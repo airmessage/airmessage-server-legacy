@@ -1,0 +1,5 @@
+# Add your server passwords here
+# One password per line, changes are only applied when program is started
+# Leave this empty to disable authentication (not recommended!)
+# Below is the default password, please remove it and replace it with your own
+cookiesandmilk
