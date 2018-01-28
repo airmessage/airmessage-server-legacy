@@ -2,9 +2,7 @@ package me.tagavari.airmessage.server;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Rectangle;
-import org.eclipse.swt.layout.FormLayout;
-import org.eclipse.swt.layout.GridData;
-import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.layout.*;
 import org.eclipse.swt.widgets.*;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -188,35 +186,25 @@ public class PreferencesManager {
 		Shell shell = new Shell(UIHelper.getDisplay(), SWT.TITLE);
 		shell.setText(I18N.i.title_preferences());
 		
-		//Configuring the layout
-		/* RowLayout rowLayout = new RowLayout();
-		rowLayout.wrap = false;
-		rowLayout.pack = true;
-		rowLayout.justify = false;
-		rowLayout.type = SWT.VERTICAL;
-		rowLayout.marginLeft = windowPadding;
-		rowLayout.marginTop = windowPadding;
-		rowLayout.marginRight = windowPadding;
-		rowLayout.marginBottom = windowPadding;
-		rowLayout.spacing = 5; */
-		GridLayout gridLayout = new GridLayout();
-		gridLayout.numColumns = 2;
-		gridLayout.marginLeft = 100;
-		gridLayout.marginTop = UIHelper.windowPadding;
-		gridLayout.marginRight = 50;
-		gridLayout.marginBottom = UIHelper.windowPadding;
-		gridLayout.verticalSpacing = 5;
+		//Configuring the layouts
+		GridLayout shellGL = new GridLayout(1, false);
+		shellGL.marginLeft = shellGL.marginRight = shellGL.marginTop = shellGL.marginBottom = shellGL.marginWidth = shellGL.marginHeight = 0;
+		shellGL.verticalSpacing = 5;
+		shell.setLayout(shellGL);
 		
-		FormLayout formLayout = new FormLayout();
-		formLayout.marginWidth = UIHelper.windowPadding;
-		formLayout.marginHeight = UIHelper.windowPadding;
+		//Configuring the preferences
+		Composite prefContainer = new Composite(shell, SWT.NONE);
+		GridLayout prefContainerGL = new GridLayout(2, false);
+		prefContainerGL.marginLeft = 100;
+		prefContainerGL.marginRight = 50;
+		prefContainerGL.marginTop = UIHelper.windowPadding;
+		prefContainerGL.marginBottom = UIHelper.windowPadding;
+		prefContainerGL.verticalSpacing = 5;
+		prefContainer.setLayout(prefContainerGL);
 		
-		shell.setLayout(gridLayout);
-		
-		//Creating the UI components
 		{
-			Label portLabel = new Label(shell, SWT.NONE);
-			Composite prefGroup = new Composite(shell, SWT.NONE);
+			Label portLabel = new Label(prefContainer, SWT.NONE);
+			Composite prefGroup = new Composite(prefContainer, SWT.NONE);
 			Text text = new Text(prefGroup, SWT.BORDER);
 			
 			portLabel.setText(I18N.i.pref_port());
@@ -268,15 +256,52 @@ public class PreferencesManager {
 		}
 		
 		{
-			Label securityLabel = new Label(shell, SWT.NONE);
+			Label securityLabel = new Label(prefContainer, SWT.NONE);
+			Button prefsButton = new Button(prefContainer, SWT.PUSH);
+			
 			securityLabel.setText(I18N.i.pref_security());
 			securityLabel.setLayoutData(new GridData(GridData.END, GridData.CENTER, false, false));
 			
-			Button prefsButton = new Button(shell, SWT.PUSH);
 			prefsButton.setText(I18N.i.button_editPasswords());
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			prefGB.horizontalIndent = -8;
 			prefsButton.setLayoutData(prefGB);
+		}
+		
+		//Adding the divider
+		{
+			Label divider = new Label(shell, SWT.HORIZONTAL);
+			divider.setBackground(UIHelper.getDisplay().getSystemColor(SWT.COLOR_GRAY));
+			GridData dividerGD = new GridData(GridData.FILL_HORIZONTAL);
+			dividerGD.heightHint = 1;
+			divider.setLayoutData(dividerGD);
+		}
+		
+		Composite buttonContainer = new Composite(shell, SWT.NONE);
+		buttonContainer.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+		//Configuring the buttons
+		{
+			FormLayout buttonContainerFL = new FormLayout();
+			//buttonContainerFL.marginLeft = buttonContainerFL.marginRight = buttonContainerFL.marginTop = buttonContainerFL.marginBottom = buttonContainerFL.marginWidth = buttonContainerFL.marginHeight = 0;
+			buttonContainerFL.marginWidth = buttonContainerFL.marginHeight = 10;
+			buttonContainer.setLayout(buttonContainerFL);
+			
+			Button acceptButton = new Button(buttonContainer, SWT.PUSH);
+			acceptButton.setText(I18N.i.button_ok());
+			FormData acceptButtonFD = new FormData();
+			if(acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) acceptButtonFD.width = UIHelper.minButtonWidth;
+			acceptButtonFD.right = new FormAttachment(100);
+			//acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
+			acceptButton.setLayoutData(acceptButtonFD);
+			shell.setDefaultButton(acceptButton);
+			
+			Button discardButton = new Button(buttonContainer, SWT.PUSH);
+			discardButton.setText(I18N.i.button_cancel());
+			FormData discardButtonFD = new FormData();
+			if(discardButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) discardButtonFD.width = UIHelper.minButtonWidth;
+			discardButtonFD.right = new FormAttachment(acceptButton);
+			discardButtonFD.top = new FormAttachment(acceptButton, 0, SWT.CENTER);
+			discardButton.setLayoutData(discardButtonFD);
 		}
 		
 		//Packing the shell

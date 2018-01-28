@@ -55,7 +55,7 @@ public class SystemTrayManager {
 		
 		//Quit
 		MenuItem miQuit = new MenuItem(menu, SWT.PUSH);
-		miQuit.setText(I18N.i.menu_quit());
+		miQuit.setText(I18N.i.button_quitAirMessage());
 		miQuit.addListener(SWT.Selection,event -> System.exit(0));;
 		
 		//Creating the tray item

@@ -1,5 +1,6 @@
-# Built application files
-/build
+# Build files
+build/
+target/
 
 # Gradle generated files
 .gradle/

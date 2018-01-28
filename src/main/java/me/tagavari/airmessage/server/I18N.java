@@ -6,6 +6,18 @@ import com.github.rodionmoiseev.c10n.annotations.En;
 public interface I18N {
 	I18N i = C10N.get(I18N.class);
 	
+	@En("Quit AirMessage")
+	String button_quitAirMessage();
+	
+	@En("Open Preferences\u2026")
+	String button_openPrefs();
+	
+	@En("OK")
+	String button_ok();
+	
+	@En("Cancel")
+	String button_cancel();
+	
 	@En("AirMessage will not run on {0}")
 	String warning_osIncompatible(String name);
 	
@@ -27,9 +39,6 @@ public interface I18N {
 	@En("Preferences\u2026")
 	String menu_preferences();
 	
-	@En("Quit AirMessage")
-	String menu_quit();
-	
 	@En("Welcome to AirMessage Server!")
 	String intro_title();
 	
@@ -38,9 +47,6 @@ public interface I18N {
 	
 	@En("Preferences")
 	String title_preferences();
-	
-	@En("Open Preferences\u2026")
-	String button_openprefs();
 	
 	@En("Server port:")
 	String pref_port();

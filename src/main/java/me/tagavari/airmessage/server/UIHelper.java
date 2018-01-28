@@ -13,6 +13,7 @@ import org.eclipse.swt.widgets.*;
 public class UIHelper {
 	//Creating the reference values
 	static final int windowPadding = 5;
+	static final int minButtonWidth = 100;
 	private static final Display display = new Display();
 	
 	static boolean displayVersionWarning() {
@@ -65,7 +66,7 @@ public class UIHelper {
 		
 		{
 			Button prefsButton = new Button(shell, SWT.PUSH);
-			prefsButton.setText(I18N.i.button_openprefs());
+			prefsButton.setText(I18N.i.button_openPrefs());
 			prefsButton.addListener(SWT.Selection, event -> {
 				shell.close();
 				PreferencesManager.openPrefsWindow();
