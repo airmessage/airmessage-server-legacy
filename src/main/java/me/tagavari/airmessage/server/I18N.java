@@ -54,6 +54,9 @@ public interface I18N {
 	@En("Security:")
 	String pref_security();
 	
+	@En("Passwords:")
+	String pref_passwords();
+	
 	@En("Edit Passwords\u2026")
 	String button_editPasswords();
 	

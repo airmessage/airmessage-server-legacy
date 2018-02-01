@@ -55,10 +55,10 @@ class Main {
 		//System.getProperties().setProperty("org.jooq.no-logo", "true");
 		
 		//Logging the startup messages
-		getLogger().info("Thank you for using jOOQ " + org.jooq.Constants.FULL_VERSION);
-		getLogger().info("Starting AirMessage server version " + Constants.SERVER_VERSION);
+		//getLogger().info("Thank you for using jOOQ " + org.jooq.Constants.FULL_VERSION);
+		//getLogger().info("Starting AirMessage server version " + Constants.SERVER_VERSION);
 		
-		//Getting the time system
+		/* //Getting the time system
 		timeHelper = TimeHelper.getCorrectTimeSystem();
 		
 		//Creating the result variable
@@ -85,7 +85,7 @@ class Main {
 			Constants.recursiveDelete(Constants.uploadDir);
 		}));
 		
-		getLogger().info("Server started, press CTRL + C to quit");
+		getLogger().info("Server started, press CTRL + C to quit"); */
 		
 		//Starting the event loop
 		UIHelper.startEventLoop();

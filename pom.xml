@@ -4,8 +4,8 @@
 		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>me.tagavari.messagemaster</groupId>
-	<artifactId>MessageMasterServer</artifactId>
+	<groupId>me.tagavari.airmessage</groupId>
+	<artifactId>AirMessageServer</artifactId>
 	<version>1.0-SNAPSHOT</version>
 
 	<repositories>
@@ -32,6 +32,10 @@
 		<repository>
 			<id>maven-eclipse-repo</id>
 			<url>http://maven-eclipse.github.io/maven</url>
+		</repository>
+		<repository>
+			<id>jabylon</id>
+			<url>http://www.jabylon.org/maven/</url>
 		</repository>
 	</repositories>
 
@@ -69,6 +73,12 @@
 			<groupId>org.eclipse.swt</groupId>
 			<artifactId>org.eclipse.swt.cocoa.macosx.x86_64</artifactId>
 			<version>4.6.1</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.eclipse</groupId>
+			<artifactId>jface</artifactId>
+			<version>3.9.0</version>
 		</dependency>
 
 		<!-- SQLiteQueryBuilder / Database Library -->

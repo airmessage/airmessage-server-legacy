@@ -1,6 +1,10 @@
 package me.tagavari.airmessage.server;
 
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.TableEditor;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.*;
 import org.eclipse.swt.widgets.*;
@@ -197,8 +201,8 @@ public class PreferencesManager {
 		GridLayout prefContainerGL = new GridLayout(2, false);
 		prefContainerGL.marginLeft = 100;
 		prefContainerGL.marginRight = 50;
-		prefContainerGL.marginTop = UIHelper.windowPadding;
-		prefContainerGL.marginBottom = UIHelper.windowPadding;
+		prefContainerGL.marginTop = UIHelper.windowMargin;
+		prefContainerGL.marginBottom = UIHelper.windowMargin;
 		prefContainerGL.verticalSpacing = 5;
 		prefContainer.setLayout(prefContainerGL);
 		
@@ -227,6 +231,9 @@ public class PreferencesManager {
 			text.addVerifyListener(event -> {
 				//Returning if the text is invalid
 				if(event.text.isEmpty()) return;
+				
+				//Trimming the text
+				event.text = event.text.trim();
 				
 				//Iterating over the text's characters and rejecting the event if a non-numerical character was found
 				for(char stringChar : event.text.toCharArray()) if(!('0' <= stringChar && stringChar <= '9')) {
@@ -266,6 +273,9 @@ public class PreferencesManager {
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			prefGB.horizontalIndent = -8;
 			prefsButton.setLayoutData(prefGB);
+			prefsButton.addListener(SWT.Selection, event -> {
+				openPrefsPasswordWindow(shell);
+			});
 		}
 		
 		//Adding the divider
@@ -283,7 +293,7 @@ public class PreferencesManager {
 		{
 			FormLayout buttonContainerFL = new FormLayout();
 			//buttonContainerFL.marginLeft = buttonContainerFL.marginRight = buttonContainerFL.marginTop = buttonContainerFL.marginBottom = buttonContainerFL.marginWidth = buttonContainerFL.marginHeight = 0;
-			buttonContainerFL.marginWidth = buttonContainerFL.marginHeight = 10;
+			buttonContainerFL.marginWidth = buttonContainerFL.marginHeight = UIHelper.dialogButtonBarMargin;
 			buttonContainer.setLayout(buttonContainerFL);
 			
 			Button acceptButton = new Button(buttonContainer, SWT.PUSH);
@@ -291,7 +301,7 @@ public class PreferencesManager {
 			FormData acceptButtonFD = new FormData();
 			if(acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) acceptButtonFD.width = UIHelper.minButtonWidth;
 			acceptButtonFD.right = new FormAttachment(100);
-			//acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
+			acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
 			acceptButton.setLayoutData(acceptButtonFD);
 			shell.setDefaultButton(acceptButton);
 			
@@ -306,15 +316,264 @@ public class PreferencesManager {
 		
 		//Packing the shell
 		shell.pack();
-		
-		//Getting the bounds
-		Rectangle screenBounds = UIHelper.getDisplay().getPrimaryMonitor().getBounds();
-		Rectangle windowBounds = shell.getBounds();
+		shell.setMinimumSize(500, shell.getMinimumSize().y);
 		
 		//Centering the window
+		Rectangle screenBounds = UIHelper.getDisplay().getPrimaryMonitor().getBounds();
+		Rectangle windowBounds = shell.getBounds();
 		shell.setLocation(screenBounds.x + (screenBounds.width - windowBounds.width) / 2, screenBounds.y + (screenBounds.height - windowBounds.height) / 2);
 		
 		//Opening the shell
+		shell.open();
+	}
+	
+	static void openPrefsPasswordWindow(Shell parentShell) {
+		//Creating the shell flags
+		Constants.ValueWrapper<Boolean> textEditorOpen = new Constants.ValueWrapper<>(Boolean.FALSE);
+		
+		//Creating the shell
+		Shell shell = new Shell(parentShell, SWT.SHEET);
+		
+		//Configuring the shell
+		shell.addListener(SWT.Traverse, event -> {
+			//Cancelling the event if the editor is open and the button is "escape" or "return" (to exit the dialog)
+			if(textEditorOpen.value && (event.detail == SWT.TRAVERSE_ESCAPE || event.detail == SWT.TRAVERSE_RETURN)) event.doit = false;
+		});
+		
+		//Configuring the layout
+		GridLayout shellGL = new GridLayout(1, false);
+		shellGL.marginWidth = shellGL.marginHeight = UIHelper.sheetMargin;
+		shell.setLayout(shellGL);
+		
+		//Creating the relevant widget values
+		Table table;
+		Button removeItemButton;
+		
+		{
+			//Creating the list label
+			Label listLabel = new Label(shell, SWT.NONE);
+			listLabel.setText(I18N.i.pref_passwords());
+			
+			//Creating the list
+			table = new Table(shell, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.FULL_SELECTION);
+			
+			//Creating the table editor
+			TableEditor editor = new TableEditor(table);
+			editor.horizontalAlignment = SWT.LEFT;
+			editor.grabHorizontal = true;
+			editor.grabVertical = true;
+			
+			//Adding the table selection listener
+			table.addSelectionListener(new SelectionAdapter() {
+				public void widgetSelected(SelectionEvent selectionEvent) {
+					//Checking if the previous editor is still intact
+					Control oldEditor = editor.getEditor();
+					if(oldEditor != null && !oldEditor.isDisposed()) {
+						//Applying the edited text
+						Text text = (Text)editor.getEditor();
+						editor.getItem().setText(text.getText());
+						
+						//Disposing of the editor
+						oldEditor.dispose();
+					}
+					
+					//Getting the table item
+					TableItem item = (TableItem) selectionEvent.item;
+					if(item == null) return;
+					
+					//Creating the text editor
+					Text newEditor = new Text(table, SWT.NONE);
+					newEditor.setText(item.getText());
+					
+					//Recording the original text and clearing the item text
+					String originalText = item.getText();
+					item.setText("");
+					
+					//Adding the modification listener to resize the text field
+					newEditor.addModifyListener(modifyEvent -> UIHelper.packControl((Text) modifyEvent.widget, ((Text) modifyEvent.widget).getText(), 6));
+					
+					//Adding a key listener to track submit / discard events
+					Listener textListener = textEvent -> {
+						//Getting the editor
+						Text text = (Text) editor.getEditor();
+						
+						//Checking if the event is a lost focus
+						if(textEvent.type == SWT.FocusOut) {
+							//Applying the changes
+							editor.getItem().setText(text.getText());
+							
+							//Disposing of the editor
+							newEditor.dispose();
+							
+							//Setting the text editor as closed
+							textEditorOpen.value = Boolean.FALSE;
+							
+							//Focusing the table
+							table.setFocus();
+						}
+						//Otherwise checking if the event is a traverse
+						else if(textEvent.type == SWT.Traverse) {
+							//Checking if the traverse type is a confirmation (return)
+							if(textEvent.detail == SWT.TRAVERSE_RETURN) {
+								//Applying the changes
+								editor.getItem().setText(text.getText());
+								
+								//Disposing of the editor
+								newEditor.dispose();
+								
+								//Setting the text editor as closed
+								textEditorOpen.value = Boolean.FALSE;
+								
+								//Focusing the table
+								table.setFocus();
+							}
+							//Otherwise checking if the traverse type is a discard (escape)
+							else if(textEvent.detail == SWT.TRAVERSE_ESCAPE) {
+								//Reverting the changes
+								editor.getItem().setText(originalText);
+								
+								//Disposing of the editor
+								newEditor.dispose();
+								
+								//Setting the text editor as closed
+								textEditorOpen.value = Boolean.FALSE;
+								
+								//Focusing the table
+								table.setFocus();
+							}
+						}
+					};
+					
+					newEditor.addListener(SWT.FocusOut, textListener);
+					newEditor.addListener(SWT.Traverse, textListener);
+					
+					//Adding a key listener to track enter / discard keys
+					/* newEditor.addKeyListener(new KeyAdapter() {
+						public void keyPressed(KeyEvent event) {
+							//Checking if the event is confirming the changes (return)
+							if(event.character == SWT.CR) {
+								//Applying the changes
+								Text text = (Text) editor.getEditor();
+								editor.getItem().setText(text.getText());
+								
+								//Disposing of the editor
+								newEditor.dispose();
+								
+								//Setting the text editor as closed
+								textEditorOpen.value = Boolean.FALSE;
+								
+								//Focusing the table
+								table.setFocus();
+							}
+							//Otherwise checking if the event is discarding the changes (escape)
+							if(event.character == SWT.ESC) {
+								//Reverting the changes
+								Text text = (Text) editor.getEditor();
+								editor.getItem().setText(originalText);
+								
+								//Disposing of the editor
+								newEditor.dispose();
+								
+								//Setting the text editor as closed
+								textEditorOpen.value = Boolean.FALSE;
+								
+								//Focusing the table
+								table.setFocus();
+							}
+						}
+					}); */
+					
+					//Enabling the editor
+					newEditor.selectAll();
+					newEditor.setFocus();
+					editor.setEditor(newEditor, item, 0);
+					newEditor.pack();
+					
+					//Setting the text editor as open
+					textEditorOpen.value = Boolean.TRUE;
+				}
+			});
+			
+			GridData tableGD = new GridData();
+			tableGD.horizontalAlignment = GridData.FILL;
+			tableGD.grabExcessVerticalSpace = true;
+			tableGD.grabExcessHorizontalSpace = true;
+			table.setLayoutData(tableGD);
+			
+			for (int i=0; i<10; i++) {
+				TableItem item = new TableItem (table, 0);
+				item.setText ("Item " + i);
+			}
+		}
+		
+		{
+			//Creating the button composite
+			Composite buttonContainer = new Composite(shell, SWT.NONE);
+			FormLayout buttonCompositeFL = new FormLayout();
+			buttonCompositeFL.marginWidth = buttonCompositeFL.marginHeight = 0;
+			buttonContainer.setLayout(buttonCompositeFL);
+			GridData buttonCompositeGD = new GridData();
+			buttonCompositeGD.horizontalAlignment = GridData.FILL;
+			buttonCompositeGD.grabExcessHorizontalSpace = true;
+			buttonContainer.setLayoutData(buttonCompositeGD);
+			
+			//Adding the apply / discard buttons
+			Button acceptButton = new Button(buttonContainer, SWT.PUSH);
+			acceptButton.setText(I18N.i.button_ok());
+			FormData acceptButtonFD = new FormData();
+			if(acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.smallMinButtonWidth) acceptButtonFD.width = UIHelper.smallMinButtonWidth;
+			acceptButtonFD.right = new FormAttachment(100);
+			acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
+			acceptButton.setLayoutData(acceptButtonFD);
+			acceptButton.addListener(SWT.Selection, event -> {
+				//TODO save data
+				shell.close();
+			});
+			shell.setDefaultButton(acceptButton);
+			
+			Button discardButton = new Button(buttonContainer, SWT.PUSH);
+			discardButton.setText(I18N.i.button_cancel());
+			FormData discardButtonFD = new FormData();
+			if(discardButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.smallMinButtonWidth) discardButtonFD.width = UIHelper.smallMinButtonWidth;
+			discardButtonFD.right = new FormAttachment(acceptButton);
+			discardButtonFD.top = new FormAttachment(acceptButton, 0, SWT.CENTER);
+			discardButton.setLayoutData(discardButtonFD);
+			discardButton.addListener(SWT.Selection, event -> {
+				//TODO discard data
+				shell.close();
+			});
+			
+			//Fetching the image resources
+			Image addImage = new Image(UIHelper.getDisplay(), PreferencesManager.class.getClassLoader().getResourceAsStream("icon_add.png"));
+			Image removeImage = new Image(UIHelper.getDisplay(), PreferencesManager.class.getClassLoader().getResourceAsStream("icon_remove.png"));
+			
+			//Adding a listener to the shell to release the resources
+			shell.addListener(SWT.Close, closeEvent -> {
+				addImage.dispose();
+				removeImage.dispose();
+			});
+			
+			//Adding the list add / remove buttons
+			Button addItemButton = new Button(buttonContainer, SWT.FLAT);
+			addItemButton.setImage(addImage);
+			FormData addItemButtonFD = new FormData();
+			addItemButtonFD.width = addItemButtonFD.height = 25;
+			addItemButtonFD.left = new FormAttachment(0);
+			addItemButtonFD.top = new FormAttachment(50, -addItemButtonFD.height / 2);
+			addItemButton.setLayoutData(addItemButtonFD);
+			
+			removeItemButton = new Button(buttonContainer, SWT.FLAT);
+			removeItemButton.setImage(removeImage);
+			FormData removeItemButtonFD = new FormData();
+			removeItemButtonFD.width = removeItemButtonFD.height = 25;
+			removeItemButtonFD.left = new FormAttachment(addItemButton);
+			removeItemButtonFD.top = new FormAttachment(50, -removeItemButtonFD.height / 2);
+			removeItemButton.setLayoutData(removeItemButtonFD);
+		}
+		
+		//Opening the dialog
+		shell.pack();
+		shell.setSize(300, 200);
 		shell.open();
 	}
 }

@@ -135,4 +135,12 @@ class Constants {
 		//Returning the preferences file path
 		return new File(System.getProperty("user.home") + '/' + Constants.class.getPackage().getName());
 	}
+	
+	static class ValueWrapper<T> {
+		T value;
+		
+		ValueWrapper(T value) {
+			this.value = value;
+		}
+	}
 }

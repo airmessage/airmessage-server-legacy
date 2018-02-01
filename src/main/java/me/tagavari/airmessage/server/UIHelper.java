@@ -3,17 +3,18 @@ package me.tagavari.airmessage.server;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
-import org.eclipse.swt.graphics.Font;
-import org.eclipse.swt.graphics.FontData;
-import org.eclipse.swt.graphics.Rectangle;
+import org.eclipse.swt.graphics.*;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
 
 public class UIHelper {
 	//Creating the reference values
-	static final int windowPadding = 5;
+	static final int windowMargin = 5;
+	static final int sheetMargin = 20;
+	static final int dialogButtonBarMargin = 8;
 	static final int minButtonWidth = 100;
+	static final int smallMinButtonWidth = 80;
 	private static final Display display = new Display();
 	
 	static boolean displayVersionWarning() {
@@ -38,17 +39,17 @@ public class UIHelper {
 		rowLayout.pack = true;
 		rowLayout.justify = false;
 		rowLayout.type = SWT.VERTICAL;
-		rowLayout.marginLeft = windowPadding;
-		rowLayout.marginTop = windowPadding;
-		rowLayout.marginRight = windowPadding;
-		rowLayout.marginBottom = windowPadding;
+		rowLayout.marginLeft = windowMargin;
+		rowLayout.marginTop = windowMargin;
+		rowLayout.marginRight = windowMargin;
+		rowLayout.marginBottom = windowMargin;
 		rowLayout.spacing = 5; */
 		GridLayout gridLayout = new GridLayout();
 		gridLayout.numColumns = 1;
-		gridLayout.marginLeft = windowPadding;
-		gridLayout.marginTop = windowPadding;
-		gridLayout.marginRight = windowPadding;
-		gridLayout.marginBottom = windowPadding;
+		gridLayout.marginLeft = windowMargin;
+		gridLayout.marginTop = windowMargin;
+		gridLayout.marginRight = windowMargin;
+		gridLayout.marginBottom = windowMargin;
 		gridLayout.verticalSpacing = 5;
 		shell.setLayout(gridLayout);
 		
@@ -56,7 +57,7 @@ public class UIHelper {
 		{
 			Label titleLabel = new Label(shell, SWT.NONE);
 			titleLabel.setText(I18N.i.intro_title());
-			titleLabel.setFont(getFont(titleLabel, 20, SWT.BOLD));
+			titleLabel.setFont(getFont(titleLabel.getFont(), 20, SWT.BOLD));
 		}
 		
 		{
@@ -170,16 +171,23 @@ public class UIHelper {
 		}
 	}
 	
-	static Font getFont(Label label, int fontSize, int style) {
+	static Font getFont(Font font, int fontSize, int style) {
 		//Getting the font data
-		FontData font = label.getFont().getFontData()[0];
+		FontData fontData = font.getFontData()[0];
 		
 		//Setting the font information
-		if(fontSize != -1) font.setHeight(fontSize);
-		if(style != -1) font.setStyle(style);
+		if(fontSize != -1) fontData.setHeight(fontSize);
+		if(style != -1) fontData.setStyle(style);
 		
 		//Returning the font
-		return new Font(label.getDisplay(), font);
+		return new Font(getDisplay(), fontData);
+	}
+	
+	static void packControl(Control control, String text, int padding) {
+		GC gc = new GC(control);
+		Point textSize = gc.textExtent(text);
+		gc.dispose();
+		control.setSize(textSize.x + padding, control.getSize().y);
 	}
 	
 	public static Display getDisplay() {
