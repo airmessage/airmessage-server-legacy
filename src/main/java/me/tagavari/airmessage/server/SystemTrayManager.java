@@ -16,7 +16,7 @@ public class SystemTrayManager {
 	private static Shell shell;
 	//private static TrayIcon trayIcon;
 	private static MenuItem miStatus;
-	private static MenuItem miConnected;
+	private static MenuItem miStatusSub;
 	
 	static {
 		//Creating the shell
@@ -37,10 +37,11 @@ public class SystemTrayManager {
 		miStatus.setText(I18N.i.menu_starting());
 		miStatus.setEnabled(false);
 		
-		//Client connected
-		miConnected = new MenuItem(menu, SWT.PUSH);
-		miConnected.setText(I18N.i.menu_clientsConnected(0));
-		miConnected.setEnabled(false);
+		//Clients connected
+		miStatusSub = new MenuItem(menu, SWT.PUSH);
+		miStatusSub.setText(I18N.i.menu_clientsConnected(0));
+		miStatusSub.setEnabled(false);
+		miStatusSub.addListener(SWT.Selection, event -> Main.startServer());
 		
 		//Divider
 		new MenuItem(menu, SWT.SEPARATOR);
@@ -48,7 +49,7 @@ public class SystemTrayManager {
 		//Preferences
 		MenuItem miPrefs = new MenuItem(menu, SWT.PUSH);
 		miPrefs.setText(I18N.i.menu_preferences());
-		miPrefs.addListener(SWT.Selection, event -> openPreferencesWindow());
+		miPrefs.addListener(SWT.Selection, event -> PreferencesManager.openWindow());
 		
 		//Divider
 		new MenuItem(menu, SWT.SEPARATOR);
@@ -56,7 +57,7 @@ public class SystemTrayManager {
 		//Quit
 		MenuItem miQuit = new MenuItem(menu, SWT.PUSH);
 		miQuit.setText(I18N.i.button_quitAirMessage());
-		miQuit.addListener(SWT.Selection,event -> System.exit(0));;
+		miQuit.addListener(SWT.Selection, event -> System.exit(0));;
 		
 		//Creating the tray item
 		TrayItem trayItem = new TrayItem(shell.getDisplay().getSystemTray(), SWT.NONE);
@@ -116,12 +117,38 @@ public class SystemTrayManager {
 		return true;
 	}
 	
-	private static void openPreferencesWindow() {
-	
+	static void updateStatusMessage() {
+		//Getting the message
+		switch(Main.getServerState()) {
+			case Main.serverStateStarting:
+				miStatus.setText(I18N.i.menu_starting());
+				miStatusSub.setText(I18N.i.menu_clientsConnected(0));
+				miStatusSub.setEnabled(false);
+				break;
+			case Main.serverStateRunning:
+				miStatus.setText(I18N.i.menu_running());
+				miStatusSub.setText(I18N.i.menu_clientsConnected(WSServerManager.getConnectionCount()));
+				miStatusSub.setEnabled(false);
+				break;
+			case Main.serverStateFailedDatabase:
+				miStatus.setText(I18N.i.menu_err_database());
+				miStatusSub.setText(I18N.i.button_retry());
+				miStatusSub.setEnabled(true);
+				break;
+			case Main.serverStateFailedServer:
+				miStatus.setText(I18N.i.menu_err_server());
+				miStatusSub.setText(I18N.i.button_retry());
+				miStatusSub.setEnabled(true);
+				break;
+		}
 	}
 	
-	private static void openIntroWindow() {
-	
+	static void updateConnectionsMessage() {
+		//Returning if the state isn't connected
+		if(Main.getServerState() != Main.serverStateRunning) return;
+		
+		//Updating the message
+		miStatusSub.setText(I18N.i.menu_clientsConnected(WSServerManager.getConnectionCount()));
 	}
 	
 	private static Image getTrayIcon() {

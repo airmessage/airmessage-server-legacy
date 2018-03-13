@@ -2,6 +2,7 @@ package me.tagavari.airmessage.server;
 
 import me.tagavari.airmessage.common.SharedValues;
 import org.java_websocket.WebSocket;
+import org.java_websocket.exceptions.WebsocketNotConnectedException;
 import org.jooq.*;
 import org.jooq.impl.DSL;
 
@@ -58,10 +59,10 @@ class DatabaseManager implements Runnable {
 		//Checking if there is already an instance
 		if(thread != null) {
 			//Logging the exception
-			Main.getLogger().severe("Instance of database manager already exists");
+			//Main.getLogger().severe("Instance of database manager already exists");
 			
-			//Returning false
-			return false;
+			//Returning true
+			return true;
 		}
 		
 		//Connecting to the database
@@ -70,14 +71,13 @@ class DatabaseManager implements Runnable {
 		} catch(SQLException exception) {
 			//Logging a message
 			Main.getLogger().severe("Failed to connect to chat message database: " + exception.getMessage());
-			Main.getLogger().severe("No incoming messages will be received");
+			//Main.getLogger().severe("No incoming messages will be received");
 			
 			//Returning false
 			return false;
 		}
 		
 		//Getting the time variables
-		Main.getLogger().info("Using time system " + Main.getTimeHelper().toString() + " with current time " + System.currentTimeMillis() + " -> " + Main.getTimeHelper().toDatabaseTime(System.currentTimeMillis()));
 		connectFetchTime = Main.getTimeHelper().toDatabaseTime(System.currentTimeMillis());
 		
 		//Starting the thread
@@ -167,7 +167,7 @@ class DatabaseManager implements Runnable {
 				
 				//Updating the last check time
 				lastCheckTime = System.currentTimeMillis();
-			} catch(IOException | NoSuchAlgorithmException exception) {
+			} catch(IOException | NoSuchAlgorithmException | WebsocketNotConnectedException exception) {
 				//Printing the stack trace
 				exception.printStackTrace();
 			} catch(InterruptedException exception) {
@@ -256,15 +256,18 @@ class DatabaseManager implements Runnable {
 				conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers));
 			}
 			
-			//Preparing to serialize the data
-			try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-				//Serializing the data
-				out.writeByte(SharedValues.wsFrameChatInfo); //Message type - chat information
-				out.writeObject(conversationInfoList); //Conversation list
-				out.flush();
-				
-				//Sending the conversation info
-				if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
+			//Checking if the connection is still open
+			if(request.connection.isOpen()) {
+				//Preparing to serialize the data
+				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+					//Serializing the data
+					out.writeByte(SharedValues.wsFrameChatInfo); //Message type - chat information
+					out.writeObject(conversationInfoList); //Conversation list
+					out.flush();
+					
+					//Sending the conversation info
+					request.connection.send(bos.toByteArray());
+				}
 			}
 		}
 	}
@@ -431,18 +434,21 @@ class DatabaseManager implements Runnable {
 				conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers));
 			}
 			
-			//Serializing the data
-			try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-				out.writeByte(SharedValues.wsFrameMassRetrieval); //Message type - mass retrieval
-				out.writeObject(messageResult.conversationItems); //Message list
-				out.writeObject(conversationInfoList); //Conversation list
-				out.flush();
-				
-				//Sending the data
-				request.connection.send(bos.toByteArray());
-			} catch(IOException exception) {
-				//Printing the stack trace
-				exception.printStackTrace();
+			//Checking if the connection is still open
+			if(request.connection.isOpen()) {
+				//Serializing the data
+				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+					out.writeByte(SharedValues.wsFrameMassRetrieval); //Message type - mass retrieval
+					out.writeObject(messageResult.conversationItems); //Message list
+					out.writeObject(conversationInfoList); //Conversation list
+					out.flush();
+					
+					//Sending the data
+					request.connection.send(bos.toByteArray());
+				} catch(IOException exception) {
+					//Printing the stack trace
+					exception.printStackTrace();
+				}
 			}
 		}
 	}

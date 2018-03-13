@@ -30,15 +30,45 @@ public class WSServerManager extends WebSocketServer {
 	//Creating the instance values
 	//private final BidiMap<String, WebSocket> clientList = new DualHashBidiMap<>();
 	
-	static void startServer() {
-		//Returning if an instance already exists
-		if(serverManager != null) return;
+	//Creating the other values
+	private static int connectionCount = 0;
+	
+	static boolean startServer(int port) {
+		//Returning true if an instance already exists
+		if(serverManager != null) return true;
+		
+		//Returning false if the port is already bound
+		if(!Constants.checkPortAvailability(port)) return false;
+		
+		//Creating the server
+		createServer(port);
+		
+		//Returning true
+		return true;
+	}
+	
+	static boolean restartServer(int port) {
+		//Stopping the server if it exists
+		if(serverManager != null) stopServer();
+		
+		//Returning false if the port is already bound
+		if(!Constants.checkPortAvailability(port)) return false;
+		
+		//Creating the server
+		createServer(port);
+		
+		//Returning true
+		return true;
+	}
+	
+	private static void createServer(int port) {
+		//Enabling verbose WebSocket logging
 		//WebSocketImpl.DEBUG = true;
 		
-		serverManager = new WSServerManager(1359, new ArrayList<>(Arrays.asList(new DraftMMS())));
-		//serverManager = new WSServerManager(1359);
+		//Creating the server
+		serverManager = new WSServerManager(port, new ArrayList<>(Arrays.asList(new DraftMMS())));
 		serverManager.setWebSocketFactory(new DefaultSSLWebSocketServerFactory(SecurityManager.createSSLContext()));
-		serverManager.setConnectionLostTimeout(20 * 60); //20 minutes
+		serverManager.setConnectionLostTimeout(0); //Disabled, unnecessary as the server doesn't do anything when clients disconnect
 		
 		//Starting the server
 		serverManager.start();
@@ -47,7 +77,7 @@ public class WSServerManager extends WebSocketServer {
 	static void stopServer() {
 		try {
 			//Stopping the server
-			serverManager.stop();
+			if(serverManager != null) serverManager.stop();
 		} catch(IOException | InterruptedException exception) {
 			//Logging the exception
 			exception.printStackTrace();
@@ -63,7 +93,7 @@ public class WSServerManager extends WebSocketServer {
 	}
 	
 	static void publishMessage(byte[] message) {
-		serverManager.sendToAll(message);
+		if(serverManager != null) serverManager.sendToAll(message);
 	}
 	
 	private void sendToAll(byte[] message) {
@@ -95,14 +125,30 @@ public class WSServerManager extends WebSocketServer {
 		}
 	}
 	
+	static int getConnectionCount() {
+		return connectionCount;
+	}
+	
 	@Override
 	public void onOpen(WebSocket connection, ClientHandshake handshake) {
+		//Adding a connection
+		connectionCount++;
+		
+		//Updating the connection message
+		UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);
+		
 		//Logging the client's connection
 		if(connection.getRemoteSocketAddress() != null) Main.getLogger().info("Client connected with IP address " + connection.getRemoteSocketAddress().getAddress().getHostAddress());
 	}
 	
 	@Override
 	public void onClose(WebSocket connection, int code, String reason, boolean remote) {
+		//Removing a connection
+		connectionCount--;
+		
+		//Updating the connection message
+		UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);
+		
 		if(connection.getRemoteSocketAddress() == null) Main.getLogger().info("Client disconnected");
 		else Main.getLogger().info("Client disconnected with IP address " + connection.getRemoteSocketAddress().getAddress().getHostAddress());
 	}
@@ -261,24 +307,24 @@ public class WSServerManager extends WebSocketServer {
 	}
 	
 	@Override
-	public void onStart() {}
+	public void onStart() {
+	}
 	
 	@Override
 	public void onWebsocketPing(WebSocket conn, Framedata f) {
 		Main.getLogger().finest("Intercepting ping");
-		super.onWebsocketPing(conn, f);
 	}
 	
 	@Override
 	public void onWebsocketPong(WebSocket conn, Framedata f) {
 		Main.getLogger().finest("Intercepting pong");
-		super.onWebsocketPong(conn, f);
 	}
 	
 	@Override
 	public ServerHandshakeBuilder onWebsocketHandshakeReceivedAsServer(WebSocket conn, Draft draft, ClientHandshake request) throws InvalidDataException {
 		//Rejecting the handshake if no value was provided
-		if(!request.hasFieldValue(SharedValues.headerCommVer)) throw new InvalidDataException(SharedValues.resultBadRequest, "Communications version not provided: " + SharedValues.resultBadRequest);
+		if(!request.hasFieldValue(SharedValues.headerCommVer))
+			throw new InvalidDataException(SharedValues.resultBadRequest, "Communications version not provided: " + SharedValues.resultBadRequest);
 		
 		//Parsing the versions
 		String[] versions = request.getFieldValue(SharedValues.headerCommVer).split("\\|");
@@ -286,14 +332,16 @@ public class WSServerManager extends WebSocketServer {
 		for(String version : versions) if(version.matches("^\\d+$")) clientVersions.add(Integer.parseInt(version));
 		
 		//Rejecting the handshake if no valid values were provided
-		if(clientVersions.isEmpty()) throw new InvalidDataException(SharedValues.resultBadRequest, "Communications version not provided: " + SharedValues.resultBadRequest);
+		if(clientVersions.isEmpty())
+			throw new InvalidDataException(SharedValues.resultBadRequest, "Communications version not provided: " + SharedValues.resultBadRequest);
 		
 		//Finding an applicable version
 		boolean versionsApplicable = false;
-		for(int version : clientVersions) if(SharedValues.mmCommunicationsVersion == version) {
-			versionsApplicable = true;
-			break;
-		}
+		for(int version : clientVersions)
+			if(SharedValues.mmCommunicationsVersion == version) {
+				versionsApplicable = true;
+				break;
+			}
 		
 		//Rejecting the handshake if there is a communications version problem
 		if(!versionsApplicable) {
@@ -303,7 +351,8 @@ public class WSServerManager extends WebSocketServer {
 		}
 		
 		//Rejecting the handshake if the password couldn't be validated
-		if(!SecurityManager.authenticate(request.getFieldValue(SharedValues.headerPassword))) throw new InvalidDataException(SharedValues.resultUnauthorized, "Couldn't validate credentials: " + SharedValues.resultUnauthorized);
+		if(!PreferencesManager.matchPassword(request.getFieldValue(SharedValues.headerPassword)))
+			throw new InvalidDataException(SharedValues.resultUnauthorized, "Couldn't validate credentials: " + SharedValues.resultUnauthorized);
 		
 		//Returning the result of the super method
 		return super.onWebsocketHandshakeReceivedAsServer(conn, draft, request);
@@ -311,6 +360,7 @@ public class WSServerManager extends WebSocketServer {
 	
 	private static class DraftMMS extends Draft_6455 {
 		DraftMMS() {
+		
 		}
 		
 		DraftMMS(IExtension inputExtension) {
@@ -336,21 +386,18 @@ public class WSServerManager extends WebSocketServer {
 		}
 		
 		@Override
-		public boolean equals(Object o) {
-			if( this == o ) return true;
-			if( o == null || getClass() != o.getClass() ) return false;
+		public boolean equals(Object object) {
+			if(this == object) return true;
+			if(object == null || getClass() != object.getClass()) return false;
 			
-			DraftMMS that = ( DraftMMS ) o;
-			
-			return getExtension() != null ? getExtension().equals( that.getExtension() ) : that.getExtension() == null;
+			DraftMMS draft = (DraftMMS) object;
+			return getExtension() != null ? getExtension().equals(draft.getExtension()) : draft.getExtension() == null;
 		}
 		
 		@Override
 		public Draft copyInstance() {
-			ArrayList<IExtension> newExtensions = new ArrayList<IExtension>();
-			for( IExtension extension : getKnownExtensions() ) {
-				newExtensions.add( extension.copyInstance() );
-			}
+			ArrayList<IExtension> newExtensions = new ArrayList<>();
+			for(IExtension extension : getKnownExtensions()) newExtensions.add(extension.copyInstance());
 			return new DraftMMS(newExtensions);
 		}
 	}

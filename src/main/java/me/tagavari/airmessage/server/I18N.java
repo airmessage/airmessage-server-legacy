@@ -30,7 +30,13 @@ public interface I18N {
 	@En("Server running")
 	String menu_running();
 	
-	@En("{0} clients connected")
+	@En("Failed to start server; port is unavailable")
+	String menu_err_server();
+	
+	@En("Failed to connect to database")
+	String menu_err_database();
+	
+	@En("{0} client(s) connected")
 	String menu_clientsConnected(int count);
 	
 	//@En("Send feedback\u2026")
@@ -57,8 +63,23 @@ public interface I18N {
 	@En("Passwords:")
 	String pref_passwords();
 	
+	@En("Updates:")
+	String pref_updates();
+	
+	@En("Scanning:")
+	String pref_scanning();
+	
+	@En("How often to check for new messages (seconds)")
+	String pref_scanning_desc();
+	
 	@En("Edit Passwords\u2026")
 	String button_editPasswords();
+	
+	@En("Check for updates automatically")
+	String button_checkUpdatesAuto();
+	
+	@En("Retry")
+	String button_retry();
 	
 	@En("Please enter a server port")
 	String warning_noPort();

@@ -381,7 +381,7 @@ public class WebSocketImpl implements WebSocket {
 	private void closeConnectionDueToWrongHandshake( InvalidDataException exception ) {
 		//write( generateHttpResponseDueToError( 404 ) );
 		write(generateCustomHttpResponseDueToError(exception.getMessage()));
-		flushAndClose( exception.getCloseCode(), exception.getMessage(), false );
+		flushAndClose( CloseFrame.NEVER_CONNECTED, exception.getMessage(), false );
 	}
 
 	/**

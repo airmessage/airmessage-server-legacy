@@ -70,7 +70,7 @@ public class UIHelper {
 			prefsButton.setText(I18N.i.button_openPrefs());
 			prefsButton.addListener(SWT.Selection, event -> {
 				shell.close();
-				PreferencesManager.openPrefsWindow();
+				PreferencesManager.openWindow();
 			});
 			shell.setDefaultButton(prefsButton);
 			

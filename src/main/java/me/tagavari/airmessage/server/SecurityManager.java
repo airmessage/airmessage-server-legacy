@@ -4,18 +4,11 @@ import sun.security.tools.keytool.CertAndKeyGen;
 import sun.security.x509.X500Name;
 
 import javax.net.ssl.*;
-import java.io.*;
-import java.nio.file.Files;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.stream.Stream;
 
 public class SecurityManager {
-	//Creating the variables
-	static final ArrayList<String> passwords = new ArrayList<>();
-	
 	/* static boolean generateFiles() {
 		try {
 			//Creating the server keystore
@@ -66,7 +59,7 @@ public class SecurityManager {
 		return true;
 	} */
 	
-	static boolean loadCredentials() {
+	/* static boolean loadCredentials() {
 		//Getting the file
 		File file = new File(Constants.userList);
 		
@@ -167,7 +160,7 @@ public class SecurityManager {
 		
 		//Returning if is there is a matching password
 		return passwords.contains(password);
-	}
+	} */
 	
 	static SSLContext createSSLContext() {
 		TrustManager[] trustAllCerts = new TrustManager[]{

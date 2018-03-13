@@ -13,19 +13,19 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
-import javax.crypto.Cipher;
-import javax.crypto.NoSuchPaddingException;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.security.NoSuchAlgorithmException;
+import java.io.*;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.List;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 
 public class PreferencesManager {
@@ -33,25 +33,40 @@ public class PreferencesManager {
 	private static final int SCHEMA_VERSION = 1;
 	
 	private static final File prefFile = new File(Constants.applicationSupportDir, "prefs.xml");
-	private static final File userFile = new File(Constants.applicationSupportDir, "users.xml");
+	private static final File userFile = new File(Constants.applicationSupportDir, "users.txt");
 	private static final int defaultPort = 1359;
 	private static final String defaultPassword = "cookiesandmilk";
+	private static final boolean defaultAutoCheckUpdates = true;
+	private static final float defaultScanFrequency = 2;
 	
 	private static final String domTagRoot = "Preferences";
 	private static final String domTagSchemaVer = "SchemaVer";
 	private static final String domTagPort = "Port";
+	private static final String domTagAutoCheckUpdates = "AutomaticUpdateCheck";
+	private static final String domTagScanFrequency = "ScanFrequency";
+	
+	private static final String encryptionAlgorithm = "AES";
+	private static final String textEncoding = "UTF-8";
 	
 	//Creating the preference values
-	private static int serverPort;
+	private static int serverPort = defaultPort;
+	private static boolean autoCheckUpdates = defaultAutoCheckUpdates;
+	private static float scanFrequency = defaultScanFrequency;
+	
+	//Creating the window values
+	private static Text pwTextPort;
+	private static Button pwButtonAutoUpdate;
+	private static Text pwTextScanFrequency;
+	private static Shell windowShell = null;
 	
 	//Creating the other values
-	private static String deviceSerial = "000000000000";
-	private static Cipher cipher;
+	//private static byte[] deviceSerial = "000000000000".getBytes();
+	//private static Cipher cipher;
 	
-	static boolean prepare() {
+	/* static boolean prepare() {
 		try {
 			//Setting the cipher
-			cipher = Cipher.getInstance("AES");
+			cipher = Cipher.getInstance(encryptionAlgorithm);
 			
 			//Returning true
 			return true;
@@ -62,10 +77,10 @@ public class PreferencesManager {
 			//Returning false
 			return false;
 		}
-	}
+	} */
 	
 	static boolean loadPreferences() {
-		//Attempting to get the device's serial number
+		/* //Attempting to get the device's serial number
 		try {
 			//Running the command to fetch the device's serial number
 			Process process = Runtime.getRuntime().exec("ioreg -c IOPlatformExpertDevice -d 2 | awk -F\\\" '/IOPlatformSerialNumber/{print $(NF-1)}'");
@@ -81,12 +96,12 @@ public class PreferencesManager {
 				}
 				
 				//Fetching the serial number if there are no error lines
-				if(!errorLines) deviceSerial = inputReader.readLine();
+				if(!errorLines) deviceSerial = inputReader.readLine().getBytes();
 			}
 		} catch(IOException exception) {
 			//Printing the stack trace
 			Main.getLogger().log(Level.WARNING, "Couldn't read device serial number", exception);
-		}
+		} */
 		
 		//Checking if the preference file exists
 		if(prefFile.exists()) {
@@ -115,8 +130,8 @@ public class PreferencesManager {
 				}
 			}
 			
-			//Checking if the document's schema version is valid
-			if(schemaValid) {
+			//Checking if the document's schema version is invalid
+			if(!schemaValid) {
 				//Discarding and re-creating the preferences
 				return createPreferences();
 			}
@@ -131,6 +146,21 @@ public class PreferencesManager {
 				preferencesUpdateRequired = true;
 			}
 			
+			String autoCheckUpdatesString = document.getElementsByTagName(domTagAutoCheckUpdates).item(0).getTextContent();
+			if("true".equals(autoCheckUpdatesString)) autoCheckUpdates = true;
+			else if("false".equals(autoCheckUpdatesString)) autoCheckUpdates = false;
+			else {
+				autoCheckUpdates = defaultAutoCheckUpdates;
+				preferencesUpdateRequired = true;
+			}
+			
+			String scanFrequencyString = document.getElementsByTagName(domTagScanFrequency).item(0).getTextContent();
+			if(scanFrequencyString.matches("^\\d+\\.\\d+$")) scanFrequency = Float.parseFloat(scanFrequencyString);
+			else {
+				scanFrequency = defaultScanFrequency;
+				preferencesUpdateRequired = true;
+			}
+			
 			//Updating the preferences if it has been requested
 			if(preferencesUpdateRequired) savePreferences();
 			
@@ -142,7 +172,7 @@ public class PreferencesManager {
 		}
 	}
 	
-	static boolean createPreferences() {
+	private static boolean createPreferences() {
 		//Setting the default values
 		serverPort = defaultPort;
 		
@@ -150,7 +180,7 @@ public class PreferencesManager {
 		return savePreferences();
 	}
 	
-	static boolean savePreferences() {
+	private static boolean savePreferences() {
 		try {
 			//Creating the document
 			Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument();
@@ -160,16 +190,30 @@ public class PreferencesManager {
 			document.appendChild(rootElement);
 			
 			{
-				Element schemaVerElement = document.createElement(domTagSchemaVer);
-				schemaVerElement.setTextContent(Integer.toString(SCHEMA_VERSION));
-				rootElement.appendChild(schemaVerElement);
+				Element element = document.createElement(domTagSchemaVer);
+				element.setTextContent(Integer.toString(SCHEMA_VERSION));
+				rootElement.appendChild(element);
 			}
 			
 			{
-				Element portElement = document.createElement(domTagPort);
-				portElement.setTextContent(Integer.toString(serverPort));
-				rootElement.appendChild(portElement);
+				Element element = document.createElement(domTagPort);
+				element.setTextContent(Integer.toString(serverPort));
+				rootElement.appendChild(element);
 			}
+			
+			{
+				Element element = document.createElement(domTagAutoCheckUpdates);
+				element.setTextContent(Boolean.toString(autoCheckUpdates));
+				rootElement.appendChild(element);
+			}
+			System.out.println("Saving auto check updates to " + autoCheckUpdates);
+			
+			{
+				Element element = document.createElement(domTagScanFrequency);
+				element.setTextContent(Float.toString(scanFrequency));
+				rootElement.appendChild(element);
+			}
+			System.out.println("Saving frequency to " + scanFrequency);
 			
 			//Writing the XML document
 			TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(prefFile));
@@ -185,19 +229,54 @@ public class PreferencesManager {
 		return true;
 	}
 	
-	static void openPrefsWindow() {
+	private static void applyPreferenceChanges() {
+		{
+			//Getting the port text
+			String portText = pwTextPort.getText();
+			if(!portText.isEmpty()) {
+				//Updating the port
+				serverPort = Integer.parseInt(portText); //Input is forced to be numerical due to input filter
+			}
+		}
+		
+		//Getting the auto update
+		autoCheckUpdates = pwButtonAutoUpdate.getSelection();
+		
+		{
+			//Getting the port text
+			String scanFrequencyText = pwTextScanFrequency.getText();
+			if(!scanFrequencyText.isEmpty()) {
+				//Updating the port
+				scanFrequency = Float.parseFloat(scanFrequencyText); //Input is forced to be numerical due to input filter
+			}
+		}
+		
+		//Saving the preferences
+		savePreferences();
+		
+		//Restarting the server
+		Main.restartServer();
+	}
+	
+	static void openWindow() {
+		//Opening the window
+		if(windowShell == null) openPrefsWindow();
+		else windowShell.forceActive();
+	}
+	
+	private static void openPrefsWindow() {
 		//Creating the shell
-		Shell shell = new Shell(UIHelper.getDisplay(), SWT.TITLE);
-		shell.setText(I18N.i.title_preferences());
+		windowShell = new Shell(UIHelper.getDisplay(), SWT.TITLE);
+		windowShell.setText(I18N.i.title_preferences());
 		
 		//Configuring the layouts
 		GridLayout shellGL = new GridLayout(1, false);
 		shellGL.marginLeft = shellGL.marginRight = shellGL.marginTop = shellGL.marginBottom = shellGL.marginWidth = shellGL.marginHeight = 0;
 		shellGL.verticalSpacing = 5;
-		shell.setLayout(shellGL);
+		windowShell.setLayout(shellGL);
 		
 		//Configuring the preferences
-		Composite prefContainer = new Composite(shell, SWT.NONE);
+		Composite prefContainer = new Composite(windowShell, SWT.NONE);
 		GridLayout prefContainerGL = new GridLayout(2, false);
 		prefContainerGL.marginLeft = 100;
 		prefContainerGL.marginRight = 50;
@@ -208,27 +287,13 @@ public class PreferencesManager {
 		
 		{
 			Label portLabel = new Label(prefContainer, SWT.NONE);
-			Composite prefGroup = new Composite(prefContainer, SWT.NONE);
-			Text text = new Text(prefGroup, SWT.BORDER);
+			pwTextPort = new Text(prefContainer, SWT.BORDER);
 			
 			portLabel.setText(I18N.i.pref_port());
-			GridData labelGD = new GridData(GridData.END, GridData.BEGINNING, false, false);
-			labelGD.verticalIndent = 2;
-			portLabel.setLayoutData(labelGD);
+			portLabel.setLayoutData(new GridData(GridData.END, GridData.CENTER, false, false));
 			
-			/* RowLayout prefGroupRL = new RowLayout();
-			prefGroupRL.wrap = false;
-			prefGroupRL.pack = false;
-			prefGroupRL.justify = false;
-			prefGroupRL.type = SWT.VERTICAL;
-			prefGroupRL.marginTop = prefGroupRL.marginBottom = prefGroupRL.marginLeft = prefGroupRL.marginRight = 0; */
-			GridLayout prefGroupGL = new GridLayout(1, false);
-			prefGroupGL.marginWidth = prefGroupGL.marginHeight = 0;
-			
-			prefGroup.setLayout(prefGroupGL);
-			
-			text.setTextLimit(5);
-			text.addVerifyListener(event -> {
+			pwTextPort.setTextLimit(5);
+			pwTextPort.addVerifyListener(event -> {
 				//Returning if the text is invalid
 				if(event.text.isEmpty()) return;
 				
@@ -245,6 +310,9 @@ public class PreferencesManager {
 				String originalString = ((Text) event.widget).getText();
 				String fullString = originalString.substring(0, event.start) + event.text + originalString.substring(event.end);
 				
+				//Returning if the string is empty
+				if(fullString.isEmpty()) return;
+				
 				//Rejecting the event if the value is not within the port range
 				int portNum = Integer.parseInt(fullString);
 				if(portNum < 1 || portNum > 65535) {
@@ -256,7 +324,8 @@ public class PreferencesManager {
 			textGD.grabExcessHorizontalSpace = false;
 			textGD.grabExcessVerticalSpace = false;
 			textGD.widthHint = 43;
-			text.setLayoutData(textGD);
+			pwTextPort.setLayoutData(textGD);
+			pwTextPort.setText(Integer.toString(serverPort));
 			/* GridData textWarningGD = new GridData();
 			textWarningGD.widthHint = 250;
 			textWarning.setLayoutData(textWarningGD); */
@@ -273,21 +342,83 @@ public class PreferencesManager {
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			prefGB.horizontalIndent = -8;
 			prefsButton.setLayoutData(prefGB);
-			prefsButton.addListener(SWT.Selection, event -> {
-				openPrefsPasswordWindow(shell);
+			prefsButton.addListener(SWT.Selection, event -> openPrefsPasswordWindow(windowShell));
+		}
+		
+		{
+			Label updateLabel = new Label(prefContainer, SWT.NONE);
+			pwButtonAutoUpdate = new Button(prefContainer, SWT.CHECK);
+			
+			updateLabel.setText(I18N.i.pref_updates());
+			updateLabel.setLayoutData(new GridData(GridData.END, GridData.CENTER, false, false));
+			
+			pwButtonAutoUpdate.setText(I18N.i.button_checkUpdatesAuto());
+			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
+			pwButtonAutoUpdate.setLayoutData(prefGB);
+			pwButtonAutoUpdate.setSelection(autoCheckUpdates);
+		}
+		
+		{
+			Label dbScanLabel = new Label(prefContainer, SWT.NONE);
+			Composite dbScanComposite = new Composite(prefContainer, SWT.NONE);
+			pwTextScanFrequency = new Text(dbScanComposite, SWT.BORDER);
+			Label dbScanDesc = new Label(dbScanComposite, SWT.NONE);
+			
+			dbScanLabel.setText(I18N.i.pref_scanning());
+			GridData dbScanLabelGD = new GridData(GridData.END, GridData.BEGINNING, false, false);
+			dbScanLabelGD.verticalIndent = 4;
+			dbScanLabel.setLayoutData(dbScanLabelGD);
+			
+			RowLayout compositeLayout = new RowLayout();
+			compositeLayout.type = SWT.VERTICAL;
+			dbScanComposite.setLayout(compositeLayout);
+			
+			RowData dbScanTextRD = new RowData();
+			dbScanTextRD.width = 43;
+			pwTextScanFrequency.setLayoutData(dbScanTextRD);
+			pwTextScanFrequency.addVerifyListener(event -> {
+				//Returning if the text is invalid
+				if(event.text.isEmpty()) return;
+				
+				//Trimming the text
+				event.text = event.text.trim();
+				
+				//Iterating over the text's characters and rejecting the event if a non-numerical character was found
+				for(char stringChar : event.text.toCharArray()) if(!('0' <= stringChar && stringChar <= '9') && stringChar != '.') {
+					event.doit = false;
+					return;
+				}
+				
+				//Assembling the full string
+				String originalString = ((Text) event.widget).getText();
+				//String fullString = originalString.substring(0, event.start) + event.text + originalString.substring(event.end);
+				
+				//Returning if the string is empty
+				//if(fullString.isEmpty()) return;
+				
+				//Rejecting the event if there is already a decimal point in the string
+				if(event.text.contains(".") && originalString.contains(".")) {
+					event.doit = false;
+					return;
+				}
 			});
+			
+			pwTextScanFrequency.setText(Float.toString(scanFrequency));
+			
+			dbScanDesc.setText(I18N.i.pref_scanning_desc());
+			dbScanDesc.setFont(UIHelper.getFont(dbScanDesc.getFont(), 10, -1));
 		}
 		
 		//Adding the divider
 		{
-			Label divider = new Label(shell, SWT.HORIZONTAL);
+			Label divider = new Label(windowShell, SWT.HORIZONTAL);
 			divider.setBackground(UIHelper.getDisplay().getSystemColor(SWT.COLOR_GRAY));
 			GridData dividerGD = new GridData(GridData.FILL_HORIZONTAL);
 			dividerGD.heightHint = 1;
 			divider.setLayoutData(dividerGD);
 		}
 		
-		Composite buttonContainer = new Composite(shell, SWT.NONE);
+		Composite buttonContainer = new Composite(windowShell, SWT.NONE);
 		buttonContainer.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 		//Configuring the buttons
 		{
@@ -303,7 +434,11 @@ public class PreferencesManager {
 			acceptButtonFD.right = new FormAttachment(100);
 			acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
 			acceptButton.setLayoutData(acceptButtonFD);
-			shell.setDefaultButton(acceptButton);
+			acceptButton.addListener(SWT.Selection, event -> {
+				applyPreferenceChanges();
+				windowShell.close();
+			});
+			windowShell.setDefaultButton(acceptButton);
 			
 			Button discardButton = new Button(buttonContainer, SWT.PUSH);
 			discardButton.setText(I18N.i.button_cancel());
@@ -312,22 +447,29 @@ public class PreferencesManager {
 			discardButtonFD.right = new FormAttachment(acceptButton);
 			discardButtonFD.top = new FormAttachment(acceptButton, 0, SWT.CENTER);
 			discardButton.setLayoutData(discardButtonFD);
+			discardButton.addListener(SWT.Selection, event -> windowShell.close());
 		}
 		
 		//Packing the shell
-		shell.pack();
-		shell.setMinimumSize(500, shell.getMinimumSize().y);
+		windowShell.pack();
+		windowShell.setMinimumSize(500, windowShell.getMinimumSize().y);
 		
 		//Centering the window
 		Rectangle screenBounds = UIHelper.getDisplay().getPrimaryMonitor().getBounds();
-		Rectangle windowBounds = shell.getBounds();
-		shell.setLocation(screenBounds.x + (screenBounds.width - windowBounds.width) / 2, screenBounds.y + (screenBounds.height - windowBounds.height) / 2);
+		Rectangle windowBounds = windowShell.getBounds();
+		windowShell.setLocation(screenBounds.x + (screenBounds.width - windowBounds.width) / 2, screenBounds.y + (screenBounds.height - windowBounds.height) / 2);
+		
+		//Invalidating the reference when the shell is closed
+		windowShell.addListener(SWT.Close, event -> windowShell = null);
 		
 		//Opening the shell
-		shell.open();
+		windowShell.open();
 	}
 	
-	static void openPrefsPasswordWindow(Shell parentShell) {
+	private static void openPrefsPasswordWindow(Shell parentShell) {
+		//Loading the passwords
+		List<String> passwords = loadPasswords();
+		
 		//Creating the shell flags
 		Constants.ValueWrapper<Boolean> textEditorOpen = new Constants.ValueWrapper<>(Boolean.FALSE);
 		
@@ -347,7 +489,12 @@ public class PreferencesManager {
 		
 		//Creating the relevant widget values
 		Table table;
+		TableEditor tableEditor;
+		Constants.ValueWrapper<String> originalEditTextWrapper = new Constants.ValueWrapper<>(null);
 		Button removeItemButton;
+		
+		//Creating the consumers
+		Consumer<TableItem> editTableItem;
 		
 		{
 			//Creating the list label
@@ -358,49 +505,67 @@ public class PreferencesManager {
 			table = new Table(shell, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.FULL_SELECTION);
 			
 			//Creating the table editor
-			TableEditor editor = new TableEditor(table);
-			editor.horizontalAlignment = SWT.LEFT;
-			editor.grabHorizontal = true;
-			editor.grabVertical = true;
+			tableEditor = new TableEditor(table);
+			tableEditor.horizontalAlignment = SWT.LEFT;
+			tableEditor.grabHorizontal = true;
+			tableEditor.grabVertical = true;
 			
-			//Adding the table selection listener
-			table.addSelectionListener(new SelectionAdapter() {
-				public void widgetSelected(SelectionEvent selectionEvent) {
-					//Checking if the previous editor is still intact
-					Control oldEditor = editor.getEditor();
-					if(oldEditor != null && !oldEditor.isDisposed()) {
-						//Applying the edited text
-						Text text = (Text)editor.getEditor();
-						editor.getItem().setText(text.getText());
+			//Setting the edit table item consumer
+			editTableItem = item -> {
+				//Returning if the item matches (the text listener will take care of applying the changes)
+				if(item.equals(tableEditor.getItem())) return;
+				
+				//Checking if the previous editor is still intact
+				Control oldEditor = tableEditor.getEditor();
+				if(oldEditor != null && !oldEditor.isDisposed()) {
+					//Applying the edited text
+					Text text = (Text) tableEditor.getEditor();
+					tableEditor.getItem().setText(text.getText());
+					
+					//Disposing of the editor
+					oldEditor.dispose();
+				}
+				
+				//Creating the text editor
+				Text newEditor = new Text(table, SWT.NONE);
+				newEditor.setText(item.getText());
+				
+				//Recording the original text and clearing the item text
+				originalEditTextWrapper.value = item.getText();
+				item.setText("");
+				
+				//Adding the modification listener to resize the text field
+				newEditor.addModifyListener(modifyEvent -> UIHelper.packControl((Text) modifyEvent.widget, ((Text) modifyEvent.widget).getText(), 6));
+				
+				//Adding a key listener to track submit / discard events
+				Listener textListener = textEvent -> {
+					//Getting the editor
+					Text text = (Text) tableEditor.getEditor();
+					
+					//Checking if the event is a lost focus
+					if(textEvent.type == SWT.FocusOut) {
+						//Applying the changes
+						String editedText = text.getText().trim();
+						TableItem tableItem = tableEditor.getItem();
+						if(!tableItem.isDisposed()) tableItem.setText(editedText.isEmpty() ? originalEditTextWrapper.value : editedText);
 						
 						//Disposing of the editor
-						oldEditor.dispose();
-					}
-					
-					//Getting the table item
-					TableItem item = (TableItem) selectionEvent.item;
-					if(item == null) return;
-					
-					//Creating the text editor
-					Text newEditor = new Text(table, SWT.NONE);
-					newEditor.setText(item.getText());
-					
-					//Recording the original text and clearing the item text
-					String originalText = item.getText();
-					item.setText("");
-					
-					//Adding the modification listener to resize the text field
-					newEditor.addModifyListener(modifyEvent -> UIHelper.packControl((Text) modifyEvent.widget, ((Text) modifyEvent.widget).getText(), 6));
-					
-					//Adding a key listener to track submit / discard events
-					Listener textListener = textEvent -> {
-						//Getting the editor
-						Text text = (Text) editor.getEditor();
+						newEditor.dispose();
 						
-						//Checking if the event is a lost focus
-						if(textEvent.type == SWT.FocusOut) {
+						//Setting the text editor as closed
+						textEditorOpen.value = Boolean.FALSE;
+						
+						//Focusing the table
+						table.setFocus();
+					}
+					//Otherwise checking if the event is a traverse
+					else if(textEvent.type == SWT.Traverse) {
+						//Checking if the traverse type is a confirmation (return)
+						if(textEvent.detail == SWT.TRAVERSE_RETURN) {
 							//Applying the changes
-							editor.getItem().setText(text.getText());
+							String editedText = text.getText().trim();
+							TableItem tableItem = tableEditor.getItem();
+							if(!tableItem.isDisposed()) tableItem.setText(editedText.isEmpty() ? originalEditTextWrapper.value : editedText);
 							
 							//Disposing of the editor
 							newEditor.dispose();
@@ -411,99 +576,55 @@ public class PreferencesManager {
 							//Focusing the table
 							table.setFocus();
 						}
-						//Otherwise checking if the event is a traverse
-						else if(textEvent.type == SWT.Traverse) {
-							//Checking if the traverse type is a confirmation (return)
-							if(textEvent.detail == SWT.TRAVERSE_RETURN) {
-								//Applying the changes
-								editor.getItem().setText(text.getText());
-								
-								//Disposing of the editor
-								newEditor.dispose();
-								
-								//Setting the text editor as closed
-								textEditorOpen.value = Boolean.FALSE;
-								
-								//Focusing the table
-								table.setFocus();
-							}
-							//Otherwise checking if the traverse type is a discard (escape)
-							else if(textEvent.detail == SWT.TRAVERSE_ESCAPE) {
-								//Reverting the changes
-								editor.getItem().setText(originalText);
-								
-								//Disposing of the editor
-								newEditor.dispose();
-								
-								//Setting the text editor as closed
-								textEditorOpen.value = Boolean.FALSE;
-								
-								//Focusing the table
-								table.setFocus();
-							}
+						//Otherwise checking if the traverse type is a discard (escape)
+						else if(textEvent.detail == SWT.TRAVERSE_ESCAPE) {
+							//Reverting the changes
+							TableItem tableItem = tableEditor.getItem();
+							if(!tableItem.isDisposed()) tableItem.setText(originalEditTextWrapper.value);
+							
+							//Disposing of the editor
+							newEditor.dispose();
+							
+							//Setting the text editor as closed
+							textEditorOpen.value = Boolean.FALSE;
+							
+							//Focusing the table
+							table.setFocus();
 						}
-					};
+					}
+				};
+				
+				newEditor.addListener(SWT.FocusOut, textListener);
+				newEditor.addListener(SWT.Traverse, textListener);
+				
+				//Enabling the editor
+				newEditor.selectAll();
+				newEditor.setFocus();
+				tableEditor.setEditor(newEditor, item, 0);
+				newEditor.pack();
+				
+				//Setting the text editor as open
+				textEditorOpen.value = Boolean.TRUE;
+			};
+			
+			//Adding the table selection listener
+			table.addSelectionListener(new SelectionAdapter() {
+				public void widgetSelected(SelectionEvent selectionEvent) {
+					//Getting the table item
+					TableItem item = (TableItem) selectionEvent.item;
+					if(item == null) return;
 					
-					newEditor.addListener(SWT.FocusOut, textListener);
-					newEditor.addListener(SWT.Traverse, textListener);
-					
-					//Adding a key listener to track enter / discard keys
-					/* newEditor.addKeyListener(new KeyAdapter() {
-						public void keyPressed(KeyEvent event) {
-							//Checking if the event is confirming the changes (return)
-							if(event.character == SWT.CR) {
-								//Applying the changes
-								Text text = (Text) editor.getEditor();
-								editor.getItem().setText(text.getText());
-								
-								//Disposing of the editor
-								newEditor.dispose();
-								
-								//Setting the text editor as closed
-								textEditorOpen.value = Boolean.FALSE;
-								
-								//Focusing the table
-								table.setFocus();
-							}
-							//Otherwise checking if the event is discarding the changes (escape)
-							if(event.character == SWT.ESC) {
-								//Reverting the changes
-								Text text = (Text) editor.getEditor();
-								editor.getItem().setText(originalText);
-								
-								//Disposing of the editor
-								newEditor.dispose();
-								
-								//Setting the text editor as closed
-								textEditorOpen.value = Boolean.FALSE;
-								
-								//Focusing the table
-								table.setFocus();
-							}
-						}
-					}); */
-					
-					//Enabling the editor
-					newEditor.selectAll();
-					newEditor.setFocus();
-					editor.setEditor(newEditor, item, 0);
-					newEditor.pack();
-					
-					//Setting the text editor as open
-					textEditorOpen.value = Boolean.TRUE;
+					//Editing the table item
+					editTableItem.accept(item);
 				}
 			});
 			
 			GridData tableGD = new GridData();
 			tableGD.horizontalAlignment = GridData.FILL;
+			tableGD.verticalAlignment = GridData.FILL;
 			tableGD.grabExcessVerticalSpace = true;
 			tableGD.grabExcessHorizontalSpace = true;
 			table.setLayoutData(tableGD);
-			
-			for (int i=0; i<10; i++) {
-				TableItem item = new TableItem (table, 0);
-				item.setText ("Item " + i);
-			}
 		}
 		
 		{
@@ -526,6 +647,19 @@ public class PreferencesManager {
 			acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
 			acceptButton.setLayoutData(acceptButtonFD);
 			acceptButton.addListener(SWT.Selection, event -> {
+				//Applying the current edit
+				if(tableEditor.getEditor() != null && !tableEditor.getEditor().isDisposed()) {
+					String editedText = ((Text) tableEditor.getEditor()).getText().trim();
+					tableEditor.getItem().setText(editedText.isEmpty() ? originalEditTextWrapper.value : editedText);
+				}
+				
+				//Getting the passwords from the table
+				List<String> newPasswords = new ArrayList<>();
+				for(TableItem item : table.getItems()) newPasswords.add(item.getText());
+				
+				//Writing the password list to disk if the lists don't match
+				if(!passwords.equals(newPasswords)) savePasswords(newPasswords);
+				
 				//TODO save data
 				shell.close();
 			});
@@ -561,6 +695,11 @@ public class PreferencesManager {
 			addItemButtonFD.left = new FormAttachment(0);
 			addItemButtonFD.top = new FormAttachment(50, -addItemButtonFD.height / 2);
 			addItemButton.setLayoutData(addItemButtonFD);
+			addItemButton.addListener(SWT.Selection, event -> {
+				TableItem tableItem = new TableItem(table, SWT.NONE);
+				table.setSelection(tableItem);
+				editTableItem.accept(tableItem);
+			});
 			
 			removeItemButton = new Button(buttonContainer, SWT.FLAT);
 			removeItemButton.setImage(removeImage);
@@ -569,11 +708,101 @@ public class PreferencesManager {
 			removeItemButtonFD.left = new FormAttachment(addItemButton);
 			removeItemButtonFD.top = new FormAttachment(50, -removeItemButtonFD.height / 2);
 			removeItemButton.setLayoutData(removeItemButtonFD);
+			removeItemButton.addListener(SWT.Selection, event -> {
+				table.remove(table.getSelectionIndices());
+			});
 		}
+		
+		//Filling the table
+		for(String password : passwords) {
+			TableItem tableItem = new TableItem(table, SWT.NONE);
+			tableItem.setText(password);
+		}
+		
+		//Adding a listener to the shell
+		/* shell.addListener(SWT.Close, closeEvent -> {
+		
+		}); */
 		
 		//Opening the dialog
 		shell.pack();
 		shell.setSize(300, 200);
 		shell.open();
+	}
+	
+	private static List<String> loadPasswords() {
+		//Creating the list
+		List<String> list = new ArrayList<>();
+		
+		//Checking if the users file exists
+		if(userFile.exists()) {
+			try {
+				//Reading the file
+				for(String line : Files.readAllLines(userFile.toPath())) list.add(new String(Base64.getDecoder().decode(line)));
+			} catch(IOException exception) {
+				//Printing the stack trace
+				Main.getLogger().log(Level.SEVERE, "Failed to read users file at " + userFile.getPath(), exception);
+				
+				//Returning the list
+				return list;
+			}
+		} else {
+			//Adding the default password
+			list.add(defaultPassword);
+			
+			//Writing the password list to disk
+			savePasswords(list);
+		}
+		
+		//Returning the list
+		return list;
+	}
+	
+	private static void savePasswords(List<String> list) {
+		//Creating the print writer
+		try(PrintWriter writer = new PrintWriter(userFile, textEncoding)) {
+			//Writing the passwords
+			for(String line : list) writer.println(Base64.getEncoder().encodeToString(line.getBytes()));
+		} catch(FileNotFoundException | UnsupportedEncodingException exception) {
+			//Printing the stack trace
+			Main.getLogger().log(Level.SEVERE, "Failed to write users file at " + userFile.getPath(), exception);
+		}
+	}
+	
+	static boolean matchPassword(String comparePass) {
+		//Returning true if the file doesn't exist
+		if(!userFile.exists()) return true;
+		
+		//Preparing the password containers
+		byte[] comparePassBytes = comparePass.getBytes();
+		byte[] storedPassBytes = new byte[0];
+		
+		//Reading the file
+		try(BufferedReader reader = new BufferedReader(new FileReader(userFile))) {
+			//Iterating over the lines and returning true if one of them matches
+			String line;
+			while((line = reader.readLine()) != null) {
+				storedPassBytes = Base64.getDecoder().decode(line);
+				if(Arrays.equals(comparePassBytes, storedPassBytes)) return true;
+			}
+		} catch(IOException exception) {
+			//Printing the stack trace
+			Main.getLogger().log(Level.SEVERE, "Failed to read users file at " + userFile.getPath(), exception);
+			
+			//Returning false
+			return false;
+		} finally {
+			//Clearing the password containers
+			byte zero = 0;
+			Arrays.fill(comparePassBytes, zero);
+			Arrays.fill(storedPassBytes, zero);
+		}
+		
+		//Returning false
+		return false;
+	}
+	
+	static int getServerPort() {
+		return serverPort;
 	}
 }

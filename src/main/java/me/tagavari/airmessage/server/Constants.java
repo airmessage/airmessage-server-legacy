@@ -1,6 +1,9 @@
 package me.tagavari.airmessage.server;
 
 import java.io.File;
+import java.io.IOException;
+import java.net.DatagramSocket;
+import java.net.ServerSocket;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -24,6 +27,10 @@ class Constants {
 	static final Pattern regExNumerated = Pattern.compile("_\\d+?$");
 	static final String reExInteger = "^\\d+$";
 	static final String regExSplitFilename = "\\.(?=[^.]+$)";
+	
+	//Creating the other values
+	static final int minPort = 0;
+	static final int maxPort = 65535;
 	
 	static File findFreeFile(File directory, String fileName) {
 		//Creating the file
@@ -114,7 +121,8 @@ class Constants {
 		//Creating the directory if the file doesn't exist
 		if(!applicationSupportDir.exists()) {
 			boolean result = applicationSupportDir.mkdir();
-			if(!result) UIHelper.displayAlertDialog("Couldn't start application: failed to create Application Support directory at " + applicationSupportDir.getPath());
+			if(!result)
+				UIHelper.displayAlertDialog("Couldn't start application: failed to create Application Support directory at " + applicationSupportDir.getPath());
 			return result;
 		}
 		
@@ -142,5 +150,43 @@ class Constants {
 		ValueWrapper(T value) {
 			this.value = value;
 		}
+	}
+	
+	/**
+	 * Checks to see if a specific port is available.
+	 *
+	 * @param port the port to check for availability
+	 */
+	public static boolean checkPortAvailability(int port) {
+		//Returning if the port is out of range
+		if(port < minPort || port > maxPort) throw new IllegalArgumentException("Invalid start port: " + port);
+		
+		//Attempting to bind the port
+		ServerSocket serverSocket = null;
+		DatagramSocket datagramSocket = null;
+		try {
+			serverSocket = new ServerSocket(port);
+			serverSocket.setReuseAddress(true);
+			datagramSocket = new DatagramSocket(port);
+			datagramSocket.setReuseAddress(true);
+			
+			//Returning true
+			return true;
+		} catch(IOException exception) {
+			//An exception was thrown, port couldn't be bound
+		} finally {
+			//Cleaning up the sockets
+			if(datagramSocket != null) datagramSocket.close();
+			if(serverSocket != null) {
+				try {
+					serverSocket.close();
+				} catch(IOException exception) {
+					//Should not be thrown
+				}
+			}
+		}
+		
+		//Returning false
+		return false;
 	}
 }
