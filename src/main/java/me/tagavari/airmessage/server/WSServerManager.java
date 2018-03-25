@@ -153,7 +153,7 @@ public class WSServerManager extends WebSocketServer {
 		connectionCount--;
 		
 		//Updating the connection message
-		UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);
+		if(!UIHelper.getDisplay().isDisposed()) UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);
 		
 		if(connection.getRemoteSocketAddress() == null) Main.getLogger().info("Client disconnected");
 		else Main.getLogger().info("Client disconnected with IP address " + connection.getRemoteSocketAddress().getAddress().getHostAddress());

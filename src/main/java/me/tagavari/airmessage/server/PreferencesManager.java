@@ -652,7 +652,7 @@ public class PreferencesManager {
 				//Applying the current edit
 				if(tableEditor.getEditor() != null && !tableEditor.getEditor().isDisposed()) {
 					String editedText = ((Text) tableEditor.getEditor()).getText().trim();
-					tableEditor.getItem().setText(editedText.isEmpty() ? originalEditTextWrapper.value : editedText);
+					if(!tableEditor.getItem().isDisposed()) tableEditor.getItem().setText(editedText.isEmpty() ? originalEditTextWrapper.value : editedText);
 				}
 				
 				//Getting the passwords from the table

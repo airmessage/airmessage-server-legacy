@@ -14,10 +14,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -44,7 +43,7 @@ class DatabaseManager {
 	RequestThread requestThread;
 	
 	//Creating the other values
-	private HashMap<String, Integer> messageStates = new HashMap<>();
+	private HashMap<String, MessageState> messageStates = new HashMap<>();
 	
 	static boolean start(long scanFrequency) {
 		//Checking if there is already an instance
@@ -174,9 +173,6 @@ class DatabaseManager {
 									() -> DSL.field("message.date").greaterThan(creationTime) :
 									() -> DSL.field("message.ROWID").greaterThan(latestEntryID));
 					
-					//Updating the message states
-					updateMessageStates(connection, dataFetchResult.isolatedModifiers);
-					
 					//Updating the latest entry ID
 					if(dataFetchResult.latestMessageID > latestEntryID) latestEntryID = dataFetchResult.latestMessageID;
 					
@@ -190,21 +186,25 @@ class DatabaseManager {
 					return;
 				}
 				
-				//Skipping the remainder of the iteration if there are no new messages
-				if(dataFetchResult == null || dataFetchResult.conversationItems.isEmpty()) continue;
-				
-				//Serializing the data
-				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-					out.writeByte(SharedValues.wsFrameUpdate); //Message type - update
-					out.writeObject(dataFetchResult.conversationItems); //Message list
-					out.flush();
-					
-					//Sending the data
-					WSServerManager.publishMessage(bos.toByteArray());
-				} catch(IOException exception) {
-					//Printing the stack trace
-					exception.printStackTrace();
+				//Checking if there are no new messages
+				if(dataFetchResult != null && !dataFetchResult.conversationItems.isEmpty()) {
+					//Serializing the data
+					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+						out.writeByte(SharedValues.wsFrameUpdate); //Message type - update
+						out.writeObject(dataFetchResult.conversationItems); //Message list
+						out.flush();
+						
+						//Sending the data
+						WSServerManager.publishMessage(bos.toByteArray());
+						System.out.println("Message update packet sent!");
+					} catch(IOException exception) {
+						//Printing the stack trace
+						exception.printStackTrace();
+					}
 				}
+				
+				//Updating the message states
+				updateMessageStates(connection, dataFetchResult == null ? new ArrayList<>() : dataFetchResult.isolatedModifiers);
 			}
 		}
 		
@@ -228,9 +228,7 @@ class DatabaseManager {
 		private final Connection connection;
 		
 		//Creating the lock values
-		private final Lock dbRequestsLock = new ReentrantLock();
-		private final java.util.concurrent.locks.Condition dbRequestsCondition = dbRequestsLock.newCondition();
-		private ArrayList<Object> databaseRequests = new ArrayList<>();
+		private BlockingQueue<Object> databaseRequests = new LinkedBlockingQueue<>();
 		
 		private RequestThread(Connection connection) {
 			this.connection = connection;
@@ -238,63 +236,33 @@ class DatabaseManager {
 		
 		@Override
 		public void run() {
-			//Looping while the thread is alive
-			while(!isInterrupted()) {
-				//Creating the queued request lists
-				ArrayList<ConversationInfoRequest> queuedConversationRequests = new ArrayList<>();
-				ArrayList<FileRequest> queuedFileRequests = new ArrayList<>();
-				ArrayList<CustomRetrievalRequest> queuedCustomRetrievalRequests = new ArrayList<>();
-				ArrayList<MassRetrievalRequest> queuedMassRetrievalRequests = new ArrayList<>();
-				
-				//Moving the requests (to be able to release the lock sooner)
-				ArrayList<Object> localRequests = new ArrayList<>();
-				dbRequestsLock.lock();
-				try {
-					if(!databaseRequests.isEmpty()) {
-						localRequests = databaseRequests;
-						databaseRequests = new ArrayList<>();
-					}
-				} finally {
-					dbRequestsLock.unlock();
+			try {
+				//Looping while the thread is alive
+				while(!isInterrupted()) {
+					//Taking the queue item
+					Object request = databaseRequests.take();
+					
+					//Processing the request
+					if(request instanceof ConversationInfoRequest) fulfillConversationRequest(connection, (ConversationInfoRequest) request);
+					else if(request instanceof FileRequest) fulfillFileRequest(connection, (FileRequest) request);
+					else if(request instanceof CustomRetrievalRequest) fulfillCustomRetrievalRequest(connection, (CustomRetrievalRequest) request);
+					else if(request instanceof MassRetrievalRequest) fulfillMassRetrievalRequest(connection, (MassRetrievalRequest) request);
 				}
-				
-				//Sorting the requests
-				for(Object request : localRequests) {
-					if(request instanceof ConversationInfoRequest) queuedConversationRequests.add((ConversationInfoRequest) request);
-					else if(request instanceof FileRequest) queuedFileRequests.add((FileRequest) request);
-					else if(request instanceof CustomRetrievalRequest) queuedCustomRetrievalRequests.add((CustomRetrievalRequest) request);
-					else if(request instanceof MassRetrievalRequest) queuedMassRetrievalRequests.add((MassRetrievalRequest) request);
-				}
-				
-				//Fulfilling the queued requests (if there are any)
-				if(!queuedConversationRequests.isEmpty()) fulfillConversationRequests(connection, queuedConversationRequests);
-				if(!queuedFileRequests.isEmpty()) fulfillFileRequests(connection, queuedFileRequests);
-				if(!queuedCustomRetrievalRequests.isEmpty()) fulfillCustomRetrievalRequests(connection, queuedCustomRetrievalRequests);
-				if(!queuedMassRetrievalRequests.isEmpty()) fulfillMassRetrievalRequests(connection, queuedMassRetrievalRequests);
-				
-				//Awaiting new requests
-				dbRequestsLock.lock();
-				try {
-					//Waiting for entries to appear
-					if(databaseRequests.isEmpty()) dbRequestsCondition.await();
-				} catch(InterruptedException exception) {
-					//Breaking from the loop
-					break;
-				} finally {
-					dbRequestsLock.unlock();
-				}
+			} catch(InterruptedException exception) {
+			
 			}
 		}
 		
 		void addRequest(Object request) {
-			//Adding the data struct
+			databaseRequests.add(request);
+			/* //Adding the data struct
 			dbRequestsLock.lock();
 			try {
 				databaseRequests.add(request);
 				dbRequestsCondition.signal();
 			} finally {
 				dbRequestsLock.unlock();
-			}
+			} */
 		}
 	}
 	
@@ -302,40 +270,221 @@ class DatabaseManager {
 		requestThread.addRequest(request);
 	}
 	
-	private void fulfillConversationRequests(Connection connection, ArrayList<ConversationInfoRequest> requests) {
+	private void fulfillConversationRequest(Connection connection, ConversationInfoRequest request) {
 		//Creating the DSL context
 		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
 		
-		//Iterating over the requests
-		for(ConversationInfoRequest request : requests) {
-			//Creating the conversation info list
-			ArrayList<SharedValues.ConversationInfo> conversationInfoList = new ArrayList<>();
-			
-			//Iterating over their conversations
-			for(String conversationGUID : request.conversationsGUIDs) {
-				//Fetching the conversation information
-				String conversationTitle;
-				String conversationService;
-				{
-					//Running the SQL
-					Result<org.jooq.Record2<String, String>> results = create.select(DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
-							.from(DSL.table("chat"))
-							.where(DSL.field("chat.guid").equal(conversationGUID))
-							.fetch();
+		//Creating the conversation info list
+		ArrayList<SharedValues.ConversationInfo> conversationInfoList = new ArrayList<>();
+		
+		//Iterating over their conversations
+		for(String conversationGUID : request.conversationsGUIDs) {
+			//Fetching the conversation information
+			String conversationTitle;
+			String conversationService;
+			{
+				//Running the SQL
+				Result<org.jooq.Record2<String, String>> results = create.select(DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
+						.from(DSL.table("chat"))
+						.where(DSL.field("chat.guid").equal(conversationGUID))
+						.fetch();
+				
+				//Checking if there are no results
+				if(results.isEmpty()) {
+					//Adding an unavailable conversation info
+					conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID));
 					
-					//Checking if there are no results
-					if(results.isEmpty()) {
-						//Adding an unavailable conversation info
-						conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID));
-						
-						//Skipping the remainder of the iteration
-						continue;
-					}
-					
-					//Setting the conversation information
-					conversationTitle = results.getValue(0, DSL.field("chat.display_name", String.class));
-					conversationService = results.getValue(0, DSL.field("chat.service_name", String.class));
+					//Skipping the remainder of the iteration
+					continue;
 				}
+				
+				//Setting the conversation information
+				conversationTitle = results.getValue(0, DSL.field("chat.display_name", String.class));
+				conversationService = results.getValue(0, DSL.field("chat.service_name", String.class));
+			}
+			
+			//Fetching the conversation members
+			ArrayList<String> conversationMembers = new ArrayList<>();
+			{
+				//Running the SQL
+				Result<org.jooq.Record1<String>> results = create.select(DSL.field("handle.id", String.class))
+						.from(DSL.table("handle"))
+						.innerJoin(DSL.table("chat_handle_join")).on(DSL.field("handle.ROWID").equal(DSL.field("chat_handle_join.handle_id")))
+						.innerJoin(DSL.table("chat")).on(DSL.field("chat_handle_join.chat_id").equal(DSL.field("chat.ROWID")))
+						.where(DSL.field("chat.guid").equal(conversationGUID))
+						.fetch();
+				
+				//Checking if there are no results
+				if(results.isEmpty()) {
+					//Adding an unavailable conversation info
+					conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID));
+					
+					//Skipping the remainder of the iteration
+					continue;
+				}
+				
+				//Adding the members
+				for(Record1<String> result : results) conversationMembers.add(result.getValue(DSL.field("handle.id", String.class)));
+			}
+			
+			//Adding the conversation info
+			conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers));
+		}
+		
+		//Checking if the connection is still open
+		if(request.connection.isOpen()) {
+			//Preparing to serialize the data
+			try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+				//Serializing the data
+				out.writeByte(SharedValues.wsFrameChatInfo); //Message type - chat information
+				out.writeObject(conversationInfoList); //Conversation list
+				out.flush();
+				
+				//Sending the conversation info
+				request.connection.send(bos.toByteArray());
+			} catch(IOException exception) {
+				exception.printStackTrace();
+			}
+		}
+	}
+	
+	private void fulfillFileRequest(Connection connection, FileRequest request) {
+		//Creating the DSL context
+		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
+		
+		//Fetching information from the database
+		Result<org.jooq.Record1<String>> results = create.select(DSL.field("filename", String.class))
+				.from(DSL.table("attachment"))
+				.where(DSL.field("guid").equal(request.fileGuid))
+				.fetch();
+		
+		//Creating the result variables
+		File file = null;
+		boolean succeeded = true;
+		
+		//Setting the succeeded variable to false if there are no results
+		if(results.isEmpty()) succeeded = false;
+		else {
+			//Getting the file
+			String filePath = results.getValue(0, DSL.field("filename", String.class));
+			if(filePath.startsWith("~")) filePath = filePath.replaceFirst("~", System.getProperty("user.home"));
+			file = new File(filePath);
+			
+			//Setting the succeeded variable to false if the file doesn't exist
+			if(!file.exists()) succeeded = false;
+		}
+		
+		//Checking if there have been no errors so far
+		if(succeeded) {
+			//Streaming the file
+			try(FileInputStream inputStream = new FileInputStream(file)) {
+				//Preparing to read the data
+				byte[] buffer = new byte[request.chunkSize];
+				int bytesRead;
+				int requestIndex = 0;
+				
+				//Attempting to read the data
+				if((bytesRead = inputStream.read(buffer)) != -1) {
+					while(true) {
+						//Copying and compressing the buffer
+						byte[] compressedChunk = SharedValues.compress(buffer, bytesRead);
+						
+						//Reading more data
+						boolean moreDataRead = (bytesRead = inputStream.read(buffer)) != -1;
+						
+						//Preparing to serialize the data
+						try(ByteArrayOutputStream bos = new ByteArrayOutputStream();
+							ObjectOutputStream out = new ObjectOutputStream(bos)) {
+							out.writeByte(SharedValues.wsFrameAttachmentReq); //Message type - attachment request
+							out.writeUTF(request.fileGuid); //File GUID
+							out.writeShort(request.requestID); //Request ID
+							out.writeInt(requestIndex); //Request index
+							out.writeObject(compressedChunk); //Compressed chunk compressedData
+							out.reset();
+							if(requestIndex == 0) out.writeLong(file.length()); //File length
+							out.writeBoolean(!moreDataRead); //Is last
+							out.flush();
+							
+							//Sending the data
+							if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
+						}
+						
+						//Adding to the request index
+						requestIndex++;
+						
+						//Breaking from the loop if there is no more data to read
+						if(!moreDataRead) break;
+					}
+				} else {
+					//Setting the succeeded variable to false
+					succeeded = false;
+				}
+			} catch(IOException exception) {
+				exception.printStackTrace();
+			}
+		}
+		
+		//Checking if the attempt was a failure
+		if(!succeeded) {
+			//Preparing to serialize the data
+			try(ByteArrayOutputStream bos = new ByteArrayOutputStream();
+				ObjectOutputStream out = new ObjectOutputStream(bos)) {
+				out.writeByte(SharedValues.wsFrameAttachmentReqFailed); //Message type - attachment request
+				out.writeShort(request.requestID); //Request ID
+				out.writeUTF(request.fileGuid); //File GUID
+				out.flush();
+				
+				//Sending the data
+				if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
+			} catch(IOException exception) {
+				exception.printStackTrace();
+			}
+		}
+	}
+	
+	private void fulfillCustomRetrievalRequest(Connection connection, CustomRetrievalRequest request) {
+		try {
+			//Returning their data
+			DataFetchResult result = fetchData(connection, request.filter);
+			if(request.connection.isOpen()) {
+				//Serializing the data
+				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+					out.writeByte(request.messageResponseType); //Message type - update
+					out.writeObject(result.conversationItems); //Message list
+					out.flush();
+					
+					//Sending the data
+					request.connection.send(bos.toByteArray());
+				}
+			}
+		} catch(NoSuchAlgorithmException | IOException exception) {
+			exception.printStackTrace();
+		}
+	}
+	
+	private void fulfillMassRetrievalRequest(Connection connection, MassRetrievalRequest request) {
+		try {
+			//Reading the message data
+			DataFetchResult messageResult = fetchData(connection, null);
+			//if(messageResult == null) continue;
+			
+			//Creating the DSL context
+			DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
+			
+			//Fetching the conversation information
+			List<SharedValues.ConversationInfo> conversationInfoList = new ArrayList<>();
+			
+			//Running the SQL
+			Result<org.jooq.Record3<String, String, String>> conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
+					.from(DSL.table("chat"))
+					.fetch();
+			
+			//Iterating over the results
+			for(int i = 0; i < conversationResults.size(); i++) {
+				//Setting the conversation information
+				String conversationGUID = conversationResults.getValue(i, DSL.field("chat.guid", String.class));
+				String conversationTitle = conversationResults.getValue(i, DSL.field("chat.display_name", String.class));
+				String conversationService = conversationResults.getValue(i, DSL.field("chat.service_name", String.class));
 				
 				//Fetching the conversation members
 				ArrayList<String> conversationMembers = new ArrayList<>();
@@ -348,15 +497,6 @@ class DatabaseManager {
 							.where(DSL.field("chat.guid").equal(conversationGUID))
 							.fetch();
 					
-					//Checking if there are no results
-					if(results.isEmpty()) {
-						//Adding an unavailable conversation info
-						conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID));
-						
-						//Skipping the remainder of the iteration
-						continue;
-					}
-					
 					//Adding the members
 					for(Record1<String> result : results) conversationMembers.add(result.getValue(DSL.field("handle.id", String.class)));
 				}
@@ -367,206 +507,19 @@ class DatabaseManager {
 			
 			//Checking if the connection is still open
 			if(request.connection.isOpen()) {
-				//Preparing to serialize the data
+				//Serializing the data
 				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-					//Serializing the data
-					out.writeByte(SharedValues.wsFrameChatInfo); //Message type - chat information
+					out.writeByte(SharedValues.wsFrameMassRetrieval); //Message type - mass retrieval
+					out.writeObject(messageResult.conversationItems); //Message list
 					out.writeObject(conversationInfoList); //Conversation list
 					out.flush();
 					
-					//Sending the conversation info
-					request.connection.send(bos.toByteArray());
-				} catch(IOException exception) {
-					exception.printStackTrace();
-				}
-			}
-		}
-	}
-	
-	private void fulfillFileRequests(Connection connection, ArrayList<FileRequest> requests) {
-		//Creating the DSL context
-		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
-		
-		//Iterating over the requests
-		for(FileRequest request : requests) {
-			//Fetching information from the database
-			Result<org.jooq.Record1<String>> results = create.select(DSL.field("filename", String.class))
-					.from(DSL.table("attachment"))
-					.where(DSL.field("guid").equal(request.fileGuid))
-					.fetch();
-			
-			//Creating the result variables
-			File file = null;
-			boolean succeeded = true;
-			
-			//Setting the succeeded variable to false if there are no results
-			if(results.isEmpty()) succeeded = false;
-			else {
-				//Getting the file
-				String filePath = results.getValue(0, DSL.field("filename", String.class));
-				if(filePath.startsWith("~")) filePath = filePath.replaceFirst("~", System.getProperty("user.home"));
-				file = new File(filePath);
-				
-				//Setting the succeeded variable to false if the file doesn't exist
-				if(!file.exists()) succeeded = false;
-			}
-			
-			//Checking if there have been no errors so far
-			if(succeeded) {
-				//Streaming the file
-				try(FileInputStream inputStream = new FileInputStream(file)) {
-					//Preparing to read the data
-					byte[] buffer = new byte[request.chunkSize];
-					int bytesRead;
-					int requestIndex = 0;
-					
-					//Attempting to read the data
-					if((bytesRead = inputStream.read(buffer)) != -1) {
-						while(true) {
-							//Copying and compressing the buffer
-							byte[] compressedChunk = SharedValues.compress(buffer, bytesRead);
-							
-							//Reading more data
-							boolean moreDataRead = (bytesRead = inputStream.read(buffer)) != -1;
-							
-							//Preparing to serialize the data
-							try(ByteArrayOutputStream bos = new ByteArrayOutputStream();
-								ObjectOutputStream out = new ObjectOutputStream(bos)) {
-								out.writeByte(SharedValues.wsFrameAttachmentReq); //Message type - attachment request
-								out.writeUTF(request.fileGuid); //File GUID
-								out.writeShort(request.requestID); //Request ID
-								out.writeInt(requestIndex); //Request index
-								out.writeObject(compressedChunk); //Compressed chunk compressedData
-								out.reset();
-								if(requestIndex == 0) out.writeLong(file.length()); //File length
-								out.writeBoolean(!moreDataRead); //Is last
-								out.flush();
-								
-								//Sending the data
-								if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
-							}
-							
-							//Adding to the request index
-							requestIndex++;
-							
-							//Breaking from the loop if there is no more data to read
-							if(!moreDataRead) break;
-						}
-					} else {
-						//Setting the succeeded variable to false
-						succeeded = false;
-					}
-				} catch(IOException exception) {
-					exception.printStackTrace();
-				}
-			}
-			
-			//Checking if the attempt was a failure
-			if(!succeeded) {
-				//Preparing to serialize the data
-				try(ByteArrayOutputStream bos = new ByteArrayOutputStream();
-					ObjectOutputStream out = new ObjectOutputStream(bos)) {
-					out.writeByte(SharedValues.wsFrameAttachmentReqFailed); //Message type - attachment request
-					out.writeShort(request.requestID); //Request ID
-					out.writeUTF(request.fileGuid); //File GUID
-					out.flush();
-					
 					//Sending the data
-					if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
-				} catch(IOException exception) {
-					exception.printStackTrace();
+					request.connection.send(bos.toByteArray());
 				}
-				
-				//Skipping the remainder of the iteration
-				continue;
 			}
-		}
-	}
-	
-	private void fulfillCustomRetrievalRequests(Connection connection, ArrayList<CustomRetrievalRequest> requests) {
-		//Iterating over the requests
-		for(CustomRetrievalRequest request : requests) {
-			try {
-				//Returning their data
-				DataFetchResult result = fetchData(connection, request.filter);
-				if(request.connection.isOpen()) {
-					//Serializing the data
-					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-						out.writeByte(request.messageResponseType); //Message type - update
-						out.writeObject(result.conversationItems); //Message list
-						out.flush();
-						
-						//Sending the data
-						request.connection.send(bos.toByteArray());
-					}
-				}
-			} catch(NoSuchAlgorithmException | IOException exception) {
-				exception.printStackTrace();
-			}
-		}
-	}
-	
-	private void fulfillMassRetrievalRequests(Connection connection, ArrayList<MassRetrievalRequest> requests) {
-		//Iterating over the requests
-		for(MassRetrievalRequest request : requests) {
-			try {
-				//Reading the message data
-				DataFetchResult messageResult = fetchData(connection, null);
-				//if(messageResult == null) continue;
-				
-				//Creating the DSL context
-				DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
-				
-				//Fetching the conversation information
-				List<SharedValues.ConversationInfo> conversationInfoList = new ArrayList<>();
-				
-				//Running the SQL
-				Result<org.jooq.Record3<String, String, String>> conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
-						.from(DSL.table("chat"))
-						.fetch();
-				
-				//Iterating over the results
-				for(int i = 0; i < conversationResults.size(); i++) {
-					//Setting the conversation information
-					String conversationGUID = conversationResults.getValue(i, DSL.field("chat.guid", String.class));
-					String conversationTitle = conversationResults.getValue(i, DSL.field("chat.display_name", String.class));
-					String conversationService = conversationResults.getValue(i, DSL.field("chat.service_name", String.class));
-					
-					//Fetching the conversation members
-					ArrayList<String> conversationMembers = new ArrayList<>();
-					{
-						//Running the SQL
-						Result<org.jooq.Record1<String>> results = create.select(DSL.field("handle.id", String.class))
-								.from(DSL.table("handle"))
-								.innerJoin(DSL.table("chat_handle_join")).on(DSL.field("handle.ROWID").equal(DSL.field("chat_handle_join.handle_id")))
-								.innerJoin(DSL.table("chat")).on(DSL.field("chat_handle_join.chat_id").equal(DSL.field("chat.ROWID")))
-								.where(DSL.field("chat.guid").equal(conversationGUID))
-								.fetch();
-						
-						//Adding the members
-						for(Record1<String> result : results) conversationMembers.add(result.getValue(DSL.field("handle.id", String.class)));
-					}
-					
-					//Adding the conversation info
-					conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers));
-				}
-				
-				//Checking if the connection is still open
-				if(request.connection.isOpen()) {
-					//Serializing the data
-					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-						out.writeByte(SharedValues.wsFrameMassRetrieval); //Message type - mass retrieval
-						out.writeObject(messageResult.conversationItems); //Message list
-						out.writeObject(conversationInfoList); //Conversation list
-						out.flush();
-						
-						//Sending the data
-						request.connection.send(bos.toByteArray());
-					}
-				}
-			} catch(IOException | NoSuchAlgorithmException exception) {
-				exception.printStackTrace();
-			}
+		} catch(IOException | NoSuchAlgorithmException exception) {
+			exception.printStackTrace();
 		}
 	}
 	
@@ -827,19 +780,37 @@ class DatabaseManager {
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
 		//Fetching the data
-		Result<Record6<Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.field("message.date", Long.class).max(), DSL.field("message.guid", String.class), DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_delivered", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.date_read", Long.class))
+		/* Result<Record8<String, Long, Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.field("message.text", String.class), DSL.field("message.date", Long.class), DSL.field("message.date", Long.class).max(), DSL.field("message.guid", String.class), DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_delivered", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.date_read", Long.class))
 				.from(DSL.table("chat"))
 				.join(DSL.table("chat_message_join")).on(DSL.field("chat.ROWID").eq(DSL.field("chat_message_join.chat_id")))
 				.join(DSL.table("message")).on(DSL.field("chat_message_join.message_id").eq(DSL.field("message.ROWID")))
 				.where(DSL.field("message.is_from_me").isTrue())
+				.groupBy(DSL.field("chat.ROWID")).fetch(); */
+		
+		Result<Record6<Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.field("message.date", Long.class).max(), DSL.field("message.guid", String.class), DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_delivered", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.date_read", Long.class))
+				.from(DSL.table("message"))
+				.join(DSL.table("chat_message_join")).on(DSL.field("message.ROWID").eq(DSL.field("chat_message_join.message_id")))
+				.join(DSL.table("chat")).on(DSL.field("chat_message_join.chat_id").eq(DSL.field("chat.ROWID")))
+				.where(DSL.field("message.is_from_me").isTrue())
 				.groupBy(DSL.field("chat.ROWID")).fetch();
+		
+		/* Result<Record8<String, Long, Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.field("message.text", String.class), DSL.field("message.date", Long.class), DSL.field("message.date", Long.class).max(), DSL.field("message.guid", String.class), DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_delivered", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.date_read", Long.class))
+				.from(DSL.table("message"))
+				.join(DSL.table("chat_message_join")).on(DSL.field("message.ROWID").eq(DSL.field("chat_message_join.message_id")))
+				.join(DSL.table("chat")).on(DSL.field("chat_message_join.chat_id").eq(DSL.field("chat.ROWID")))
+				.join(DSL.select(DSL.field("chat.ROWID", Long.class), DSL.field("message.date", Long.class).max().as("maxDate")).from(DSL.table("message"))
+						.join(DSL.table("chat_message_join")).on(DSL.field("message.ROWID").eq(DSL.field("chat_message_join.message_id")))
+						.join(DSL.table("chat")).on(DSL.field("chat_message_join.chat_id").eq(DSL.field("chat.ROWID"))).groupBy(DSL.field("chat.ROWID")).asTable("grouped")).on(DSL.field("chat.ROWID").eq(DSL.field("grouped.ROWID"))).and(DSL.field("message.date").eq(DSL.field("grouped.maxDate")))
+				//.where(DSL.field("message.is_from_me").isTrue())
+				//.groupBy(DSL.field("chat.ROWID")).fetch();
+				.fetch(); */
 		
 		//Creating the result list
 		//ArrayList<Object> modifierList = new ArrayList<>();
 		
 		//Iterating over the results
-		HashMap<String, Integer> messageStatesCache = messageStates;
-		messageStates = new HashMap<>();
+		//HashMap<String, MessageState> messageStatesCache = messageStates;
+		//messageStates = new HashMap<>();
 		for(int i = 0; i < results.size(); i++) {
 			//Getting the result information
 			String resultGuid = results.getValue(i, DSL.field("message.guid", String.class));
@@ -847,24 +818,36 @@ class DatabaseManager {
 					results.getValue(i, DSL.field("message.is_delivered", Boolean.class)),
 					results.getValue(i, DSL.field("message.is_read", Boolean.class)));
 			
-			//Adding the state to the list
-			messageStates.put(resultGuid, resultState);
+			//Getting the item
+			MessageState messageState;
+			if(messageStates.containsKey(resultGuid)) messageState = messageStates.get(resultGuid);
+			else {
+				messageStates.put(resultGuid, new MessageState(resultState));
+				continue;
+			}
 			
-			//Skipping the remainder of the iteration if the message state was not previously cached
-			if(!messageStatesCache.containsKey(resultGuid)) continue;
+			//Resetting the item's depth
+			messageState.depth = 0;
 			
 			//Getting the message states
-			int cacheState = messageStatesCache.get(resultGuid);
+			int cacheState = messageStates.get(resultGuid).state;
 			
 			//Checking if the states don't match
 			if(cacheState != resultState) {
+				//Updating the state
+				messageState.state = resultState;
+				
 				//Logging a debug message
 				Main.getLogger().finest("New activity status for message " + resultGuid + ": " + cacheState + " -> " + resultState);
+				//Main.getLogger().finest("New activity status for message " + results.getValue(i, DSL.field("message.text", String.class)) + ": " + cacheState + " -> " + resultState);
 				
 				//Adding the modifier to the list
 				modifierList.add(new SharedValues.ActivityStatusModifierInfo(resultGuid, resultState, Main.getTimeHelper().toUnixTime(results.getValue(i, DSL.field("message.date_read", Long.class)))));
 			}
 		}
+		
+		//Increasing the depth of the elements in the list, and removing them if they are deeper than 5
+		messageStates.entrySet().removeIf(stringMessageStateEntry -> ++stringMessageStateEntry.getValue().depth > 5);
 		
 		//Returning if there are no modifiers to send
 		if(modifierList.isEmpty()) return;
@@ -880,6 +863,15 @@ class DatabaseManager {
 		} catch(IOException exception) {
 			//Printing the stack trace
 			exception.printStackTrace();
+		}
+	}
+	
+	private static class MessageState {
+		private int state;
+		private int depth = 0;
+		
+		MessageState(int state) {
+			this.state = state;
 		}
 	}
 	

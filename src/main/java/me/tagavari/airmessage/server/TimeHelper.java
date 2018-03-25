@@ -26,7 +26,7 @@ enum TimeHelper {
 			case COCOA_CORE_DATA:
 				return (time - millisAppleUnixDifference) / 1000L; //Unix epoch -> Apple epoch / Milliseconds -> Seconds
 			case MAC_ABSOLUTE_TIME:
-				return (time - millisAppleUnixDifference) * 1000000L; //Unix epoch -> Apple epoch / Milliseconds -> Microseconds
+				return (time - millisAppleUnixDifference) * 1000000L; //Unix epoch -> Apple epoch / Milliseconds -> Nanoseconds
 			default:
 				//Throwing an illegal state exception
 				throw new IllegalStateException();
@@ -39,7 +39,7 @@ enum TimeHelper {
 			case COCOA_CORE_DATA:
 				return time * 1000L + millisAppleUnixDifference; //Seconds -> Milliseconds / Apple epoch -> Unix epoch
 			case MAC_ABSOLUTE_TIME:
-				return time / 1000000L + millisAppleUnixDifference; //Microseconds -> Milliseconds / Apple epoch -> Unix epoch
+				return time / 1000000L + millisAppleUnixDifference; //Nanoseconds -> Milliseconds / Apple epoch -> Unix epoch
 			default:
 				//Throwing an illegal state exception
 				throw new IllegalStateException();
