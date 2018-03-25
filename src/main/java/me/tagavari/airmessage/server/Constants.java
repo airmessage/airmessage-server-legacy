@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.DatagramSocket;
 import java.net.ServerSocket;
+import java.util.Random;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -188,5 +189,16 @@ class Constants {
 		
 		//Returning false
 		return false;
+	}
+	
+	
+	private static final String ALPHA_NUMERIC_STRING = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+	public static String randomAlphaNumericString(int length) {
+		StringBuilder builder = new StringBuilder();
+		Random random = new Random();
+		
+		for(int i = 0; i < length; i++) builder.append(ALPHA_NUMERIC_STRING.charAt(random.nextInt(ALPHA_NUMERIC_STRING.length())));
+		
+		return builder.toString();
 	}
 }

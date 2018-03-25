@@ -206,14 +206,12 @@ public class PreferencesManager {
 				element.setTextContent(Boolean.toString(autoCheckUpdates));
 				rootElement.appendChild(element);
 			}
-			System.out.println("Saving auto check updates to " + autoCheckUpdates);
 			
 			{
 				Element element = document.createElement(domTagScanFrequency);
 				element.setTextContent(Float.toString(scanFrequency));
 				rootElement.appendChild(element);
 			}
-			System.out.println("Saving frequency to " + scanFrequency);
 			
 			//Writing the XML document
 			TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(prefFile));
@@ -253,6 +251,10 @@ public class PreferencesManager {
 		
 		//Saving the preferences
 		savePreferences();
+		
+		//Updating the database manager
+		DatabaseManager databaseManager = DatabaseManager.getInstance();
+		if(databaseManager != null) databaseManager.scannerThread.updateScanFrequency((int) (scanFrequency * 1000));
 		
 		//Restarting the server
 		Main.restartServer();
@@ -804,5 +806,9 @@ public class PreferencesManager {
 	
 	static int getServerPort() {
 		return serverPort;
+	}
+	
+	static float getScanFrequency() {
+		return scanFrequency;
 	}
 }

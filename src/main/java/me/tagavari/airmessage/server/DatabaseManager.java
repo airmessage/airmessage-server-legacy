@@ -14,50 +14,41 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
-class DatabaseManager implements Runnable {
+class DatabaseManager {
 	//Creating the reference variables
-	private static final long checkTime = 5 * 1000;
-	private static final long pollTime = 100;
+	//private static final long checkTime = 5 * 1000;
+	//private static final long pollTime = 100;
 	private static final String databaseLocation = "jdbc:sqlite:" + System.getProperty("user.home") + "/Library/Messages/chat.db";
 	/* private static final ArrayList<String> validServices = new ArrayList<String>() {{
 		add("iMessage");
 		add("SMS");
 	}}; */
 	
-	private static final RetrievalFilter timeRetrievalFilter = new RetrievalFilter() {
-		@Override
-		Condition filter() {
-			return DSL.field("message.date").greaterThan(connectFetchTime);
-		}
-	};
+	//Creating the instance value
+	private static DatabaseManager instance;
 	
-	private static final RetrievalFilter identifierRetrievalFilter = new RetrievalFilter() {
-		@Override
-		Condition filter() {
-			return DSL.field("message.ROWID").greaterThan(latestEntryID);
-		}
-	};
-	
-	//Creating the support variables
+	//Creating the schema support values
 	private boolean dbSupportsSendStyle = false;
 	private boolean dbSupportsAssociation = false;
 	
-	//Creating the other variables
-	//private static long lastFetchTime;
-	private static long connectFetchTime;
-	private static long latestEntryID = -1;
+	//Creating the thread values
+	ScannerThread scannerThread;
+	RequestThread requestThread;
 	
-	private static Thread thread = null;
-	private static Connection connection;
-	static final ArrayList<Object> databaseRequests = new ArrayList<>();
-	
+	//Creating the other values
 	private HashMap<String, Integer> messageStates = new HashMap<>();
 	
-	static boolean start() {
+	static boolean start(long scanFrequency) {
 		//Checking if there is already an instance
-		if(thread != null) {
+		if(instance != null) {
 			//Logging the exception
 			//Main.getLogger().severe("Instance of database manager already exists");
 			
@@ -65,43 +56,52 @@ class DatabaseManager implements Runnable {
 			return true;
 		}
 		
-		//Connecting to the database
+		//Creating the database connections
+		Connection[] connections = new Connection[2];
+		int connectionsEstablished = 0;
 		try {
-			connection = DriverManager.getConnection(databaseLocation);
+			for(; connectionsEstablished < connections.length; connectionsEstablished++) connections[connectionsEstablished] = DriverManager.getConnection(databaseLocation);
 		} catch(SQLException exception) {
 			//Logging a message
 			Main.getLogger().severe("Failed to connect to chat message database: " + exception.getMessage());
+			
+			//Closing the connections
+			for(int i = 0; i < connectionsEstablished; i++) {
+				try {
+					connections[i].close();
+				} catch(SQLException exception2) {
+					exception2.printStackTrace();
+				}
+			}
+			
 			//Main.getLogger().severe("No incoming messages will be received");
 			
 			//Returning false
 			return false;
 		}
 		
-		//Getting the time variables
-		connectFetchTime = Main.getTimeHelper().toDatabaseTime(System.currentTimeMillis());
+		//Creating the instance
+		instance = new DatabaseManager(connections, scanFrequency);
 		
-		//Starting the thread
-		thread = new Thread(new DatabaseManager());
-		thread.start();
+		//Getting the time variables
+		//connectFetchTime = Main.getTimeHelper().toDatabaseTime(System.currentTimeMillis());
 		
 		//Returning true
 		return true;
 	}
 	
 	static void stop() {
+		//Getting the instance
+		if(DatabaseManager.instance == null) return;
+		
 		//Interrupting the thread
-		thread.interrupt();
+		DatabaseManager.instance.requestThread.interrupt();
+		DatabaseManager.instance.scannerThread.interrupt();
 	}
 	
-	@Override
-	public void run() {
-		//Creating the message array variable
-		DataFetchResult dataFetchResult = null;
-		
-		//Creating the time variables
-		long lastCheckTime = System.currentTimeMillis() - 5 * 1000;
-		
+	private DatabaseManager(Connection[] connections, long scanFrequency) {
 		//Reading the schema
+		Connection connection = connections[0];
 		try {
 			//Checking if the DB supports send styles
 			ResultSet resultSet = connection.getMetaData().getColumns(null, null, "message", "expressive_send_style_id");
@@ -117,83 +117,192 @@ class DatabaseManager implements Runnable {
 			exception.printStackTrace();
 		}
 		
-		//Looping until the thread is interrupted
-		while(!thread.isInterrupted()) {
-			try {
-				//Looping while 5 seconds has not passed
-				while(System.currentTimeMillis() - lastCheckTime < checkTime) {
-					//Sleeping for the poll time
-					Thread.sleep(pollTime);
-					
-					//Creating the queued request lists
-					ArrayList<ConversationInfoRequest> queuedConversationRequests = new ArrayList<>();
-					ArrayList<FileRequest> queuedFileRequests = new ArrayList<>();
-					ArrayList<CustomRetrievalRequest> queuedCustomRetrievalRequests = new ArrayList<>();
-					ArrayList<MassRetrievalRequest> queuedMassRetrievalRequests = new ArrayList<>();
-					
-					//Locking the conversation info requests
-					synchronized(databaseRequests) {
-						//Checking if there is a request
-						if(!databaseRequests.isEmpty()) {
-							//Sorting the requests
-							for(Object request : databaseRequests) {
-								if(request instanceof ConversationInfoRequest)
-									queuedConversationRequests.add((ConversationInfoRequest) request);
-								else if(request instanceof FileRequest) queuedFileRequests.add((FileRequest) request);
-								else if(request instanceof CustomRetrievalRequest) queuedCustomRetrievalRequests.add((CustomRetrievalRequest) request);
-								else if(request instanceof MassRetrievalRequest) queuedMassRetrievalRequests.add((MassRetrievalRequest) request);
-							}
-							
-							//Clearing the requests
-							databaseRequests.clear();
-						}
+		//Creating the threads
+		scannerThread = new ScannerThread(connections[0], scanFrequency);
+		scannerThread.start();
+		requestThread = new RequestThread(connections[1]);
+		requestThread.start();
+	}
+	
+	public static DatabaseManager getInstance() {
+		return instance;
+	}
+	
+	//The thread that actively scans the database for new messages
+	class ScannerThread extends Thread {
+		//Creating the connection variables
+		private final Connection connection;
+		
+		//Creating the time values
+		private long latestEntryID = -1;
+		private final long creationTime;
+		//private long lastCheckTime;
+		
+		//Creating the lock values
+		private final Lock scanFrequencyLock = new ReentrantLock();
+		private final java.util.concurrent.locks.Condition scanFrequencyCondition = scanFrequencyLock.newCondition();
+		private long scanFrequency;
+		
+		private ScannerThread(Connection connection, long scanFrequency) {
+			//Setting the values
+			this.connection = connection;
+			
+			creationTime = Main.getTimeHelper().toDatabaseTime(System.currentTimeMillis());
+			
+			this.scanFrequency = scanFrequency;
+		}
+		
+		@Override
+		public void run() {
+			//Creating the message array variable
+			DataFetchResult dataFetchResult = null;
+			
+			//Looping until the thread is interrupted
+			while(!isInterrupted()) {
+				try {
+					//Sleeping for the scan frequency
+					scanFrequencyLock.lock();
+					try {
+						scanFrequencyCondition.await(scanFrequency, TimeUnit.MILLISECONDS);
+					} finally {
+						scanFrequencyLock.unlock();
 					}
 					
-					//Fulfilling the queued requests (if there are any)
-					if(!queuedConversationRequests.isEmpty()) fulfillConversationRequests(queuedConversationRequests);
-					if(!queuedFileRequests.isEmpty()) fulfillFileRequests(queuedFileRequests);
-					if(!queuedCustomRetrievalRequests.isEmpty()) fulfillCustomRetrievalRequests(queuedCustomRetrievalRequests);
-					if(!queuedMassRetrievalRequests.isEmpty()) fulfillMassRetrievalRequests(queuedMassRetrievalRequests);
+					//Fetching new messages
+					dataFetchResult = fetchData(connection,
+							latestEntryID == -1 ?
+									() -> DSL.field("message.date").greaterThan(creationTime) :
+									() -> DSL.field("message.ROWID").greaterThan(latestEntryID));
+					
+					//Updating the message states
+					updateMessageStates(connection, dataFetchResult.isolatedModifiers);
+					
+					//Updating the latest entry ID
+					if(dataFetchResult.latestMessageID > latestEntryID) latestEntryID = dataFetchResult.latestMessageID;
+					
+					//Updating the last check time
+					//lastCheckTime = System.currentTimeMillis();
+				} catch(IOException | NoSuchAlgorithmException | WebsocketNotConnectedException exception) {
+					//Printing the stack trace
+					exception.printStackTrace();
+				} catch(InterruptedException exception) {
+					//Returning
+					return;
 				}
 				
-				//Fetching new messages
-				dataFetchResult = fetchData(latestEntryID == -1 ? timeRetrievalFilter : identifierRetrievalFilter);
+				//Skipping the remainder of the iteration if there are no new messages
+				if(dataFetchResult == null || dataFetchResult.conversationItems.isEmpty()) continue;
 				
-				//Updating the message states
-				updateMessageStates(dataFetchResult.isolatedModifiers);
-				
-				//Updating the latest message ID
-				if(dataFetchResult.latestMessageID > latestEntryID) latestEntryID = dataFetchResult.latestMessageID;
-				
-				//Updating the last check time
-				lastCheckTime = System.currentTimeMillis();
-			} catch(IOException | NoSuchAlgorithmException | WebsocketNotConnectedException exception) {
-				//Printing the stack trace
-				exception.printStackTrace();
-			} catch(InterruptedException exception) {
-				//Returning
-				return;
+				//Serializing the data
+				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+					out.writeByte(SharedValues.wsFrameUpdate); //Message type - update
+					out.writeObject(dataFetchResult.conversationItems); //Message list
+					out.flush();
+					
+					//Sending the data
+					WSServerManager.publishMessage(bos.toByteArray());
+				} catch(IOException exception) {
+					//Printing the stack trace
+					exception.printStackTrace();
+				}
 			}
-			
-			//Skipping the remainder of the iteration if there are no new messages
-			if(dataFetchResult == null || dataFetchResult.conversationItems.isEmpty()) continue;
-			
-			//Serializing the data
-			try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-				out.writeByte(SharedValues.wsFrameUpdate); //Message type - update
-				out.writeObject(dataFetchResult.conversationItems); //Message list
-				out.flush();
-				
-				//Sending the data
-				WSServerManager.publishMessage(bos.toByteArray());
-			} catch(IOException exception) {
-				//Printing the stack trace
-				exception.printStackTrace();
+		}
+		
+		void updateScanFrequency(long frequency) {
+			//Updating the value
+			scanFrequencyLock.lock();
+			try {
+				if(frequency != scanFrequency) {
+					scanFrequency = frequency;
+					scanFrequencyCondition.signal();
+				}
+			} finally {
+				scanFrequencyLock.unlock();
 			}
 		}
 	}
 	
-	private void fulfillConversationRequests(ArrayList<ConversationInfoRequest> requests) throws IOException {
+	//The thread that handles requests from clients such as file downloads
+	class RequestThread extends Thread {
+		//Creating the connection variables
+		private final Connection connection;
+		
+		//Creating the lock values
+		private final Lock dbRequestsLock = new ReentrantLock();
+		private final java.util.concurrent.locks.Condition dbRequestsCondition = dbRequestsLock.newCondition();
+		private ArrayList<Object> databaseRequests = new ArrayList<>();
+		
+		private RequestThread(Connection connection) {
+			this.connection = connection;
+		}
+		
+		@Override
+		public void run() {
+			//Looping while the thread is alive
+			while(!isInterrupted()) {
+				//Creating the queued request lists
+				ArrayList<ConversationInfoRequest> queuedConversationRequests = new ArrayList<>();
+				ArrayList<FileRequest> queuedFileRequests = new ArrayList<>();
+				ArrayList<CustomRetrievalRequest> queuedCustomRetrievalRequests = new ArrayList<>();
+				ArrayList<MassRetrievalRequest> queuedMassRetrievalRequests = new ArrayList<>();
+				
+				//Moving the requests (to be able to release the lock sooner)
+				ArrayList<Object> localRequests = new ArrayList<>();
+				dbRequestsLock.lock();
+				try {
+					if(!databaseRequests.isEmpty()) {
+						localRequests = databaseRequests;
+						databaseRequests = new ArrayList<>();
+					}
+				} finally {
+					dbRequestsLock.unlock();
+				}
+				
+				//Sorting the requests
+				for(Object request : localRequests) {
+					if(request instanceof ConversationInfoRequest) queuedConversationRequests.add((ConversationInfoRequest) request);
+					else if(request instanceof FileRequest) queuedFileRequests.add((FileRequest) request);
+					else if(request instanceof CustomRetrievalRequest) queuedCustomRetrievalRequests.add((CustomRetrievalRequest) request);
+					else if(request instanceof MassRetrievalRequest) queuedMassRetrievalRequests.add((MassRetrievalRequest) request);
+				}
+				
+				//Fulfilling the queued requests (if there are any)
+				if(!queuedConversationRequests.isEmpty()) fulfillConversationRequests(connection, queuedConversationRequests);
+				if(!queuedFileRequests.isEmpty()) fulfillFileRequests(connection, queuedFileRequests);
+				if(!queuedCustomRetrievalRequests.isEmpty()) fulfillCustomRetrievalRequests(connection, queuedCustomRetrievalRequests);
+				if(!queuedMassRetrievalRequests.isEmpty()) fulfillMassRetrievalRequests(connection, queuedMassRetrievalRequests);
+				
+				//Awaiting new requests
+				dbRequestsLock.lock();
+				try {
+					//Waiting for entries to appear
+					if(databaseRequests.isEmpty()) dbRequestsCondition.await();
+				} catch(InterruptedException exception) {
+					//Breaking from the loop
+					break;
+				} finally {
+					dbRequestsLock.unlock();
+				}
+			}
+		}
+		
+		void addRequest(Object request) {
+			//Adding the data struct
+			dbRequestsLock.lock();
+			try {
+				databaseRequests.add(request);
+				dbRequestsCondition.signal();
+			} finally {
+				dbRequestsLock.unlock();
+			}
+		}
+	}
+	
+	void addClientRequest(Object request) {
+		requestThread.addRequest(request);
+	}
+	
+	private void fulfillConversationRequests(Connection connection, ArrayList<ConversationInfoRequest> requests) {
 		//Creating the DSL context
 		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
 		
@@ -267,12 +376,14 @@ class DatabaseManager implements Runnable {
 					
 					//Sending the conversation info
 					request.connection.send(bos.toByteArray());
+				} catch(IOException exception) {
+					exception.printStackTrace();
 				}
 			}
 		}
 	}
 	
-	private void fulfillFileRequests(ArrayList<FileRequest> requests) throws IOException {
+	private void fulfillFileRequests(Connection connection, ArrayList<FileRequest> requests) {
 		//Creating the DSL context
 		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
 		
@@ -345,6 +456,8 @@ class DatabaseManager implements Runnable {
 						//Setting the succeeded variable to false
 						succeeded = false;
 					}
+				} catch(IOException exception) {
+					exception.printStackTrace();
 				}
 			}
 			
@@ -360,6 +473,8 @@ class DatabaseManager implements Runnable {
 					
 					//Sending the data
 					if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
+				} catch(IOException exception) {
+					exception.printStackTrace();
 				}
 				
 				//Skipping the remainder of the iteration
@@ -368,92 +483,94 @@ class DatabaseManager implements Runnable {
 		}
 	}
 	
-	private void fulfillCustomRetrievalRequests(ArrayList<CustomRetrievalRequest> requests) throws IOException, NoSuchAlgorithmException {
+	private void fulfillCustomRetrievalRequests(Connection connection, ArrayList<CustomRetrievalRequest> requests) {
 		//Iterating over the requests
 		for(CustomRetrievalRequest request : requests) {
-			//Returning their data
-			DataFetchResult result = fetchData(request.filter);
-			if(request.connection.isOpen()) {
-				//Serializing the data
-				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-					out.writeByte(request.messageResponseType); //Message type - update
-					out.writeObject(result.conversationItems); //Message list
-					out.flush();
-					
-					//Sending the data
-					request.connection.send(bos.toByteArray());
-				} catch(IOException exception) {
-					//Printing the stack trace
-					exception.printStackTrace();
+			try {
+				//Returning their data
+				DataFetchResult result = fetchData(connection, request.filter);
+				if(request.connection.isOpen()) {
+					//Serializing the data
+					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+						out.writeByte(request.messageResponseType); //Message type - update
+						out.writeObject(result.conversationItems); //Message list
+						out.flush();
+						
+						//Sending the data
+						request.connection.send(bos.toByteArray());
+					}
 				}
+			} catch(NoSuchAlgorithmException | IOException exception) {
+				exception.printStackTrace();
 			}
 		}
 	}
 	
-	private void fulfillMassRetrievalRequests(ArrayList<MassRetrievalRequest> requests) throws IOException, NoSuchAlgorithmException {
+	private void fulfillMassRetrievalRequests(Connection connection, ArrayList<MassRetrievalRequest> requests) {
 		//Iterating over the requests
 		for(MassRetrievalRequest request : requests) {
-			//Reading the message data
-			DataFetchResult messageResult = fetchData(null);
-			if(messageResult == null) continue;
-			
-			//Creating the DSL context
-			DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
-			
-			//Fetching the conversation information
-			List<SharedValues.ConversationInfo> conversationInfoList = new ArrayList<>();
-			
-			//Running the SQL
-			Result<org.jooq.Record3<String, String, String>> conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
-					.from(DSL.table("chat"))
-					.fetch();
-			
-			//Iterating over the results
-			for(int i = 0; i < conversationResults.size(); i++) {
-				//Setting the conversation information
-				String conversationGUID = conversationResults.getValue(i, DSL.field("chat.guid", String.class));
-				String conversationTitle = conversationResults.getValue(i, DSL.field("chat.display_name", String.class));
-				String conversationService = conversationResults.getValue(i, DSL.field("chat.service_name", String.class));
+			try {
+				//Reading the message data
+				DataFetchResult messageResult = fetchData(connection, null);
+				//if(messageResult == null) continue;
 				
-				//Fetching the conversation members
-				ArrayList<String> conversationMembers = new ArrayList<>();
-				{
-					//Running the SQL
-					Result<org.jooq.Record1<String>> results = create.select(DSL.field("handle.id", String.class))
-							.from(DSL.table("handle"))
-							.innerJoin(DSL.table("chat_handle_join")).on(DSL.field("handle.ROWID").equal(DSL.field("chat_handle_join.handle_id")))
-							.innerJoin(DSL.table("chat")).on(DSL.field("chat_handle_join.chat_id").equal(DSL.field("chat.ROWID")))
-							.where(DSL.field("chat.guid").equal(conversationGUID))
-							.fetch();
+				//Creating the DSL context
+				DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
+				
+				//Fetching the conversation information
+				List<SharedValues.ConversationInfo> conversationInfoList = new ArrayList<>();
+				
+				//Running the SQL
+				Result<org.jooq.Record3<String, String, String>> conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
+						.from(DSL.table("chat"))
+						.fetch();
+				
+				//Iterating over the results
+				for(int i = 0; i < conversationResults.size(); i++) {
+					//Setting the conversation information
+					String conversationGUID = conversationResults.getValue(i, DSL.field("chat.guid", String.class));
+					String conversationTitle = conversationResults.getValue(i, DSL.field("chat.display_name", String.class));
+					String conversationService = conversationResults.getValue(i, DSL.field("chat.service_name", String.class));
 					
-					//Adding the members
-					for(Record1<String> result : results) conversationMembers.add(result.getValue(DSL.field("handle.id", String.class)));
+					//Fetching the conversation members
+					ArrayList<String> conversationMembers = new ArrayList<>();
+					{
+						//Running the SQL
+						Result<org.jooq.Record1<String>> results = create.select(DSL.field("handle.id", String.class))
+								.from(DSL.table("handle"))
+								.innerJoin(DSL.table("chat_handle_join")).on(DSL.field("handle.ROWID").equal(DSL.field("chat_handle_join.handle_id")))
+								.innerJoin(DSL.table("chat")).on(DSL.field("chat_handle_join.chat_id").equal(DSL.field("chat.ROWID")))
+								.where(DSL.field("chat.guid").equal(conversationGUID))
+								.fetch();
+						
+						//Adding the members
+						for(Record1<String> result : results) conversationMembers.add(result.getValue(DSL.field("handle.id", String.class)));
+					}
+					
+					//Adding the conversation info
+					conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers));
 				}
 				
-				//Adding the conversation info
-				conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers));
-			}
-			
-			//Checking if the connection is still open
-			if(request.connection.isOpen()) {
-				//Serializing the data
-				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-					out.writeByte(SharedValues.wsFrameMassRetrieval); //Message type - mass retrieval
-					out.writeObject(messageResult.conversationItems); //Message list
-					out.writeObject(conversationInfoList); //Conversation list
-					out.flush();
-					
-					//Sending the data
-					request.connection.send(bos.toByteArray());
-				} catch(IOException exception) {
-					//Printing the stack trace
-					exception.printStackTrace();
+				//Checking if the connection is still open
+				if(request.connection.isOpen()) {
+					//Serializing the data
+					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+						out.writeByte(SharedValues.wsFrameMassRetrieval); //Message type - mass retrieval
+						out.writeObject(messageResult.conversationItems); //Message list
+						out.writeObject(conversationInfoList); //Conversation list
+						out.flush();
+						
+						//Sending the data
+						request.connection.send(bos.toByteArray());
+					}
 				}
+			} catch(IOException | NoSuchAlgorithmException exception) {
+				exception.printStackTrace();
 			}
 		}
 	}
 	
-	private DataFetchResult fetchData(RetrievalFilter filter) throws IOException, NoSuchAlgorithmException {
+	private DataFetchResult fetchData(Connection connection, RetrievalFilter filter) throws IOException, NoSuchAlgorithmException {
 		//Creating the DSL context
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
@@ -705,7 +822,7 @@ class DatabaseManager implements Runnable {
 		return new DataFetchResult(conversationItems, isolatedModifiers, latestMessageID);
 	}
 	
-	private void updateMessageStates(ArrayList<SharedValues.ModifierInfo> modifierList) {
+	private void updateMessageStates(Connection connection, ArrayList<SharedValues.ModifierInfo> modifierList) {
 		//Creating the DSL context
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
@@ -818,8 +935,8 @@ class DatabaseManager implements Runnable {
 		}
 	}
 	
-	static abstract class RetrievalFilter {
-		abstract Condition filter();
+	interface RetrievalFilter {
+		Condition filter();
 	}
 	
 	static class CustomRetrievalRequest {

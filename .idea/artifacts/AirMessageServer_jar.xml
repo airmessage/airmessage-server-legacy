@@ -4,8 +4,18 @@
     <root id="archive" name="AirMessageServer.jar">
       <element id="module-output" name="AirMessageServer" />
       <element id="module-output" name="Java-WebSocket" />
-      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/org/jooq/jooq/3.10.2/jooq-3.10.2.jar" path-in-jar="/" />
-      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/org/xerial/sqlite-jdbc/3.21.0.1/sqlite-jdbc-3.21.0.1.jar" path-in-jar="/" />
+      <element id="library" level="project" name="Maven: com.fasterxml.jackson.core:jackson-core:2.8.7" />
+      <element id="library" level="project" name="Maven: io.sentry:sentry:1.7.1" />
+      <element id="library" level="project" name="Maven: org.eclipse.core:commands:3.6.100" />
+      <element id="library" level="project" name="Maven: org.eclipse.equinox:common:3.6.200-v20130402-1505" />
+      <element id="library" level="project" name="Maven: org.eclipse.swt:org.eclipse.swt.cocoa.macosx.x86_64:4.6.1" />
+      <element id="library" level="project" name="Maven: org.eclipse:jface:3.9.0" />
+      <element id="library" level="project" name="Maven: org.eclipse:swt:3.102.0" />
+      <element id="library" level="project" name="Maven: org.jooq:jooq:3.10.2" />
+      <element id="library" level="project" name="Maven: org.slf4j:slf4j-api:1.7.24" />
+      <element id="library" level="project" name="Maven: org.slf4j:slf4j-nop:1.7.9" />
+      <element id="library" level="project" name="Maven: org.xerial:sqlite-jdbc:3.21.0.1" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/com/github/rodionmoiseev/c10n/c10n-core/1.2/c10n-core-1.2.jar" path-in-jar="/" />
     </root>
   </artifact>
 </component>

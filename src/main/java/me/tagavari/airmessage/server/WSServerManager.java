@@ -13,7 +13,6 @@ import org.java_websocket.handshake.HandshakeBuilder;
 import org.java_websocket.handshake.ServerHandshakeBuilder;
 import org.java_websocket.server.DefaultSSLWebSocketServerFactory;
 import org.java_websocket.server.WebSocketServer;
-import org.jooq.Condition;
 import org.jooq.impl.DSL;
 
 import java.io.*;
@@ -32,6 +31,7 @@ public class WSServerManager extends WebSocketServer {
 	
 	//Creating the other values
 	private static int connectionCount = 0;
+	private static int currentPort = -1;
 	
 	static boolean startServer(int port) {
 		//Returning true if an instance already exists
@@ -48,8 +48,11 @@ public class WSServerManager extends WebSocketServer {
 	}
 	
 	static boolean restartServer(int port) {
-		//Stopping the server if it exists
-		if(serverManager != null) stopServer();
+		//Returning if the requested port matches the current port
+		if(port == currentPort) return true;
+		
+		//Stopping the server
+		stopServer();
 		
 		//Returning false if the port is already bound
 		if(!Constants.checkPortAvailability(port)) return false;
@@ -67,11 +70,14 @@ public class WSServerManager extends WebSocketServer {
 		
 		//Creating the server
 		serverManager = new WSServerManager(port, new ArrayList<>(Arrays.asList(new DraftMMS())));
-		serverManager.setWebSocketFactory(new DefaultSSLWebSocketServerFactory(SecurityManager.createSSLContext()));
+		serverManager.setWebSocketFactory(new DefaultSSLWebSocketServerFactory(SecurityManager.conjureSSLContext()));
 		serverManager.setConnectionLostTimeout(0); //Disabled, unnecessary as the server doesn't do anything when clients disconnect
 		
 		//Starting the server
 		serverManager.start();
+		
+		//Setting the current port
+		currentPort = port;
 	}
 	
 	static void stopServer() {
@@ -176,22 +182,16 @@ public class WSServerManager extends WebSocketServer {
 					final long timeUpper = in.readLong();
 					
 					//Creating a new request and queuing it
-					synchronized(DatabaseManager.databaseRequests) {
-						DatabaseManager.databaseRequests.add(new DatabaseManager.CustomRetrievalRequest(connection, new DatabaseManager.RetrievalFilter() {
-							@Override
-							Condition filter() {
-								return DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper)));
-							}
-						}, SharedValues.wsFrameTimeRetrieval));
-					}
+					DatabaseManager.getInstance().addClientRequest(new DatabaseManager.CustomRetrievalRequest(
+							connection,
+							() -> DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper))),
+							SharedValues.wsFrameTimeRetrieval));
 					
 					break;
 				}
 				case SharedValues.wsFrameMassRetrieval: { //Mass retrieval request
 					//Creating a new request and queuing it
-					synchronized(DatabaseManager.databaseRequests) {
-						DatabaseManager.databaseRequests.add(new DatabaseManager.MassRetrievalRequest(connection));
-					}
+					DatabaseManager.getInstance().addClientRequest(new DatabaseManager.MassRetrievalRequest(connection));
 					
 					break;
 				}
@@ -200,9 +200,7 @@ public class WSServerManager extends WebSocketServer {
 					ArrayList<String> list = (ArrayList<String>) in.readObject();
 					
 					//Creating a new request and queuing it
-					synchronized(DatabaseManager.databaseRequests) {
-						DatabaseManager.databaseRequests.add(new DatabaseManager.ConversationInfoRequest(connection, list));
-					}
+					DatabaseManager.getInstance().addClientRequest(new DatabaseManager.ConversationInfoRequest(connection, list));
 					
 					break;
 				}
@@ -225,9 +223,7 @@ public class WSServerManager extends WebSocketServer {
 					}
 					
 					//Creating a new request and queuing it
-					synchronized(DatabaseManager.databaseRequests) {
-						DatabaseManager.databaseRequests.add(new DatabaseManager.FileRequest(connection, fileGUID, requestID, chunkSize));
-					}
+					DatabaseManager.getInstance().addClientRequest(new DatabaseManager.FileRequest(connection, fileGUID, requestID, chunkSize));
 					
 					break;
 				}

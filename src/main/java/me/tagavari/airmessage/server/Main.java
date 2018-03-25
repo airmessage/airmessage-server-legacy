@@ -3,8 +3,10 @@ package me.tagavari.airmessage.server;
 import com.github.rodionmoiseev.c10n.C10N;
 import com.github.rodionmoiseev.c10n.annotations.DefaultC10NAnnotations;
 import io.sentry.Sentry;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.swing.*;
+import java.security.Security;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.logging.*;
@@ -50,6 +52,9 @@ class Main {
 		
 		//Returning if the system is not valid
 		if(!runSystemCheck()) return;
+		
+		//Registering BouncyCastle as a security provider
+		Security.addProvider(new BouncyCastleProvider());
 		
 		//Preparing the support directory
 		if(!Constants.prepareSupportDir()) return;
@@ -107,7 +112,7 @@ class Main {
 		//if(!result) System.exit(1);
 		
 		//Starting the database scanner
-		result = DatabaseManager.start();
+		result = DatabaseManager.start((int) (PreferencesManager.getScanFrequency() * 1000));
 		if(!result) {
 			//Updating the server state
 			setServerState(serverStateFailedDatabase);

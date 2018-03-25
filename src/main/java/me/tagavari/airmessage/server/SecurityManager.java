@@ -1,12 +1,23 @@
 package me.tagavari.airmessage.server;
 
-import sun.security.tools.keytool.CertAndKeyGen;
-import sun.security.x509.X500Name;
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.OperatorCreationException;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
-import javax.net.ssl.*;
-import java.security.KeyStore;
-import java.security.SecureRandom;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.security.*;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.Calendar;
+import java.util.Date;
 
 public class SecurityManager {
 	/* static boolean generateFiles() {
@@ -162,7 +173,114 @@ public class SecurityManager {
 		return passwords.contains(password);
 	} */
 	
-	static SSLContext createSSLContext() {
+	static X509Certificate selfSign(KeyPair keyPair, String subjectDN) throws OperatorCreationException, CertificateException, IOException
+	{
+		Provider bcProvider = new BouncyCastleProvider();
+		Security.addProvider(bcProvider);
+		
+		long now = System.currentTimeMillis();
+		Date startDate = new Date(now);
+		
+		X500Name dnName = new X500Name(subjectDN);
+		BigInteger certSerialNumber = new BigInteger(Long.toString(now)); // <-- Using the current timestamp as the certificate serial number
+		
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(startDate);
+		calendar.add(Calendar.YEAR, 1); // <-- 1 Yr validity
+		
+		Date endDate = calendar.getTime();
+		
+		String signatureAlgorithm = "SHA256WithRSA"; // <-- Use appropriate signature algorithm based on your keyPair algorithm.
+		
+		ContentSigner contentSigner = new JcaContentSignerBuilder(signatureAlgorithm).build(keyPair.getPrivate());
+		
+		JcaX509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(dnName, certSerialNumber, startDate, endDate, dnName, keyPair.getPublic());
+		
+		// Extensions --------------------------
+		
+		// Basic Constraints
+		//BasicConstraints basicConstraints = new BasicConstraints(true); // <-- true for CA, false for EndEntity
+		
+		//certBuilder.addExtension(new ASN1ObjectIdentifier("2.5.29.19"), true, basicConstraints); // Basic Constraints is usually marked as critical.
+		
+		// -------------------------------------
+		
+		return new JcaX509CertificateConverter().setProvider(bcProvider).getCertificate(certBuilder.build(contentSigner));
+	}
+	
+	/* private static X509Certificate getCertificate(KeyPair keys) {
+		try {
+			X500Name name = new X500Name(new X500Principal("CN=My Application,O=My Organisation,L=My City,C=DE").getName());
+			X509v1CertificateBuilder certificateBuilder = new X509v1CertificateBuilder(
+					name,
+					new BigInteger(Long.toString(System.currentTimeMillis())),
+					new Date(System.currentTimeMillis() - 1000L * 60L * 60L * 24L),
+					new Date(System.currentTimeMillis() + 1000L * 60L * 60L * 24L * 365L),
+					name,
+					getPublicKeyInfo(keys.getPublic()));
+			X509CertificateHolder certificateHolder = certificateBuilder.build(getSigner(keys));
+			return new JcaX509CertificateConverter().setProvider(new BouncyCastleProvider()).getCertificate(certificateHolder);
+		} catch (CertificateException e) {
+			throw new RuntimeException(e);
+		}
+	}
+	
+	private static SubjectPublicKeyInfo getPublicKeyInfo(PublicKey publicKey) {
+		if(!(publicKey instanceof RSAPublicKey)) throw new RuntimeException("publicKey is not an RSAPublicKey");
+		
+		RSAPublicKey rsaPublicKey = (RSAPublicKey) publicKey;
+		
+		try {
+			return SubjectPublicKeyInfoFactory.createSubjectPublicKeyInfo(new RSAKeyParameters(false, rsaPublicKey.getModulus(), rsaPublicKey.getPublicExponent()));
+		} catch (IOException exception) {
+			throw new RuntimeException(exception);
+		}
+	}
+	
+	private static ContentSigner getSigner(KeyPair keys) {
+		try {
+			return new JcaContentSignerBuilder("SHA1WithRSA").setProvider(new BouncyCastleProvider()).build(
+					keys.getPrivate());
+		} catch (OperatorCreationException e) {
+			throw new RuntimeException(e);
+		}
+	} */
+	
+	static SSLContext conjureSSLContext() {
+		try {
+			//Generating the key pair
+			KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+			keyGen.initialize(2048, new SecureRandom());
+			KeyPair keyPair = keyGen.generateKeyPair();
+			
+			//Creating a self-signed certificate
+			X509Certificate certificate = selfSign(keyPair, "CN=My Application,O=My Organisation,L=My City,C=DE");
+			
+			//Generating a password
+			char[] password = Constants.randomAlphaNumericString(16).toCharArray();
+			
+			//Creating the keystore
+			KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+			keyStore.load(null, null);
+			keyStore.setKeyEntry("server", keyPair.getPrivate(), password, new X509Certificate[]{certificate});
+			
+			//Creating the managers
+			KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()); //KeyManagerFactory.getDefaultAlgorithm()
+			kmf.init(keyStore, password);
+			TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()); //TrustManagerFactory.getDefaultAlgorithm()
+			tmf.init(keyStore);
+			
+			//Creating and returning the SSL context
+			SSLContext sslContext = SSLContext.getInstance("TLS");
+			sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
+			return sslContext;
+		} catch(Exception exception) {
+			exception.printStackTrace();
+			return null;
+		}
+	}
+	
+	/* static SSLContext createSSLContext() {
 		TrustManager[] trustAllCerts = new TrustManager[]{
 				new X509TrustManager() {
 					public java.security.cert.X509Certificate[] getAcceptedIssuers() {
@@ -173,42 +291,20 @@ public class SecurityManager {
 				}
 		};
 		
-		/* try {
-			SSLContext sslContext = SSLContext.getInstance("SSL");
-			sslContext.init(null, trustAllCerts, new SecureRandom());
-			return sslContext;
-		} catch(NoSuchAlgorithmException | KeyManagementException exception) {
-			exception.printStackTrace();
-			return null;
-		} */
-		
 		try {
-			//Creating the keystore
-			KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-			keyStore.load(null, "password".toCharArray());
 			
 			//Generating the certificate
 			CertAndKeyGen certGen = new CertAndKeyGen("RSA", "SHA256WithRSA", null);
 			certGen.generate(2048);
 			long validSecs = 60L * 60L * 24L * 365L * 100L; //Valid for 100 years
-			X509Certificate cert = certGen.getSelfCertificate(new X500Name("CN=My Application,O=My Organisation,L=My City,C=DE"), validSecs);
+			X509Certificate cert = certGen.getSelfCertificate(new sun.security.x509.X500Name("CN=My Application,O=My Organisation,L=My City,C=DE"), validSecs);
+			
+			//Creating the keystore
+			KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+			keyStore.load(null, "password".toCharArray());
 			
 			//Adding the certificate to the keystore
 			keyStore.setKeyEntry("server", certGen.getPrivateKey(), "password".toCharArray(), new X509Certificate[]{cert});
-			
-			/* TrustManager[] trustAllCerts = new TrustManager[] {
-					new X509TrustManager() {
-						public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-							return new X509Certificate[0];
-						}
-						public void checkClientTrusted(
-								java.security.cert.X509Certificate[] certs, String authType) {
-						}
-						public void checkServerTrusted(
-								java.security.cert.X509Certificate[] certs, String authType) {
-						}
-					}
-			}; */
 			
 			KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509"); //KeyManagerFactory.getDefaultAlgorithm()
 			kmf.init(keyStore, "password".toCharArray());
@@ -222,5 +318,26 @@ public class SecurityManager {
 			exception.printStackTrace();
 			return null;
 		}
-	}
+	} */
+	
+	/* static SSLContext createSSLContext() {
+		try {
+			KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+			keyStore.load(null, "password".toCharArray());
+			keyStore.setKeyEntry("server", X509);
+			
+			KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509"); //KeyManagerFactory.getDefaultAlgorithm()
+			kmf.init(keyStore, "password".toCharArray());
+			TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509"); //TrustManagerFactory.getDefaultAlgorithm()
+			tmf.init(keyStore);
+			
+			SSLContext context = SSLContext.getInstance("TLS");
+			context.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
+			return context;
+			//return SSLContext.getDefault();
+		} catch(NoSuchAlgorithmException | KeyStoreException | IOException | CertificateException | UnrecoverableKeyException | KeyManagementException exception) {
+			exception.printStackTrace();
+			return null;
+		}
+	} */
 }
