@@ -4,10 +4,10 @@ import me.tagavari.airmessage.common.SharedValues;
 import org.java_websocket.WebSocket;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.DataFormatException;
 
 class AppleScriptManager {
@@ -271,14 +271,16 @@ class AppleScriptManager {
 		return true;
 	}
 	
-	private static final ArrayList<FileUploadRequest> fileUploadRequests = new ArrayList<>();
+	private static final List<FileUploadRequest> fileUploadRequests = Collections.synchronizedList(new ArrayList<>());
 	static void addFileFragment(WebSocket connection, short requestID, String chatGUID, String fileName, int index, byte[] compressedBytes, boolean isLast) {
 		//Attempting to find a matching request
 		FileUploadRequest request = null;
-		for(FileUploadRequest allRequests : fileUploadRequests) {
-			if(!allRequests.connection.equals(connection) || allRequests.requestID != requestID || allRequests.chatGUID == null || !allRequests.chatGUID.equals(chatGUID)) continue;
-			request = allRequests;
-			break;
+		synchronized(fileUploadRequests) {
+			for(FileUploadRequest allRequests : fileUploadRequests) {
+				if(!allRequests.connection.equals(connection) || allRequests.requestID != requestID || allRequests.chatGUID == null || !allRequests.chatGUID.equals(chatGUID)) continue;
+				request = allRequests;
+				break;
+			}
 		}
 		
 		//Checking if the request is invalid (there is no request currently in the list)
@@ -286,9 +288,12 @@ class AppleScriptManager {
 			//Returning if this isn't the first request (meaning that the request failed, and shouldn't continue)
 			if(index != 0) return;
 			
-			//Creating a new request
+			//Creating and adding a new request
 			request = new FileUploadRequest(connection, requestID, chatGUID, fileName);
 			fileUploadRequests.add(request);
+			
+			//Starting the timer
+			request.startTimer();
 		}
 		//Otherwise restarting the timer
 		else request.stopTimer(true);
@@ -311,9 +316,12 @@ class AppleScriptManager {
 			//Returning if this isn't the first request (meaning that the request failed, and shouldn't continue)
 			if(index != 0) return;
 			
-			//Creating a new request
+			//Creating and adding a new request
 			request = new FileUploadRequest(connection, requestID, chatMembers, service, fileName);
 			fileUploadRequests.add(request);
+			
+			//Starting the timer
+			request.startTimer();
 		}
 		//Otherwise restarting the timer
 		else request.stopTimer(true);
@@ -330,16 +338,13 @@ class AppleScriptManager {
 		final String[] chatMembers;
 		final String service;
 		final String fileName;
-		File saveFile;
 		
 		//Creating the transfer variables
 		private Timer timeoutTimer = null;
 		private static final int timeout = 10 * 1000; //10 seconds
 		
 		private AttachmentWriter writerThread = null;
-		private final Object queuedFileFragmentsLock = new Object();
-		private ArrayList<FileFragment> queuedFileFragments = new ArrayList<>();
-		private int requiredIndex = 0;
+		private int lastIndex = -1;
 		
 		FileUploadRequest(WebSocket connection, short requestID, String chatGUID, String fileName) {
 			//Setting the variables
@@ -363,7 +368,7 @@ class AppleScriptManager {
 		
 		void addFileFragment(FileFragment fileFragment) {
 			//Failing the request if the index doesn't line up
-			if(requiredIndex != fileFragment.index) {
+			if(lastIndex + 1 != fileFragment.index) {
 				failRequest();
 				return;
 			}
@@ -374,34 +379,21 @@ class AppleScriptManager {
 				stopTimer(false);
 			}
 			
-			//Advancing the index
-			requiredIndex++;
+			//Updating the index
+			lastIndex = fileFragment.index;
 			
-			//Checking if there is no save thread
+			//Checking if there is no writer thread
 			if(writerThread == null) {
 				//Creating the attachment writer thread
-				try {
-					writerThread = new AttachmentWriter(fileName);
-				} catch(IOException exception) {
-					//Printing the stack trace
-					exception.printStackTrace();
-					
-					//Failing the request
-					failRequest();
-					
-					//Returning
-					return;
-				}
+				writerThread = new AttachmentWriter(fileName);
 				
 				//Starting the thread
 				writerThread.start();
 			}
 			
+			
 			//Adding the file fragment
-			synchronized(queuedFileFragmentsLock) {
-				queuedFileFragments.add(fileFragment);
-				queuedFileFragmentsLock.notifyAll();
-			}
+			writerThread.dataQueue.add(fileFragment);
 		}
 		
 		void startTimer() {
@@ -428,119 +420,91 @@ class AppleScriptManager {
 			//Stopping the timer
 			stopTimer(false);
 			
-			//Deleting the file
-			if(saveFile != null) {
-				if(saveFile.exists()) saveFile.delete();
-				saveFile.getParentFile().delete();
-			}
+			//Stopping the thread
+			if(writerThread != null) writerThread.stopThread();
 			
 			//Sending a negative response
 			WSServerManager.sendMessageResponse(connection, requestID, false);
 		}
 		
-		private void onDownloadSuccessful() {
+		private void onDownloadSuccessful(File file) {
 			//Removing the request from the list
 			fileUploadRequests.remove(this);
 			
 			//Sending the file
-			boolean result = chatGUID != null ? sendExistingFile(chatGUID, saveFile) : sendNewFile(chatMembers, saveFile, service);
+			boolean result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service);
 			
 			//Sending the response
 			WSServerManager.sendMessageResponse(connection, requestID, result);
 		}
 		
 		private class AttachmentWriter extends Thread {
-			//Creating the variables
-			FileOutputStream outputStream = null;
+			//Creating the queue
+			private final BlockingQueue<FileFragment> dataQueue = new LinkedBlockingQueue<>();
 			
-			AttachmentWriter(String fileName) throws IOException {
+			//Creating the request values
+			private final String fileName;
+			
+			//Creating the process values
+			private File targetDir;
+			private File targetFile;
+			private boolean isRunning = true;
+			
+			AttachmentWriter(String fileName) {
+				this.fileName = fileName;
+			}
+			
+			@Override
+			public void run() {
 				//Creating the upload directory if it doesn't exist
 				if(Constants.uploadDir.isFile()) Constants.uploadDir.delete();
 				if(!Constants.uploadDir.exists()) Constants.uploadDir.mkdir();
 				
 				//Finding the save file
-				saveFile = Constants.findFreeFile(Constants.uploadDir, Long.toString(System.currentTimeMillis()));
-				saveFile.mkdir();
-				saveFile = new File(saveFile, fileName);
-				outputStream = new FileOutputStream(saveFile);
-			}
-			
-			@Override
-			public void run() {
-				while(true) {
-					//Moving the file fragments (to be able to release the lock sooner)
-					ArrayList<FileFragment> localQueuedFileFragments = new ArrayList<>();
-					synchronized(queuedFileFragmentsLock) {
-						if(!queuedFileFragments.isEmpty()) {
-							localQueuedFileFragments = queuedFileFragments;
-							queuedFileFragments = new ArrayList<>();
-						}
-					}
-					
-					
-					//Iterating over the queued file fragments
-					for(FileFragment fileFragment : localQueuedFileFragments) {
+				targetDir = Constants.findFreeFile(Constants.uploadDir, Long.toString(System.currentTimeMillis()));
+				targetDir.mkdir();
+				targetFile = new File(targetDir, fileName);
+				
+				try(FileOutputStream outputStream = new FileOutputStream(targetFile)) {
+					while(isRunning) {
+						//Getting the data struct
+						FileFragment fileFragment = dataQueue.poll(timeout, TimeUnit.MILLISECONDS);
+						
+						//Skipping the remainder of the iteration if the file fragment is invalid
+						if(fileFragment == null) continue;
+						
 						//Writing the file to disk
-						try {
-							outputStream.write(SharedValues.decompress(fileFragment.compressedData));
-						} catch(IOException | DataFormatException exception) {
-							//Printing the stack trace
-							exception.printStackTrace();
-							
-							//Deleting the file
-							saveFile.delete();
-							
-							//Cleaning the thread
-							cleanThread();
-							
-							//Failing the request
-							failRequest();
-							
-							//Returning
-							return;
-						}
+						outputStream.write(SharedValues.decompress(fileFragment.compressedData));
 						
 						//Checking if the file is the last one
 						if(fileFragment.isLast) {
-							//Cleaning the thread
-							cleanThread();
-							
 							//Calling the download successful method
-							onDownloadSuccessful();
+							onDownloadSuccessful(targetFile);
 							
 							//Returning
 							return;
 						}
 					}
+				} catch(IOException | DataFormatException | InterruptedException exception) {
+					//Printing the stack trace
+					exception.printStackTrace();
 					
-					//Waiting for entries to appear
-					try {
-						synchronized(queuedFileFragmentsLock) {
-							queuedFileFragmentsLock.wait(10 * 1000); //10-second timeout
-						}
-					} catch(InterruptedException exception) {
-						//Cleaning up the thread
-						cleanThread();
-						
-						//Failing the request
-						failRequest();
-						
-						//Returning
-						return;
-					}
+					//Failing the download
+					failRequest();
+					
+					//Setting the thread as not running
+					isRunning = false;
+				}
+				
+				//Checking if the thread was stopped
+				if(!isRunning) {
+					//Cleaning up
+					Constants.recursiveDelete(targetDir);
 				}
 			}
 			
-			void cleanThread() {
-				if(outputStream == null) return;
-				
-				try {
-					//Closing the output stream
-					outputStream.close();
-				} catch(IOException exception) {
-					//Printing the exception's stack trace
-					exception.printStackTrace();
-				}
+			void stopThread() {
+				isRunning = false;
 			}
 		}
 		

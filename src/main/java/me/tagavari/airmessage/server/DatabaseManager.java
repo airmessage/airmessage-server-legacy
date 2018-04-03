@@ -196,7 +196,6 @@ class DatabaseManager {
 						
 						//Sending the data
 						WSServerManager.publishMessage(bos.toByteArray());
-						System.out.println("Message update packet sent!");
 					} catch(IOException exception) {
 						//Printing the stack trace
 						exception.printStackTrace();
