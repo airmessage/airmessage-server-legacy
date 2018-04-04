@@ -1,10 +1,6 @@
 package me.tagavari.airmessage.server;
 
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.custom.TableEditor;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
-import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.*;
 import org.eclipse.swt.widgets.*;
@@ -21,11 +17,8 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import java.io.*;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
+import java.util.*;
 import java.util.List;
-import java.util.function.Consumer;
 import java.util.logging.Level;
 
 public class PreferencesManager {
@@ -470,7 +463,7 @@ public class PreferencesManager {
 	
 	private static void openPrefsPasswordWindow(Shell parentShell) {
 		//Loading the passwords
-		List<String> passwords = loadPasswords();
+		String[] passwords = loadPasswords();
 		
 		//Creating the shell flags
 		Constants.ValueWrapper<Boolean> textEditorOpen = new Constants.ValueWrapper<>(Boolean.FALSE);
@@ -490,143 +483,23 @@ public class PreferencesManager {
 		shell.setLayout(shellGL);
 		
 		//Creating the relevant widget values
-		Table table;
-		TableEditor tableEditor;
-		Constants.ValueWrapper<String> originalEditTextWrapper = new Constants.ValueWrapper<>(null);
-		Button removeItemButton;
-		
-		//Creating the consumers
-		Consumer<TableItem> editTableItem;
+		Text passText;
 		
 		{
 			//Creating the list label
 			Label listLabel = new Label(shell, SWT.NONE);
 			listLabel.setText(I18N.i.pref_passwords());
 			
-			//Creating the list
-			table = new Table(shell, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.FULL_SELECTION);
+			//Creating the text
+			passText = new Text(shell, SWT.BORDER | SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL);
+			passText.setText(Constants.getDelimitedString(passwords, "\n"));
 			
-			//Creating the table editor
-			tableEditor = new TableEditor(table);
-			tableEditor.horizontalAlignment = SWT.LEFT;
-			tableEditor.grabHorizontal = true;
-			tableEditor.grabVertical = true;
-			
-			//Setting the edit table item consumer
-			editTableItem = item -> {
-				//Returning if the item matches (the text listener will take care of applying the changes)
-				if(item.equals(tableEditor.getItem())) return;
-				
-				//Checking if the previous editor is still intact
-				Control oldEditor = tableEditor.getEditor();
-				if(oldEditor != null && !oldEditor.isDisposed()) {
-					//Applying the edited text
-					Text text = (Text) tableEditor.getEditor();
-					tableEditor.getItem().setText(text.getText());
-					
-					//Disposing of the editor
-					oldEditor.dispose();
-				}
-				
-				//Creating the text editor
-				Text newEditor = new Text(table, SWT.NONE);
-				newEditor.setText(item.getText());
-				
-				//Recording the original text and clearing the item text
-				originalEditTextWrapper.value = item.getText();
-				item.setText("");
-				
-				//Adding the modification listener to resize the text field
-				newEditor.addModifyListener(modifyEvent -> UIHelper.packControl((Text) modifyEvent.widget, ((Text) modifyEvent.widget).getText(), 6));
-				
-				//Adding a key listener to track submit / discard events
-				Listener textListener = textEvent -> {
-					//Getting the editor
-					Text text = (Text) tableEditor.getEditor();
-					
-					//Checking if the event is a lost focus
-					if(textEvent.type == SWT.FocusOut) {
-						//Applying the changes
-						String editedText = text.getText().trim();
-						TableItem tableItem = tableEditor.getItem();
-						if(!tableItem.isDisposed()) tableItem.setText(editedText.isEmpty() ? originalEditTextWrapper.value : editedText);
-						
-						//Disposing of the editor
-						newEditor.dispose();
-						
-						//Setting the text editor as closed
-						textEditorOpen.value = Boolean.FALSE;
-						
-						//Focusing the table
-						table.setFocus();
-					}
-					//Otherwise checking if the event is a traverse
-					else if(textEvent.type == SWT.Traverse) {
-						//Checking if the traverse type is a confirmation (return)
-						if(textEvent.detail == SWT.TRAVERSE_RETURN) {
-							//Applying the changes
-							String editedText = text.getText().trim();
-							TableItem tableItem = tableEditor.getItem();
-							if(!tableItem.isDisposed()) tableItem.setText(editedText.isEmpty() ? originalEditTextWrapper.value : editedText);
-							
-							//Disposing of the editor
-							newEditor.dispose();
-							
-							//Setting the text editor as closed
-							textEditorOpen.value = Boolean.FALSE;
-							
-							//Focusing the table
-							table.setFocus();
-						}
-						//Otherwise checking if the traverse type is a discard (escape)
-						else if(textEvent.detail == SWT.TRAVERSE_ESCAPE) {
-							//Reverting the changes
-							TableItem tableItem = tableEditor.getItem();
-							if(!tableItem.isDisposed()) tableItem.setText(originalEditTextWrapper.value);
-							
-							//Disposing of the editor
-							newEditor.dispose();
-							
-							//Setting the text editor as closed
-							textEditorOpen.value = Boolean.FALSE;
-							
-							//Focusing the table
-							table.setFocus();
-						}
-					}
-				};
-				
-				newEditor.addListener(SWT.FocusOut, textListener);
-				newEditor.addListener(SWT.Traverse, textListener);
-				
-				//Enabling the editor
-				newEditor.selectAll();
-				newEditor.setFocus();
-				tableEditor.setEditor(newEditor, item, 0);
-				newEditor.pack();
-				
-				//Setting the text editor as open
-				textEditorOpen.value = Boolean.TRUE;
-			};
-			
-			//Adding the table selection listener
-			table.addSelectionListener(new SelectionAdapter() {
-				public void widgetSelected(SelectionEvent selectionEvent) {
-					//Getting the table item
-					TableItem item = (TableItem) selectionEvent.item;
-					if(item == null) return;
-					
-					//Editing the table item
-					editTableItem.accept(item);
-				}
-			});
-			
-			GridData tableGD = new GridData();
-			tableGD.horizontalAlignment = GridData.FILL;
-			tableGD.verticalAlignment = GridData.FILL;
-			tableGD.grabExcessVerticalSpace = true;
-			tableGD.grabExcessHorizontalSpace = true;
-			table.setLayoutData(tableGD);
+			GridData passTextGD = new GridData();
+			passTextGD.horizontalAlignment = GridData.FILL;
+			passTextGD.verticalAlignment = GridData.FILL;
+			passTextGD.grabExcessVerticalSpace = true;
+			passTextGD.grabExcessHorizontalSpace = true;
+			passText.setLayoutData(passTextGD);
 		}
 		
 		{
@@ -649,20 +522,16 @@ public class PreferencesManager {
 			acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
 			acceptButton.setLayoutData(acceptButtonFD);
 			acceptButton.addListener(SWT.Selection, event -> {
-				//Applying the current edit
-				if(tableEditor.getEditor() != null && !tableEditor.getEditor().isDisposed()) {
-					String editedText = ((Text) tableEditor.getEditor()).getText().trim();
-					if(!tableEditor.getItem().isDisposed()) tableEditor.getItem().setText(editedText.isEmpty() ? originalEditTextWrapper.value : editedText);
-				}
+				//Retrieving the lines and filtering out the empty ones
+				LinkedList<String> filterList = new LinkedList<>();
+				Collections.addAll(filterList, passText.getText().split("\n"));
+				for(ListIterator<String> iterator = filterList.listIterator(); iterator.hasNext();) if(iterator.next().isEmpty()) iterator.remove();
+				String[] newPasswords = filterList.toArray(new String[0]);
 				
-				//Getting the passwords from the table
-				List<String> newPasswords = new ArrayList<>();
-				for(TableItem item : table.getItems()) newPasswords.add(item.getText());
+				//Saving the new passwords
+				if(!Arrays.equals(passwords, newPasswords)) savePasswords(newPasswords);
 				
-				//Writing the password list to disk if the lists don't match
-				if(!passwords.equals(newPasswords)) savePasswords(newPasswords);
-				
-				//TODO save data
+				//Closing the shell
 				shell.close();
 			});
 			shell.setDefaultButton(acceptButton);
@@ -674,51 +543,7 @@ public class PreferencesManager {
 			discardButtonFD.right = new FormAttachment(acceptButton);
 			discardButtonFD.top = new FormAttachment(acceptButton, 0, SWT.CENTER);
 			discardButton.setLayoutData(discardButtonFD);
-			discardButton.addListener(SWT.Selection, event -> {
-				//TODO discard data
-				shell.close();
-			});
-			
-			//Fetching the image resources
-			Image addImage = new Image(UIHelper.getDisplay(), PreferencesManager.class.getClassLoader().getResourceAsStream("icon_add.png"));
-			Image removeImage = new Image(UIHelper.getDisplay(), PreferencesManager.class.getClassLoader().getResourceAsStream("icon_remove.png"));
-			
-			//Adding a listener to the shell to release the resources
-			shell.addListener(SWT.Close, closeEvent -> {
-				addImage.dispose();
-				removeImage.dispose();
-			});
-			
-			//Adding the list add / remove buttons
-			Button addItemButton = new Button(buttonContainer, SWT.FLAT);
-			addItemButton.setImage(addImage);
-			FormData addItemButtonFD = new FormData();
-			addItemButtonFD.width = addItemButtonFD.height = 25;
-			addItemButtonFD.left = new FormAttachment(0);
-			addItemButtonFD.top = new FormAttachment(50, -addItemButtonFD.height / 2);
-			addItemButton.setLayoutData(addItemButtonFD);
-			addItemButton.addListener(SWT.Selection, event -> {
-				TableItem tableItem = new TableItem(table, SWT.NONE);
-				table.setSelection(tableItem);
-				editTableItem.accept(tableItem);
-			});
-			
-			removeItemButton = new Button(buttonContainer, SWT.FLAT);
-			removeItemButton.setImage(removeImage);
-			FormData removeItemButtonFD = new FormData();
-			removeItemButtonFD.width = removeItemButtonFD.height = 25;
-			removeItemButtonFD.left = new FormAttachment(addItemButton);
-			removeItemButtonFD.top = new FormAttachment(50, -removeItemButtonFD.height / 2);
-			removeItemButton.setLayoutData(removeItemButtonFD);
-			removeItemButton.addListener(SWT.Selection, event -> {
-				table.remove(table.getSelectionIndices());
-			});
-		}
-		
-		//Filling the table
-		for(String password : passwords) {
-			TableItem tableItem = new TableItem(table, SWT.NONE);
-			tableItem.setText(password);
+			discardButton.addListener(SWT.Selection, event -> shell.close());
 		}
 		
 		//Adding a listener to the shell
@@ -732,35 +557,47 @@ public class PreferencesManager {
 		shell.open();
 	}
 	
-	private static List<String> loadPasswords() {
-		//Creating the list
-		List<String> list = new ArrayList<>();
-		
+	private static String[] loadPasswords() {
 		//Checking if the users file exists
 		if(userFile.exists()) {
 			try {
 				//Reading the file
-				for(String line : Files.readAllLines(userFile.toPath())) list.add(new String(Base64.getDecoder().decode(line)));
+				List<String> list = Files.readAllLines(userFile.toPath());
+				for(ListIterator<String> iterator = list.listIterator(); iterator.hasNext();) {
+					String line = iterator.next();
+					try {
+						iterator.set(new String(Base64.getDecoder().decode(line)));
+					} catch(IllegalArgumentException exception) {
+						//Logging a warning
+						Main.getLogger().log(Level.WARNING, "Failed to decode password line (" + line + ")", exception);
+						
+						//Removing the item
+						iterator.remove();
+					}
+				}
+				
+				//Returning the list
+				return list.toArray(new String[0]);
 			} catch(IOException exception) {
 				//Printing the stack trace
 				Main.getLogger().log(Level.SEVERE, "Failed to read users file at " + userFile.getPath(), exception);
 				
-				//Returning the list
-				return list;
+				//Returning an empty list
+				return new String[0];
 			}
 		} else {
-			//Adding the default password
-			list.add(defaultPassword);
+			//Creating the list
+			String[] passwords = new String[]{defaultPassword};
 			
 			//Writing the password list to disk
-			savePasswords(list);
+			savePasswords(passwords);
+			
+			//Returning the list
+			return passwords;
 		}
-		
-		//Returning the list
-		return list;
 	}
 	
-	private static void savePasswords(List<String> list) {
+	private static void savePasswords(String[] list) {
 		//Creating the print writer
 		try(PrintWriter writer = new PrintWriter(userFile, textEncoding)) {
 			//Writing the passwords
@@ -784,8 +621,13 @@ public class PreferencesManager {
 			//Iterating over the lines and returning true if one of them matches
 			String line;
 			while((line = reader.readLine()) != null) {
-				storedPassBytes = Base64.getDecoder().decode(line);
-				if(Arrays.equals(comparePassBytes, storedPassBytes)) return true;
+				try {
+					storedPassBytes = Base64.getDecoder().decode(line);
+					if(Arrays.equals(comparePassBytes, storedPassBytes)) return true;
+				} catch(IllegalArgumentException exception) {
+					//Logging a warning
+					Main.getLogger().log(Level.WARNING, "Failed to decode password line (" + line + ")", exception);
+				}
 			}
 		} catch(IOException exception) {
 			//Printing the stack trace

@@ -153,6 +153,17 @@ class Constants {
 		}
 	}
 	
+	public static String getDelimitedString(String[] list, String delimiter) {
+		if(list.length == 0) return "";
+		else if(list.length == 1) return list[0];
+		
+		StringBuilder stringBuilder = new StringBuilder();
+		stringBuilder.append(list[0]);
+		for(int i = 1; i < list.length; i++) stringBuilder.append(delimiter).append(list[i]);
+		
+		return stringBuilder.toString();
+	}
+	
 	/**
 	 * Checks to see if a specific port is available.
 	 *

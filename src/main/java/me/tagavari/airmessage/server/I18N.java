@@ -60,7 +60,7 @@ public interface I18N {
 	@En("Security:")
 	String pref_security();
 	
-	@En("Passwords:")
+	@En("Passwords (one per line):")
 	String pref_passwords();
 	
 	@En("Updates:")

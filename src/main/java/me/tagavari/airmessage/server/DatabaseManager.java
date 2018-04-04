@@ -1,5 +1,6 @@
 package me.tagavari.airmessage.server;
 
+import io.sentry.Sentry;
 import me.tagavari.airmessage.common.SharedValues;
 import org.java_websocket.WebSocket;
 import org.java_websocket.exceptions.WebsocketNotConnectedException;
@@ -112,7 +113,7 @@ class DatabaseManager {
 			dbSupportsAssociation = resultSet.next();
 			resultSet.close();
 		} catch(SQLException exception) {
-			//Printing the stack trace
+			Sentry.capture(exception);
 			exception.printStackTrace();
 		}
 		
@@ -123,7 +124,7 @@ class DatabaseManager {
 		requestThread.start();
 	}
 	
-	public static DatabaseManager getInstance() {
+	static DatabaseManager getInstance() {
 		return instance;
 	}
 	
@@ -178,8 +179,8 @@ class DatabaseManager {
 					
 					//Updating the last check time
 					//lastCheckTime = System.currentTimeMillis();
-				} catch(IOException | NoSuchAlgorithmException | WebsocketNotConnectedException exception) {
-					//Printing the stack trace
+				} catch(IOException | NoSuchAlgorithmException exception) {
+					Sentry.capture(exception);
 					exception.printStackTrace();
 				} catch(InterruptedException exception) {
 					//Returning
@@ -197,7 +198,9 @@ class DatabaseManager {
 						//Sending the data
 						WSServerManager.publishMessage(bos.toByteArray());
 					} catch(IOException exception) {
-						//Printing the stack trace
+						Sentry.capture(exception);
+						exception.printStackTrace();
+					} catch(WebsocketNotConnectedException exception) {
 						exception.printStackTrace();
 					}
 				}
@@ -342,6 +345,9 @@ class DatabaseManager {
 				//Sending the conversation info
 				request.connection.send(bos.toByteArray());
 			} catch(IOException exception) {
+				Sentry.capture(exception);
+				exception.printStackTrace();
+			} catch(WebsocketNotConnectedException exception) {
 				exception.printStackTrace();
 			}
 		}
@@ -419,6 +425,9 @@ class DatabaseManager {
 					succeeded = false;
 				}
 			} catch(IOException exception) {
+				Sentry.capture(exception);
+				exception.printStackTrace();
+			} catch(WebsocketNotConnectedException exception) {
 				exception.printStackTrace();
 			}
 		}
@@ -436,6 +445,9 @@ class DatabaseManager {
 				//Sending the data
 				if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
 			} catch(IOException exception) {
+				Sentry.capture(exception);
+				exception.printStackTrace();
+			} catch(WebsocketNotConnectedException exception) {
 				exception.printStackTrace();
 			}
 		}
@@ -457,6 +469,9 @@ class DatabaseManager {
 				}
 			}
 		} catch(NoSuchAlgorithmException | IOException exception) {
+			Sentry.capture(exception);
+			exception.printStackTrace();
+		} catch(WebsocketNotConnectedException exception) {
 			exception.printStackTrace();
 		}
 	}
@@ -518,6 +533,9 @@ class DatabaseManager {
 				}
 			}
 		} catch(IOException | NoSuchAlgorithmException exception) {
+			Sentry.capture(exception);
+			exception.printStackTrace();
+		} catch(WebsocketNotConnectedException exception) {
 			exception.printStackTrace();
 		}
 	}
@@ -860,7 +878,9 @@ class DatabaseManager {
 			//Sending the data
 			WSServerManager.publishMessage(bos.toByteArray());
 		} catch(IOException exception) {
-			//Printing the stack trace
+			Sentry.capture(exception);
+			exception.printStackTrace();
+		} catch(WebsocketNotConnectedException exception) {
 			exception.printStackTrace();
 		}
 	}

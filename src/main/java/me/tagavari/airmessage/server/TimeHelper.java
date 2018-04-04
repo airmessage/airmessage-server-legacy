@@ -4,8 +4,8 @@ import java.util.Calendar;
 import java.util.TimeZone;
 
 enum TimeHelper {
-	COCOA_CORE_DATA, //Cocoa core data / Seconds since January 1st, 00:00, UTC-0)
-	MAC_ABSOLUTE_TIME; //Mac absolute time
+	COCOA_CORE_DATA, //Cocoa core data / Seconds since January 1st, 1970, 00:00, UTC-0
+	MAC_ABSOLUTE_TIME; //Mac absolute time / Nanoseconds since January 1st, 2001, 00:00, UTC-0
 	
 	//Creating the reference variables
 	private static final long millisAppleUnixDifference;
