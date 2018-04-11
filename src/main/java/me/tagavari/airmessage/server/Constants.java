@@ -10,8 +10,8 @@ import java.util.stream.Stream;
 
 class Constants {
 	//Creating the version values
-	static final String SERVER_VERSION = "0.1.3";
-	static final int SERVER_VERSION_CODE = 4;
+	static final String SERVER_VERSION = "0.2";
+	static final int SERVER_VERSION_CODE = 1;
 	
 	static final String resourceDefaultCredentialList = "users.txt";
 	
@@ -96,7 +96,11 @@ class Constants {
 	}
 	
 	static int[] getSystemVersion() {
-		return Stream.of(System.getProperty("os.version").split("\\.")).mapToInt(Integer::parseInt).toArray();
+		return parseVersionString(System.getProperty("os.version"));
+	}
+	
+	static int[] parseVersionString(String version) {
+		return Stream.of(version.split("\\.")).mapToInt(Integer::parseInt).toArray();
 	}
 	
 	/* Return values

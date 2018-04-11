@@ -25,23 +25,21 @@
 				<enabled>false</enabled>
 			</snapshots>
 		</repository>
-		<!-- <repository>
-			<id>jitpack</id>
-			<url>https://jitpack.io</url>
-			<releases>
-				<enabled>true</enabled>
-			</releases>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
-		</repository> -->
+
 		<repository>
 			<id>maven-eclipse-repo</id>
 			<url>http://maven-eclipse.github.io/maven</url>
 		</repository>
+
 		<repository>
 			<id>jabylon</id>
 			<url>http://www.jabylon.org/maven/</url>
+		</repository>
+
+		<repository>
+			<id>Sonatype-public</id>
+			<name>SnakeYAML repository</name>
+			<url>http://oss.sonatype.org/content/groups/public/</url>
 		</repository>
 	</repositories>
 
@@ -111,6 +109,13 @@
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcmail-jdk15on</artifactId>
 			<version>1.59</version>
+		</dependency>
+
+		<!-- JSON in Java / JSON library -->
+		<dependency>
+			<groupId>org.json</groupId>
+			<artifactId>json</artifactId>
+			<version>20180130</version>
 		</dependency>
 
 		<!-- SQLiteQueryBuilder / Database Library -->

@@ -85,11 +85,15 @@ class Main {
 		//Starting the server
 		startServer();
 		
+		//Starting the update checker
+		UpdateManager.startUpdateChecker();
+		
 		//Adding a shutdown hook
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			//Stopping the services
 			WSServerManager.stopServer();
 			DatabaseManager.stop();
+			UpdateManager.stopUpdateChecker();
 			
 			//Deleting the uploads directory
 			Constants.recursiveDelete(Constants.uploadDir);
