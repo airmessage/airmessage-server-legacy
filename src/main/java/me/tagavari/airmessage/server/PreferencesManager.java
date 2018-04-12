@@ -347,7 +347,7 @@ public class PreferencesManager {
 			updateLabel.setText(I18N.i.pref_updates());
 			updateLabel.setLayoutData(new GridData(GridData.END, GridData.CENTER, false, false));
 			
-			pwButtonAutoUpdate.setText(I18N.i.button_checkUpdatesAuto());
+			pwButtonAutoUpdate.setText(I18N.i.pref_updates_auto());
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			pwButtonAutoUpdate.setLayoutData(prefGB);
 			pwButtonAutoUpdate.setSelection(autoCheckUpdates);

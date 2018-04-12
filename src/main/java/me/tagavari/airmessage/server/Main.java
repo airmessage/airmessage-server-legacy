@@ -29,7 +29,7 @@ class Main {
 		System.setProperty("java.awt.headless", "true");
 		
 		//Initializing Sentry
-		if(!MODE_DEBUG) Sentry.init();
+		if(!MODE_DEBUG) Sentry.init(Constants.SENTRY_DSN);
 		
 		//Configuring the logger
 		logger = Logger.getGlobal();

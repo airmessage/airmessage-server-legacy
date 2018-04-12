@@ -18,6 +18,18 @@ public interface I18N {
 	@En("Cancel")
 	String button_cancel();
 	
+	@En("Edit Passwords\u2026")
+	String button_editPasswords();
+	
+	@En("Retry")
+	String button_retry();
+	
+	@En("Install Update")
+	String button_installUpdate();
+	
+	@En("Remind Me Later")
+	String button_installUpdate_later();
+	
 	@En("AirMessage will not run on {0}")
 	String warning_osIncompatible(String name);
 	
@@ -54,6 +66,9 @@ public interface I18N {
 	@En("Preferences")
 	String title_preferences();
 	
+	@En("Software Update")
+	String title_update();
+	
 	@En("Server port:")
 	String pref_port();
 	
@@ -66,24 +81,27 @@ public interface I18N {
 	@En("Updates:")
 	String pref_updates();
 	
+	@En("Check for updates automatically")
+	String pref_updates_auto();
+	
 	@En("Scanning:")
 	String pref_scanning();
 	
 	@En("How often to check for new messages (seconds)")
 	String pref_scanning_desc();
 	
-	@En("Edit Passwords\u2026")
-	String button_editPasswords();
-	
-	@En("Check for updates automatically")
-	String button_checkUpdatesAuto();
-	
-	@En("Retry")
-	String button_retry();
-	
-	@En("Please enter a server port")
+	/* @En("Please enter a server port")
 	String warning_noPort();
 	
 	@En("{0} is outside of the valid port range (1 to 65535)")
-	String warning_portRange(int port);
+	String warning_portRange(int port); */
+	
+	@En("A new version of {0} is available!")
+	String message_updateAvailable_title(String name);
+	
+	@En("{0} {1} is now available - you have {2}. Would you like to download it now?")
+	String message_updateAvailable_description(String name, String currentVer, String newVer);
+	
+	@En("Release Notes:")
+	String message_releaseNotes();
 }
