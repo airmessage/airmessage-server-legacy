@@ -1,5 +1,6 @@
 package me.tagavari.airmessage.server;
 
+import io.sentry.Sentry;
 import me.tagavari.airmessage.common.SharedValues;
 import org.java_websocket.WebSocket;
 
@@ -488,6 +489,7 @@ class AppleScriptManager {
 				} catch(IOException | DataFormatException | InterruptedException exception) {
 					//Printing the stack trace
 					exception.printStackTrace();
+					Sentry.capture(exception);
 					
 					//Failing the download
 					failRequest();

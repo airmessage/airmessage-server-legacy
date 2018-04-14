@@ -2,8 +2,7 @@ package me.tagavari.airmessage.server;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.DatagramSocket;
-import java.net.ServerSocket;
+import java.net.*;
 import java.util.Random;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -14,15 +13,11 @@ class Constants {
 	
 	//Creating the version values
 	static final String SERVER_VERSION = "0.2";
-	//static final int SERVER_VERSION_CODE = 1;
-	static final int SERVER_VERSION_CODE = -1;
-	
-	static final String resourceDefaultCredentialList = "users.txt";
+	static final int SERVER_VERSION_CODE = 1;
 	
 	//Creating the file values
-	static final String userList = "users.txt";
-	static final File uploadDir = new File("uploads");
 	static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
+	static final File uploadDir = new File(applicationSupportDir, "uploads");
 	
 	//Creating the macOS version values
 	static final int[] macOSYosemiteVersion = {10, 10};
@@ -182,28 +177,15 @@ class Constants {
 		if(port < minPort || port > maxPort) throw new IllegalArgumentException("Invalid start port: " + port);
 		
 		//Attempting to bind the port
-		ServerSocket serverSocket = null;
-		DatagramSocket datagramSocket = null;
-		try {
-			serverSocket = new ServerSocket(port);
+		try (ServerSocket serverSocket = new ServerSocket(port);
+			DatagramSocket datagramSocket = new DatagramSocket(port)){
 			serverSocket.setReuseAddress(true);
-			datagramSocket = new DatagramSocket(port);
 			datagramSocket.setReuseAddress(true);
 			
 			//Returning true
 			return true;
 		} catch(IOException exception) {
 			//An exception was thrown, port couldn't be bound
-		} finally {
-			//Cleaning up the sockets
-			if(datagramSocket != null) datagramSocket.close();
-			if(serverSocket != null) {
-				try {
-					serverSocket.close();
-				} catch(IOException exception) {
-					//Should not be thrown
-				}
-			}
 		}
 		
 		//Returning false
@@ -219,5 +201,18 @@ class Constants {
 		for(int i = 0; i < length; i++) builder.append(ALPHA_NUMERIC_STRING.charAt(random.nextInt(ALPHA_NUMERIC_STRING.length())));
 		
 		return builder.toString();
+	}
+	
+	static String getMACAddress() {
+		try {
+			byte[] mac = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getHardwareAddress();
+			if(mac == null) return null;
+			StringBuilder stringBuilder = new StringBuilder();
+			for(int i = 0; i < mac.length; i++) stringBuilder.append(String.format("%02X%s", mac[i], (i < mac.length - 1) ? "-" : ""));
+			return stringBuilder.toString();
+		} catch(UnknownHostException | SocketException exception) {
+			exception.printStackTrace();
+			return null;
+		}
 	}
 }

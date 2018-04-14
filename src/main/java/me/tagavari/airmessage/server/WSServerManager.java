@@ -137,8 +137,8 @@ public class WSServerManager extends WebSocketServer {
 	
 	@Override
 	public void onOpen(WebSocket connection, ClientHandshake handshake) {
-		//Adding a connection
-		connectionCount++;
+		//Updating the connection count
+		connectionCount = connections().size();
 		
 		//Updating the connection message
 		UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);
@@ -149,8 +149,8 @@ public class WSServerManager extends WebSocketServer {
 	
 	@Override
 	public void onClose(WebSocket connection, int code, String reason, boolean remote) {
-		//Removing a connection
-		connectionCount--;
+		//Updating the connection count
+		connectionCount = connections().size();
 		
 		//Updating the connection message
 		if(!UIHelper.getDisplay().isDisposed()) UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);

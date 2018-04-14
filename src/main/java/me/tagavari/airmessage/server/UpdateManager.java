@@ -192,7 +192,7 @@ public class UpdateManager {
 			Button acceptButton = new Button(buttonContainer, SWT.PUSH);
 			acceptButton.setText(I18N.i.button_installUpdate());
 			FormData acceptButtonFD = new FormData();
-			if(acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) acceptButtonFD.width = UIHelper.minButtonWidth;
+			//if(acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) acceptButtonFD.width = UIHelper.minButtonWidth;
 			acceptButtonFD.right = new FormAttachment(100);
 			acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
 			acceptButton.setLayoutData(acceptButtonFD);
@@ -202,11 +202,13 @@ public class UpdateManager {
 			Button ignoreButton = new Button(buttonContainer, SWT.PUSH);
 			ignoreButton.setText(I18N.i.button_installUpdate_later());
 			FormData ignoreButtonFD = new FormData();
-			if(ignoreButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) ignoreButtonFD.width = UIHelper.minButtonWidth;
+			//if(ignoreButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) ignoreButtonFD.width = UIHelper.minButtonWidth;
 			ignoreButtonFD.right = new FormAttachment(acceptButton);
 			ignoreButtonFD.top = new FormAttachment(acceptButton, 0, SWT.CENTER);
 			ignoreButton.setLayoutData(ignoreButtonFD);
 			ignoreButton.addListener(SWT.Selection, event -> shell.close());
+			
+			acceptButtonFD.width = ignoreButtonFD.width = UIHelper.computeMaxSize(new Button[]{acceptButton, ignoreButton});
 		}
 		
 		//Packing the shell

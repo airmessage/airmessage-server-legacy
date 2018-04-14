@@ -190,7 +190,16 @@ public class UIHelper {
 		control.setSize(textSize.x + padding, control.getSize().y);
 	}
 	
-	public static Display getDisplay() {
+	static int computeMaxSize(Button[] buttons) {
+		int maxSize = 0;
+		for(Button button : buttons) {
+			int buttonSize = button.computeSize(SWT.DEFAULT, SWT.DEFAULT).x;
+			if(buttonSize > maxSize) maxSize = buttonSize;
+		}
+		return maxSize;
+	}
+	
+	static Display getDisplay() {
 		return display;
 	}
 }

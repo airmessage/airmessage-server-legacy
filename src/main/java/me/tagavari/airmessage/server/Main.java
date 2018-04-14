@@ -3,6 +3,8 @@ package me.tagavari.airmessage.server;
 import com.github.rodionmoiseev.c10n.C10N;
 import com.github.rodionmoiseev.c10n.annotations.DefaultC10NAnnotations;
 import io.sentry.Sentry;
+import io.sentry.context.Context;
+import io.sentry.event.UserBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.swing.*;
@@ -13,7 +15,7 @@ import java.util.logging.*;
 
 class Main {
 	//Creating the reference values
-	static final boolean MODE_DEBUG = true;
+	static final boolean MODE_DEBUG = false;
 	static final int serverStateStarting = 0;
 	static final int serverStateRunning = 1;
 	static final int serverStateFailedDatabase = 2;
@@ -29,7 +31,12 @@ class Main {
 		System.setProperty("java.awt.headless", "true");
 		
 		//Initializing Sentry
-		if(!MODE_DEBUG) Sentry.init(Constants.SENTRY_DSN);
+		if(!MODE_DEBUG) {
+			Sentry.init(Constants.SENTRY_DSN + "?release=" + Constants.SERVER_VERSION);
+			Context context = Sentry.getContext();
+			String macAddress = Constants.getMACAddress();
+			if(macAddress != null) context.setUser(new UserBuilder().setId(macAddress).build());
+		}
 		
 		//Configuring the logger
 		logger = Logger.getGlobal();
@@ -63,7 +70,7 @@ class Main {
 		if(!PreferencesManager.loadPreferences()) return;
 		
 		//Opening the intro window
-		UIHelper.openIntroWindow();
+		if(PreferencesManager.checkFirstRun()) UIHelper.openIntroWindow();
 		
 		//Setting up the system tray
 		SystemTrayManager.setupSystemTray();
@@ -86,7 +93,7 @@ class Main {
 		startServer();
 		
 		//Starting the update checker
-		UpdateManager.startUpdateChecker();
+		if(PreferencesManager.getAutoCheckUpdates()) UpdateManager.startUpdateChecker();
 		
 		//Adding a shutdown hook
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {

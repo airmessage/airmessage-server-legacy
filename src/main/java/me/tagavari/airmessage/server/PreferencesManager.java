@@ -6,6 +6,7 @@ import org.eclipse.swt.layout.*;
 import org.eclipse.swt.widgets.*;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
@@ -27,13 +28,15 @@ public class PreferencesManager {
 	
 	private static final File prefFile = new File(Constants.applicationSupportDir, "prefs.xml");
 	private static final File userFile = new File(Constants.applicationSupportDir, "users.txt");
+	
 	private static final int defaultPort = 1359;
-	private static final String defaultPassword = "cookiesandmilk";
+	private static final String[] defaultPasswords = {"cookiesandmilk"};
 	private static final boolean defaultAutoCheckUpdates = true;
 	private static final float defaultScanFrequency = 2;
 	
 	private static final String domTagRoot = "Preferences";
 	private static final String domTagSchemaVer = "SchemaVer";
+	private static final String domTagFirstRun = "FirstRun";
 	private static final String domTagPort = "Port";
 	private static final String domTagAutoCheckUpdates = "AutomaticUpdateCheck";
 	private static final String domTagScanFrequency = "ScanFrequency";
@@ -230,8 +233,17 @@ public class PreferencesManager {
 			}
 		}
 		
-		//Getting the auto update
-		autoCheckUpdates = pwButtonAutoUpdate.getSelection();
+		{
+			//Getting the auto update
+			boolean autoCheckUpdatesControl = pwButtonAutoUpdate.getSelection();
+			if(autoCheckUpdates != autoCheckUpdatesControl) {
+				autoCheckUpdates = autoCheckUpdatesControl;
+				
+				//Updating the update manager
+				if(autoCheckUpdates) UpdateManager.startUpdateChecker();
+				else UpdateManager.stopUpdateChecker();
+			}
+		}
 		
 		{
 			//Getting the port text
@@ -253,9 +265,56 @@ public class PreferencesManager {
 		Main.restartServer();
 	}
 	
+	static boolean checkFirstRun() {
+		//Exiting if the document doesn't exist
+		if(!prefFile.exists()) throw new RuntimeException("Preference file doesn't exist!");
+		
+		//Loading the document
+		Document document;
+		try {
+			document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(prefFile);
+		} catch(ParserConfigurationException | IOException | SAXException exception) {
+			//Logging the error
+			Main.getLogger().log(Level.SEVERE, "Couldn't create document builder", exception);
+			
+			//Returning false
+			return false;
+		}
+		
+		boolean firstRun;
+		
+		//Getting the first run
+		NodeList firstRunNL = document.getElementsByTagName(domTagFirstRun);
+		if(firstRunNL.getLength() == 0) firstRun = true;
+		else {
+			String firstRunString = document.getElementsByTagName(domTagFirstRun).item(0).getTextContent();
+			if(firstRunString.equals(Boolean.toString(false))) firstRun = false;
+			else if(firstRunString.equals(Boolean.toString(true))) firstRun = true;
+			else firstRun = true;
+		}
+		
+		if(firstRun) {
+			//Adding the XML element
+			Node rootElement = document.getElementsByTagName(domTagRoot).item(0);
+			Element element = document.createElement(domTagFirstRun);
+			element.setTextContent(Boolean.toString(false));
+			rootElement.appendChild(element);
+			
+			try {
+				//Writing the XML document
+				TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(prefFile));
+			} catch(TransformerException exception) {
+				exception.printStackTrace();
+			}
+		}
+		
+		//Returning the value
+		return firstRun;
+	}
+	
 	static void openWindow() {
 		//Opening the window
-		if(windowShell == null) openPrefsWindow();
+		if(windowShell == null || windowShell.isDisposed()) openPrefsWindow();
 		else windowShell.forceActive();
 	}
 	
@@ -459,6 +518,7 @@ public class PreferencesManager {
 		
 		//Opening the shell
 		windowShell.open();
+		windowShell.forceActive();
 	}
 	
 	private static void openPrefsPasswordWindow(Shell parentShell) {
@@ -586,14 +646,11 @@ public class PreferencesManager {
 				return new String[0];
 			}
 		} else {
-			//Creating the list
-			String[] passwords = new String[]{defaultPassword};
+			//Writing the default password list to disk
+			savePasswords(defaultPasswords);
 			
-			//Writing the password list to disk
-			savePasswords(passwords);
-			
-			//Returning the list
-			return passwords;
+			//Returning the default password list
+			return defaultPasswords;
 		}
 	}
 	
@@ -648,6 +705,10 @@ public class PreferencesManager {
 	
 	static int getServerPort() {
 		return serverPort;
+	}
+	
+	static boolean getAutoCheckUpdates() {
+		return autoCheckUpdates;
 	}
 	
 	static float getScanFrequency() {
