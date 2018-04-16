@@ -98,7 +98,7 @@ class Main {
 		//Adding a shutdown hook
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			//Stopping the services
-			WSServerManager.stopServer();
+			NetServerManager.destroyServer();
 			DatabaseManager.stop();
 			UpdateManager.stopUpdateChecker();
 			
@@ -134,7 +134,7 @@ class Main {
 		}
 		
 		//Starting the web socket manager
-		result = WSServerManager.startServer(PreferencesManager.getServerPort());
+		result = NetServerManager.createServer(PreferencesManager.getServerPort(), false);
 		if(!result) {
 			//Updating the server state
 			setServerState(serverStateFailedServer);
@@ -158,7 +158,7 @@ class Main {
 		SystemTrayManager.updateStatusMessage();
 		
 		//Starting the web socket manager
-		boolean result = WSServerManager.restartServer(PreferencesManager.getServerPort());
+		boolean result = NetServerManager.createServer(PreferencesManager.getServerPort(), true);
 		if(!result) {
 			//Updating the server state
 			setServerState(serverStateFailedServer);

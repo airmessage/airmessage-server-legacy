@@ -2,7 +2,6 @@ package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
 import me.tagavari.airmessage.common.SharedValues;
-import org.java_websocket.WebSocket;
 
 import java.io.*;
 import java.util.*;
@@ -273,12 +272,12 @@ class AppleScriptManager {
 	}
 	
 	private static final List<FileUploadRequest> fileUploadRequests = Collections.synchronizedList(new ArrayList<>());
-	static void addFileFragment(WebSocket connection, short requestID, String chatGUID, String fileName, int index, byte[] compressedBytes, boolean isLast) {
+	static void addFileFragment(NetServerManager.SocketManager connection, short requestID, String chatGUID, String fileName, int index, byte[] compressedBytes, boolean isLast) {
 		//Attempting to find a matching request
 		FileUploadRequest request = null;
 		synchronized(fileUploadRequests) {
 			for(FileUploadRequest allRequests : fileUploadRequests) {
-				if(!allRequests.connection.equals(connection) || allRequests.requestID != requestID || allRequests.chatGUID == null || !allRequests.chatGUID.equals(chatGUID)) continue;
+				if(allRequests.connection != connection || allRequests.requestID != requestID || allRequests.chatGUID == null || !allRequests.chatGUID.equals(chatGUID)) continue;
 				request = allRequests;
 				break;
 			}
@@ -303,11 +302,11 @@ class AppleScriptManager {
 		request.addFileFragment(new FileUploadRequest.FileFragment(index, compressedBytes, isLast));
 	}
 	
-	static void addFileFragment(WebSocket connection, short requestID, String[] chatMembers, String service, String fileName, int index, byte[] compressedBytes, boolean isLast) {
+	static void addFileFragment(NetServerManager.SocketManager connection, short requestID, String[] chatMembers, String service, String fileName, int index, byte[] compressedBytes, boolean isLast) {
 		//Attempting to find a matching request
 		FileUploadRequest request = null;
 		for(FileUploadRequest allRequests : fileUploadRequests) {
-			if(!allRequests.connection.equals(connection) || allRequests.requestID != requestID || allRequests.chatMembers == null || !Arrays.equals(allRequests.chatMembers, chatMembers)) continue;
+			if(allRequests.connection != connection || allRequests.requestID != requestID || allRequests.chatMembers == null || !Arrays.equals(allRequests.chatMembers, chatMembers)) continue;
 			request = allRequests;
 			break;
 		}
@@ -333,7 +332,7 @@ class AppleScriptManager {
 	
 	private static class FileUploadRequest {
 		//Creating the request variables
-		final WebSocket connection;
+		final NetServerManager.SocketManager connection;
 		final short requestID;
 		final String chatGUID;
 		final String[] chatMembers;
@@ -347,7 +346,7 @@ class AppleScriptManager {
 		private AttachmentWriter writerThread = null;
 		private int lastIndex = -1;
 		
-		FileUploadRequest(WebSocket connection, short requestID, String chatGUID, String fileName) {
+		FileUploadRequest(NetServerManager.SocketManager connection, short requestID, String chatGUID, String fileName) {
 			//Setting the variables
 			this.connection = connection;
 			this.requestID = requestID;
@@ -357,7 +356,7 @@ class AppleScriptManager {
 			this.fileName = fileName;
 		}
 		
-		FileUploadRequest(WebSocket connection, short requestID, String[] chatMembers, String service, String fileName) {
+		FileUploadRequest(NetServerManager.SocketManager connection, short requestID, String[] chatMembers, String service, String fileName) {
 			//Setting the variables
 			this.connection = connection;
 			this.requestID = requestID;
@@ -425,7 +424,7 @@ class AppleScriptManager {
 			if(writerThread != null) writerThread.stopThread();
 			
 			//Sending a negative response
-			WSServerManager.sendMessageResponse(connection, requestID, false);
+			NetServerManager.sendMessageRequestResponse(connection, requestID, false);
 		}
 		
 		private void onDownloadSuccessful(File file) {
@@ -436,7 +435,7 @@ class AppleScriptManager {
 			boolean result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service);
 			
 			//Sending the response
-			WSServerManager.sendMessageResponse(connection, requestID, result);
+			NetServerManager.sendMessageRequestResponse(connection, requestID, result);
 		}
 		
 		private class AttachmentWriter extends Thread {

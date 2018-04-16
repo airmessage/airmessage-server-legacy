@@ -2,8 +2,6 @@ package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
 import me.tagavari.airmessage.common.SharedValues;
-import org.java_websocket.WebSocket;
-import org.java_websocket.exceptions.WebsocketNotConnectedException;
 import org.jooq.*;
 import org.jooq.impl.DSL;
 
@@ -192,18 +190,16 @@ class DatabaseManager {
 				
 				//Checking if there are no new messages
 				if(dataFetchResult != null && !dataFetchResult.conversationItems.isEmpty()) {
-					//Serializing the data
 					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-						out.writeByte(SharedValues.wsFrameUpdate); //Message type - update
-						out.writeObject(dataFetchResult.conversationItems); //Message list
+						//Serializing the data
+						out.writeInt(dataFetchResult.conversationItems.size());
+						for(SharedValues.ConversationItem item : dataFetchResult.conversationItems) out.writeObject(item);
 						out.flush();
 						
 						//Sending the data
-						WSServerManager.publishMessage(bos.toByteArray());
+						NetServerManager.sendPacket(null, SharedValues.nhtMessageUpdate, bos.toByteArray());
 					} catch(IOException exception) {
 						Sentry.capture(exception);
-						exception.printStackTrace();
-					} catch(WebsocketNotConnectedException exception) {
 						exception.printStackTrace();
 					}
 				}
@@ -337,20 +333,18 @@ class DatabaseManager {
 		}
 		
 		//Checking if the connection is still open
-		if(request.connection.isOpen()) {
+		if(request.connection.isConnected()) {
 			//Preparing to serialize the data
 			try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
 				//Serializing the data
-				out.writeByte(SharedValues.wsFrameChatInfo); //Message type - chat information
-				out.writeObject(conversationInfoList); //Conversation list
+				out.writeInt(conversationInfoList.size());
+				for(SharedValues.ConversationInfo item : conversationInfoList) out.writeObject(item);
 				out.flush();
 				
 				//Sending the conversation info
-				request.connection.send(bos.toByteArray());
+				NetServerManager.sendPacket(request.connection, SharedValues.nhtConversationUpdate, bos.toByteArray());
 			} catch(IOException exception) {
 				Sentry.capture(exception);
-				exception.printStackTrace();
-			} catch(WebsocketNotConnectedException exception) {
 				exception.printStackTrace();
 			}
 		}
@@ -414,7 +408,7 @@ class DatabaseManager {
 							out.flush();
 							
 							//Sending the data
-							if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
+							//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
 						}
 						
 						//Adding to the request index
@@ -430,28 +424,25 @@ class DatabaseManager {
 			} catch(IOException exception) {
 				Sentry.capture(exception);
 				exception.printStackTrace();
-			} catch(WebsocketNotConnectedException exception) {
-				exception.printStackTrace();
 			}
 		}
 		
 		//Checking if the attempt was a failure
 		if(!succeeded) {
-			//Preparing to serialize the data
-			try(ByteArrayOutputStream bos = new ByteArrayOutputStream();
-				ObjectOutputStream out = new ObjectOutputStream(bos)) {
-				out.writeByte(SharedValues.wsFrameAttachmentReqFailed); //Message type - attachment request
-				out.writeShort(request.requestID); //Request ID
-				out.writeUTF(request.fileGuid); //File GUID
-				out.flush();
-				
-				//Sending the data
-				if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
-			} catch(IOException exception) {
-				Sentry.capture(exception);
-				exception.printStackTrace();
-			} catch(WebsocketNotConnectedException exception) {
-				exception.printStackTrace();
+			if(request.connection.isConnected()) {
+				//Preparing to serialize the data
+				try(ByteArrayOutputStream bos = new ByteArrayOutputStream();
+					ObjectOutputStream out = new ObjectOutputStream(bos)) {
+					out.writeShort(request.requestID); //Request ID
+					out.writeUTF(request.fileGuid); //File GUID
+					out.flush();
+					
+					//Sending the data
+					NetServerManager.sendPacket(request.connection, SharedValues.nhtAttachmentReqFail, bos.toByteArray());
+				} catch(IOException exception) {
+					Sentry.capture(exception);
+					exception.printStackTrace();
+				}
 			}
 		}
 	}
@@ -460,21 +451,20 @@ class DatabaseManager {
 		try {
 			//Returning their data
 			DataFetchResult result = fetchData(connection, request.filter);
-			if(request.connection.isOpen()) {
+			System.out.println("Found " + result.conversationItems.size() + " items from custom retrieval request");
+			if(request.connection.isConnected()) {
 				//Serializing the data
 				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-					out.writeByte(request.messageResponseType); //Message type - update
-					out.writeObject(result.conversationItems); //Message list
+					out.writeInt(result.conversationItems.size());
+					for(SharedValues.ConversationItem item : result.conversationItems) out.writeObject(item);
 					out.flush();
 					
 					//Sending the data
-					request.connection.send(bos.toByteArray());
+					NetServerManager.sendPacket(request.connection, request.messageResponseType, bos.toByteArray());
 				}
 			}
 		} catch(NoSuchAlgorithmException | IOException exception) {
 			Sentry.capture(exception);
-			exception.printStackTrace();
-		} catch(WebsocketNotConnectedException exception) {
 			exception.printStackTrace();
 		}
 	}
@@ -523,22 +513,25 @@ class DatabaseManager {
 			}
 			
 			//Checking if the connection is still open
-			if(request.connection.isOpen()) {
+			if(request.connection.isConnected()) {
 				//Serializing the data
 				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-					out.writeByte(SharedValues.wsFrameMassRetrieval); //Message type - mass retrieval
-					out.writeObject(messageResult.conversationItems); //Message list
-					out.writeObject(conversationInfoList); //Conversation list
+					//Writing the message list
+					out.writeInt(messageResult.conversationItems.size());
+					for(SharedValues.ConversationItem item : messageResult.conversationItems) out.writeObject(item);
+					
+					//Writing the conversation list
+					out.writeInt(conversationInfoList.size());
+					for(SharedValues.ConversationInfo item : conversationInfoList) out.writeObject(item);
+					
 					out.flush();
 					
 					//Sending the data
-					request.connection.send(bos.toByteArray());
+					NetServerManager.sendPacket(request.connection, SharedValues.nhtMassRetrieval, bos.toByteArray());
 				}
 			}
 		} catch(IOException | NoSuchAlgorithmException exception) {
 			Sentry.capture(exception);
-			exception.printStackTrace();
-		} catch(WebsocketNotConnectedException exception) {
 			exception.printStackTrace();
 		}
 	}
@@ -874,16 +867,14 @@ class DatabaseManager {
 
 		//Serializing the data
 		try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-			out.writeByte(SharedValues.wsFrameModifierUpdate); //Message type - modifier update
-			out.writeObject(modifierList); //Modifier list
+			out.writeInt(modifierList.size());
+			for(SharedValues.ModifierInfo item : modifierList) out.writeObject(item);
 			out.flush();
 			
 			//Sending the data
-			WSServerManager.publishMessage(bos.toByteArray());
+			NetServerManager.sendPacket(null, SharedValues.nhtModifierUpdate, bos.toByteArray());
 		} catch(IOException exception) {
 			Sentry.capture(exception);
-			exception.printStackTrace();
-		} catch(WebsocketNotConnectedException exception) {
 			exception.printStackTrace();
 		}
 	}
@@ -939,10 +930,10 @@ class DatabaseManager {
 	}
 	
 	static class ConversationInfoRequest {
-		final WebSocket connection;
-		final ArrayList<String> conversationsGUIDs;
+		final NetServerManager.SocketManager connection;
+		final List<String> conversationsGUIDs;
 		
-		ConversationInfoRequest(WebSocket connection, ArrayList<String> conversationsGUIDs) {
+		ConversationInfoRequest(NetServerManager.SocketManager connection, List<String> conversationsGUIDs) {
 			//Setting the values
 			this.connection = connection;
 			this.conversationsGUIDs = conversationsGUIDs;
@@ -954,11 +945,11 @@ class DatabaseManager {
 	}
 	
 	static class CustomRetrievalRequest {
-		final WebSocket connection;
+		final NetServerManager.SocketManager connection;
 		final RetrievalFilter filter;
-		final byte messageResponseType;
+		final int messageResponseType;
 		
-		CustomRetrievalRequest(WebSocket connection, RetrievalFilter filter, byte messageResponseType) {
+		CustomRetrievalRequest(NetServerManager.SocketManager connection, RetrievalFilter filter, int messageResponseType) {
 			//Setting the values
 			this.connection = connection;
 			this.filter = filter;
@@ -967,20 +958,20 @@ class DatabaseManager {
 	}
 	
 	static class MassRetrievalRequest {
-		final WebSocket connection;
+		final NetServerManager.SocketManager connection;
 		
-		MassRetrievalRequest(WebSocket connection) {
+		MassRetrievalRequest(NetServerManager.SocketManager connection) {
 			this.connection = connection;
 		}
 	}
 	
 	static class FileRequest {
-		final WebSocket connection;
+		final NetServerManager.SocketManager connection;
 		final String fileGuid;
 		final short requestID;
 		final int chunkSize;
 		
-		FileRequest(WebSocket connection, String fileGuid, short requestID, int chunkSize) {
+		FileRequest(NetServerManager.SocketManager connection, String fileGuid, short requestID, int chunkSize) {
 			this.connection = connection;
 			this.fileGuid = fileGuid;
 			this.requestID = requestID;

@@ -215,4 +215,12 @@ class Constants {
 			return null;
 		}
 	}
+	
+	static boolean checkDisconnected(IOException exception) {
+		return exception.getMessage().toLowerCase().contains("broken pipe");
+	}
+	
+	static boolean checkDisconnected(SocketException exception) {
+		return exception.getMessage().toLowerCase().contains("socket closed");
+	}
 }

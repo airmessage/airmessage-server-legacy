@@ -1,29 +1,7 @@
 package me.tagavari.airmessage.server;
 
-import me.tagavari.airmessage.common.SharedValues;
-import org.java_websocket.WebSocket;
-import org.java_websocket.drafts.Draft;
-import org.java_websocket.drafts.Draft_6455;
-import org.java_websocket.exceptions.InvalidDataException;
-import org.java_websocket.exceptions.InvalidHandshakeException;
-import org.java_websocket.extensions.IExtension;
-import org.java_websocket.framing.Framedata;
-import org.java_websocket.handshake.ClientHandshake;
-import org.java_websocket.handshake.HandshakeBuilder;
-import org.java_websocket.handshake.ServerHandshakeBuilder;
-import org.java_websocket.server.DefaultSSLWebSocketServerFactory;
-import org.java_websocket.server.WebSocketServer;
-import org.jooq.impl.DSL;
-
-import java.io.*;
-import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
-public class WSServerManager extends WebSocketServer {
-	//Server instance
+class WSServerManager {
+	/* //Server instance
 	private static WSServerManager serverManager = null;
 	
 	//Creating the instance values
@@ -396,5 +374,5 @@ public class WSServerManager extends WebSocketServer {
 			for(IExtension extension : getKnownExtensions()) newExtensions.add(extension.copyInstance());
 			return new DraftMMS(newExtensions);
 		}
-	}
+	} */
 }
