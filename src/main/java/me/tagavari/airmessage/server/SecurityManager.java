@@ -59,7 +59,6 @@ public class SecurityManager {
 			outputStream.close();
 		} catch (Exception exception) {
 			//Logging an error
-			System.out.println("Failed to create keystore: " + exception.getMessage());
 			exception.printStackTrace();
 			
 			//Returning false

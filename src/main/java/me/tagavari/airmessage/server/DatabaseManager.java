@@ -6,7 +6,6 @@ import org.jooq.*;
 import org.jooq.impl.DSL;
 
 import java.io.*;
-import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
@@ -22,6 +21,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 class DatabaseManager {
 	//Creating the reference variables
@@ -250,7 +251,7 @@ class DatabaseManager {
 					else if(request instanceof MassRetrievalRequest) fulfillMassRetrievalRequest(connection, (MassRetrievalRequest) request);
 				}
 			} catch(InterruptedException exception) {
-			
+				return;
 			}
 		}
 		
@@ -379,44 +380,44 @@ class DatabaseManager {
 		//Checking if there have been no errors so far
 		if(succeeded) {
 			//Streaming the file
-			try(FileInputStream inputStream = new FileInputStream(file)) {
+			try(FileInputStream inputStream = new FileInputStream(file);
+				ByteArrayOutputStream byteOut = new ByteArrayOutputStream(); GZIPOutputStream gzipOut = new GZIPOutputStream(byteOut)) {
 				//Preparing to read the data
 				byte[] buffer = new byte[request.chunkSize];
+				byte[] compressedBuffer;
 				int bytesRead;
+				boolean moreDataRead;
 				int requestIndex = 0;
 				
 				//Attempting to read the data
 				if((bytesRead = inputStream.read(buffer)) != -1) {
-					while(true) {
-						//Copying and compressing the buffer
-						byte[] compressedChunk = SharedValues.compress(buffer, bytesRead);
+					do {
+						//Compressing the buffer
+						compressedBuffer = Constants.compressGZIP(buffer, bytesRead);
 						
-						//Reading more data
-						boolean moreDataRead = (bytesRead = inputStream.read(buffer)) != -1;
+						//Reading the next chunk
+						moreDataRead = (bytesRead = inputStream.read(buffer)) != -1;
 						
 						//Preparing to serialize the data
-						try(ByteArrayOutputStream bos = new ByteArrayOutputStream();
-							ObjectOutputStream out = new ObjectOutputStream(bos)) {
-							out.writeByte(SharedValues.wsFrameAttachmentReq); //Message type - attachment request
-							out.writeUTF(request.fileGuid); //File GUID
+						try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
 							out.writeShort(request.requestID); //Request ID
+							out.writeUTF(request.fileGuid); //File GUID
 							out.writeInt(requestIndex); //Request index
-							out.writeObject(compressedChunk); //Compressed chunk compressedData
+							out.writeInt(compressedBuffer.length); //Compressed chunk data
+							out.write(compressedBuffer);
 							out.reset();
-							if(requestIndex == 0) out.writeLong(file.length()); //File length
+							if(requestIndex == 0) out.writeLong(file.length()); //Total file length
 							out.writeBoolean(!moreDataRead); //Is last
 							out.flush();
 							
 							//Sending the data
+							NetServerManager.sendPacket(request.connection, SharedValues.nhtAttachmentReq, bos.toByteArray());
 							//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
 						}
 						
 						//Adding to the request index
 						requestIndex++;
-						
-						//Breaking from the loop if there is no more data to read
-						if(!moreDataRead) break;
-					}
+					} while(moreDataRead);
 				} else {
 					//Setting the succeeded variable to false
 					succeeded = false;
@@ -451,7 +452,6 @@ class DatabaseManager {
 		try {
 			//Returning their data
 			DataFetchResult result = fetchData(connection, request.filter);
-			System.out.println("Found " + result.conversationItems.size() + " items from custom retrieval request");
 			if(request.connection.isConnected()) {
 				//Serializing the data
 				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
@@ -635,11 +635,15 @@ class DatabaseManager {
 							//Skipping the remainder of the iteration if the file is invalid
 							if(!file.exists()) continue;
 							
-							//Reading the file
-							byte[] fileBytes = Files.readAllBytes(file.toPath());
-							
-							//Compressing the data
-							fileBytes = SharedValues.compress(fileBytes, fileBytes.length);
+							//Reading the file with GZIP compression
+							byte[] fileBytes;
+							try(FileInputStream src = new FileInputStream(file); GZIPInputStream in = new GZIPInputStream(src);
+							ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+								byte[] buffer = new byte[1024];
+								int bytesRead;
+								while((bytesRead = in.read(buffer)) != -1) out.write(buffer, 0, bytesRead);
+								fileBytes = out.toByteArray();
+							}
 							
 							//Getting the file guid
 							String fileGuid = fileRecord.getValue(0, DSL.field("attachment.guid", String.class));

@@ -148,8 +148,8 @@ class NetServerManager {
 			try {
 				while(!isInterrupted()) {
 					PacketStruct packet = uploadQueue.take();
-					if(packet.target == null) for(SocketManager target : connectionList) target.sendData(packet.type, packet.content);
-					else packet.target.sendData(packet.type, packet.content);
+					if(packet.target == null) for(SocketManager target : connectionList) target.sendDataSync(packet.type, packet.content);
+					else packet.target.sendDataSync(packet.type, packet.content);
 				}
 			} catch(InterruptedException exception) {
 				return;
@@ -213,11 +213,14 @@ class NetServerManager {
 			//Adding the connection
 			connectionList.add(this);
 			
+			//Updating the UI
+			UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);
+			
 			//Logging the connection
-			System.out.println("Client connected from " + socket.getInetAddress().getHostName() + " (" + socket.getInetAddress().getHostAddress() + ")");
+			Main.getLogger().info("Client connected from " + socket.getInetAddress().getHostName() + " (" + socket.getInetAddress().getHostAddress() + ")");
 		}
 		
-		private synchronized boolean sendData(int messageType, byte[] data) {
+		private synchronized boolean sendDataSync(int messageType, byte[] data) {
 			//if(!isConnected()) return false;
 			try {
 				outputStream.write(ByteBuffer.allocate(Integer.SIZE / 8 * 2).putInt(messageType).putInt(data.length).array());
@@ -241,7 +244,6 @@ class NetServerManager {
 		}
 		
 		private void processData(int messageType, byte[] data) {
-			System.out.println("Process data called");
 			//Checking if the client is registered
 			if(clientRegistered) {
 				switch(messageType) {
@@ -258,11 +260,10 @@ class NetServerManager {
 						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
 							timeLower = in.readLong();
 							timeUpper = in.readLong();
-						} catch(IOException exception) {
+						} catch(IOException | RuntimeException exception) {
 							exception.printStackTrace();
 							break;
 						}
-						System.out.println("Fetching messages from " + timeLower + " to " + timeUpper);
 						
 						//Creating a new request and queuing it
 						DatabaseManager.getInstance().addClientRequest(new DatabaseManager.CustomRetrievalRequest(
@@ -285,7 +286,7 @@ class NetServerManager {
 							int count = in.readInt();
 							list = new ArrayList<>();
 							for(int i = 0; i < count; i++) list.add(in.readUTF());
-						} catch(IOException exception) {
+						} catch(IOException | RuntimeException exception) {
 							exception.printStackTrace();
 							break;
 						}
@@ -296,6 +297,38 @@ class NetServerManager {
 						break;
 					}
 					case SharedValues.nhtAttachmentReq: {
+						//Getting the request information
+						short requestID;
+						String fileGUID;
+						int chunkSize;
+						
+						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+							requestID = in.readShort();
+							fileGUID = in.readUTF();
+							chunkSize = in.readInt();
+						} catch(IOException | RuntimeException exception) {
+							exception.printStackTrace();
+							break;
+						}
+						
+						//Sending a reply
+						try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+							out.writeShort(requestID); //Request ID
+							out.writeUTF(fileGUID); //File GUID
+							out.flush();
+							
+							//Sending the data
+							sendPacket(this, SharedValues.nhtAttachmentReqConfirm, bos.toByteArray());
+						} catch(IOException exception) {
+							exception.printStackTrace();
+							Sentry.capture(exception);
+							
+							break;
+						}
+						
+						//Adding the request
+						DatabaseManager.getInstance().addClientRequest(new DatabaseManager.FileRequest(this, fileGUID, requestID, chunkSize));
+						
 						break;
 					}
 					case SharedValues.nhtSendTextExisting: {
@@ -308,7 +341,7 @@ class NetServerManager {
 							requestID = in.readShort();
 							chatGUID = in.readUTF();
 							message = in.readUTF();
-						} catch(IOException exception) {
+						} catch(IOException | RuntimeException exception) {
 							exception.printStackTrace();
 							break;
 						}
@@ -334,7 +367,7 @@ class NetServerManager {
 							for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = in.readUTF();
 							message = in.readUTF();
 							service = in.readUTF();
-						} catch(IOException exception) {
+						} catch(IOException | RuntimeException exception) {
 							exception.printStackTrace();
 							break;
 						}
@@ -348,15 +381,67 @@ class NetServerManager {
 						break;
 					}
 					case SharedValues.nhtSendFileExisting: {
+						//Getting the request information
+						short requestID;
+						int requestIndex;
+						String chatGUID;
+						byte[] compressedBytes;
+						String fileName = null;
+						boolean isLast;
+						
+						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+							requestID = in.readShort();
+							requestIndex = in.readInt();
+							chatGUID = in.readUTF();
+							compressedBytes = new byte[in.readInt()];
+							in.readFully(compressedBytes);
+							if(requestIndex == 0) fileName = in.readUTF();
+							isLast = in.readBoolean();
+						} catch(IOException | RuntimeException exception) {
+							exception.printStackTrace();
+							break;
+						}
+						
+						//Forwarding the data
+						AppleScriptManager.addFileFragment(this, requestID, chatGUID, fileName, requestIndex, compressedBytes, isLast);
+						
 						break;
 					}
 					case SharedValues.nhtSendFileNew: {
+						//Getting the request information
+						short requestID;
+						int requestIndex;
+						String[] chatMembers;
+						byte[] compressedBytes;
+						String fileName = null;
+						String service = null;
+						boolean isLast;
+						
+						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+							requestID = in.readShort();
+							requestIndex = in.readInt();
+							chatMembers = new String[in.readInt()];
+							for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = in.readUTF();
+							compressedBytes = new byte[in.readInt()];
+							in.readFully(compressedBytes);
+							if(requestIndex == 0) {
+								fileName = in.readUTF();
+								service = in.readUTF();
+							}
+							isLast = in.readBoolean();
+						} catch(IOException | RuntimeException exception) {
+							exception.printStackTrace();
+							break;
+						}
+						
+						//Forwarding the data
+						AppleScriptManager.addFileFragment(this, requestID, chatMembers, service, fileName, requestIndex, compressedBytes, isLast);
+						
 						break;
 					}
 				}
 			} else {
 				if(messageType != SharedValues.nhtAuthentication) return;
-				System.out.println("Received auth request!");
 				
 				//Stopping the registration timer
 				if(registrationExpiryTimer != null) {
@@ -373,7 +458,7 @@ class NetServerManager {
 					for(int i = 0; i < verCount; i++) clientVersions[i] = in.readInt();
 					
 					password = in.readUTF();
-				} catch(EOFException | UTFDataFormatException | NegativeArraySizeException exception) {
+				} catch(EOFException | UTFDataFormatException exception) {
 					exception.printStackTrace();
 					
 					//Sending a message
@@ -389,7 +474,7 @@ class NetServerManager {
 					}
 					
 					return;
-				} catch(Exception exception) {
+				} catch(IOException | RuntimeException exception) {
 					exception.printStackTrace();
 					return;
 				}
@@ -467,8 +552,11 @@ class NetServerManager {
 			//Removing the connection record
 			connectionList.remove(this);
 			
+			//Updating the UI
+			UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);
+			
 			//Logging the connection
-			System.out.println("Client disconnected from " + socket.getInetAddress().getHostName() + " (" + socket.getInetAddress().getHostAddress() + ")");
+			Main.getLogger().info("Client disconnected from " + socket.getInetAddress().getHostName() + " (" + socket.getInetAddress().getHostAddress() + ")");
 		}
 		
 		boolean isConnected() {
@@ -485,7 +573,6 @@ class NetServerManager {
 			
 			@Override
 			public void run() {
-				System.out.println("Reader thread started!");
 				while(!isInterrupted() && isConnected()) {
 					try {
 						//Reading the header data
@@ -509,7 +596,6 @@ class NetServerManager {
 						ByteBuffer headerBuffer = ByteBuffer.wrap(header);
 						int messageType = headerBuffer.getInt();
 						int contentLen = headerBuffer.getInt();
-						System.out.println("Message received: " + messageType + " / " + contentLen);
 						
 						//Reading the content
 						byte[] content = new byte[contentLen];

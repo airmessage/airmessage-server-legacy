@@ -1,10 +1,9 @@
 package me.tagavari.airmessage.common;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.zip.DataFormatException;
-import java.util.zip.Deflater;
-import java.util.zip.Inflater;
 
 public class SharedValues {
 	public static final int mmCommunicationsVersion = 3;
@@ -348,40 +347,26 @@ public class SharedValues {
 		}
 	}
 	
-	/* private static void serializeString(ObjectOutputStream stream, String string) throws IOException {
-		stream.writeBoolean(string != null);
-		if(string != null) stream.writeUTF(string);
+	/* public static byte[] compress(byte[] data, int length) {
+		Deflater compressor = new Deflater();
+		compressor.setInput(data, 0, length);
+		compressor.finish();
+		byte[] compressedData = new byte[length];
+		int compressedLen = compressor.deflate(compressedData);
+		compressor.end();
+		return Arrays.copyOf(compressedData, compressedLen);
 	}
 	
-	private static String deserializeString(ObjectInputStream stream) throws IOException {
-		if(!stream.readBoolean()) return null;
-		return stream.readUTF();
-	} */
-	
-	public static byte[] compress(byte[] data, int length) throws IOException {
-		Deflater deflater = new Deflater();
-		deflater.setInput(data, 0, length);
-		ByteArrayOutputStream outputStream = new ByteArrayOutputStream(length);
-		deflater.finish();
-		byte[] buffer = new byte[1024];
-		while (!deflater.finished()) {
-			int count = deflater.deflate(buffer); // returns the generated code... index
-			outputStream.write(buffer, 0, count);
-		}
-		outputStream.close();
-		return outputStream.toByteArray();
-	}
-	
-	public static byte[] decompress(byte[] data) throws IOException, DataFormatException {
+	public static byte[] decompress(byte[] data) throws IOException {
 		Inflater inflater = new Inflater();
 		inflater.setInput(data);
 		ByteArrayOutputStream outputStream = new ByteArrayOutputStream(data.length);
 		byte[] buffer = new byte[1024];
-		while (!inflater.finished()) {
+		while(!inflater.finished()) {
 			int count = inflater.inflate(buffer);
 			outputStream.write(buffer, 0, count);
 		}
 		outputStream.close();
 		return outputStream.toByteArray();
-	}
+	} */
 }

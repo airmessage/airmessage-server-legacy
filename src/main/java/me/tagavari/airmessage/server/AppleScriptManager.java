@@ -1,14 +1,13 @@
 package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
-import me.tagavari.airmessage.common.SharedValues;
 
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.zip.DataFormatException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 class AppleScriptManager {
 	//Creating the AppleScript commands
@@ -275,12 +274,10 @@ class AppleScriptManager {
 	static void addFileFragment(NetServerManager.SocketManager connection, short requestID, String chatGUID, String fileName, int index, byte[] compressedBytes, boolean isLast) {
 		//Attempting to find a matching request
 		FileUploadRequest request = null;
-		synchronized(fileUploadRequests) {
-			for(FileUploadRequest allRequests : fileUploadRequests) {
-				if(allRequests.connection != connection || allRequests.requestID != requestID || allRequests.chatGUID == null || !allRequests.chatGUID.equals(chatGUID)) continue;
-				request = allRequests;
-				break;
-			}
+		for(FileUploadRequest allRequests : fileUploadRequests) {
+			if(allRequests.connection != connection || allRequests.requestID != requestID || allRequests.chatGUID == null || !allRequests.chatGUID.equals(chatGUID)) continue;
+			request = allRequests;
+			break;
 		}
 		
 		//Checking if the request is invalid (there is no request currently in the list)
@@ -391,7 +388,6 @@ class AppleScriptManager {
 				writerThread.start();
 			}
 			
-			
 			//Adding the file fragment
 			writerThread.dataQueue.add(fileFragment);
 		}
@@ -448,7 +444,7 @@ class AppleScriptManager {
 			//Creating the process values
 			private File targetDir;
 			private File targetFile;
-			private boolean isRunning = true;
+			private final AtomicBoolean requestKill = new AtomicBoolean(false);
 			
 			AttachmentWriter(String fileName) {
 				this.fileName = fileName;
@@ -465,8 +461,8 @@ class AppleScriptManager {
 				targetDir.mkdir();
 				targetFile = new File(targetDir, fileName);
 				
-				try(FileOutputStream outputStream = new FileOutputStream(targetFile)) {
-					while(isRunning) {
+				try(FileOutputStream out = new FileOutputStream(targetFile)) {
+					while(!requestKill.get()) {
 						//Getting the data struct
 						FileFragment fileFragment = dataQueue.poll(timeout, TimeUnit.MILLISECONDS);
 						
@@ -474,7 +470,7 @@ class AppleScriptManager {
 						if(fileFragment == null) continue;
 						
 						//Writing the file to disk
-						outputStream.write(SharedValues.decompress(fileFragment.compressedData));
+						out.write(Constants.decompressGZIP(fileFragment.compressedData));
 						
 						//Checking if the file is the last one
 						if(fileFragment.isLast) {
@@ -485,7 +481,7 @@ class AppleScriptManager {
 							return;
 						}
 					}
-				} catch(IOException | DataFormatException | InterruptedException exception) {
+				} catch(IOException | InterruptedException exception) {
 					//Printing the stack trace
 					exception.printStackTrace();
 					Sentry.capture(exception);
@@ -493,19 +489,19 @@ class AppleScriptManager {
 					//Failing the download
 					failRequest();
 					
-					//Setting the thread as not running
-					isRunning = false;
+					//Terminating the thread
+					requestKill.set(true);
 				}
 				
 				//Checking if the thread was stopped
-				if(!isRunning) {
+				if(requestKill.get()) {
 					//Cleaning up
 					Constants.recursiveDelete(targetDir);
 				}
 			}
 			
 			void stopThread() {
-				isRunning = false;
+				requestKill.set(true);
 			}
 		}
 		
