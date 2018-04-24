@@ -179,35 +179,25 @@ public class PreferencesManager {
 	private static boolean savePreferences() {
 		try {
 			//Creating the document
-			Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument();
+			Document document;
+			if(prefFile.exists()) {
+				try {
+					document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(prefFile);
+				} catch(ParserConfigurationException | IOException | SAXException exception) {
+					//Logging the error
+					Main.getLogger().log(Level.SEVERE, "Couldn't create document builder", exception);
+					
+					//Returning false
+					return false;
+				}
+			} else document = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument();
 			
 			//Building the XML structure
-			Element rootElement = document.createElement(domTagRoot);
-			document.appendChild(rootElement);
-			
-			{
-				Element element = document.createElement(domTagSchemaVer);
-				element.setTextContent(Integer.toString(SCHEMA_VERSION));
-				rootElement.appendChild(element);
-			}
-			
-			{
-				Element element = document.createElement(domTagPort);
-				element.setTextContent(Integer.toString(serverPort));
-				rootElement.appendChild(element);
-			}
-			
-			{
-				Element element = document.createElement(domTagAutoCheckUpdates);
-				element.setTextContent(Boolean.toString(autoCheckUpdates));
-				rootElement.appendChild(element);
-			}
-			
-			{
-				Element element = document.createElement(domTagScanFrequency);
-				element.setTextContent(Float.toString(scanFrequency));
-				rootElement.appendChild(element);
-			}
+			Node rootNode = findCreateElement(document, document, domTagRoot);
+			findCreateElement(document, rootNode, domTagSchemaVer).setTextContent(Integer.toString(SCHEMA_VERSION));
+			findCreateElement(document, rootNode, domTagPort).setTextContent(Integer.toString(serverPort));
+			findCreateElement(document, rootNode, domTagAutoCheckUpdates).setTextContent(Boolean.toString(autoCheckUpdates));
+			findCreateElement(document, rootNode, domTagScanFrequency).setTextContent(Float.toString(scanFrequency));
 			
 			//Writing the XML document
 			TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(prefFile));
@@ -221,6 +211,17 @@ public class PreferencesManager {
 		
 		//Returning true
 		return true;
+	}
+	
+	private static Node findCreateElement(Document document, Node parent, String name) {
+		NodeList list = parent.getChildNodes();
+		for(int i = 0; i < list.getLength(); i++) {
+			Node node = list.item(i);
+			if(name.equals(node.getNodeName())) return node;
+		}
+		Node node = document.createElement(name);
+		parent.appendChild(node);
+		return node;
 	}
 	
 	private static void applyPreferenceChanges() {
@@ -266,8 +267,8 @@ public class PreferencesManager {
 	}
 	
 	static boolean checkFirstRun() {
-		//Exiting if the document doesn't exist
-		if(!prefFile.exists()) throw new RuntimeException("Preference file doesn't exist!");
+		//Returning true if the document doesn't exist
+		//if(!prefFile.exists()) return true;
 		
 		//Loading the document
 		Document document;

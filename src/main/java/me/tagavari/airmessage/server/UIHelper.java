@@ -91,6 +91,7 @@ public class UIHelper {
 		
 		//Opening the shell
 		shell.open();
+		shell.forceActive();
 		
 		//Registering a mouse tracker for the shell
 		new MouseTracker().registerShell(shell, shell);
@@ -107,6 +108,7 @@ public class UIHelper {
 	
 	static void startEventLoop() {
 		while(!display.isDisposed()) if(!display.readAndDispatch()) display.sleep();
+		System.exit(0);
 	}
 	
 	/* private static Region createRoundedRectangle(int x, int y, int W, int H, int r) {

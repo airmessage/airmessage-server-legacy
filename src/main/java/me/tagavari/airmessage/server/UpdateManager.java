@@ -103,7 +103,7 @@ public class UpdateManager {
 	}
 	
 	static void stopUpdateChecker() {
-		handleUpdateCheck.cancel(false);
+		if(handleUpdateCheck != null) handleUpdateCheck.cancel(false);
 	}
 	
 	private static URL makeURL(String target) {

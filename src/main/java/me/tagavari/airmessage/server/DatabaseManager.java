@@ -6,6 +6,7 @@ import org.jooq.*;
 import org.jooq.impl.DSL;
 
 import java.io.*;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
@@ -21,8 +22,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 class DatabaseManager {
 	//Creating the reference variables
@@ -380,8 +379,7 @@ class DatabaseManager {
 		//Checking if there have been no errors so far
 		if(succeeded) {
 			//Streaming the file
-			try(FileInputStream inputStream = new FileInputStream(file);
-				ByteArrayOutputStream byteOut = new ByteArrayOutputStream(); GZIPOutputStream gzipOut = new GZIPOutputStream(byteOut)) {
+			try(FileInputStream inputStream = new FileInputStream(file)) {
 				//Preparing to read the data
 				byte[] buffer = new byte[request.chunkSize];
 				byte[] compressedBuffer;
@@ -636,14 +634,8 @@ class DatabaseManager {
 							if(!file.exists()) continue;
 							
 							//Reading the file with GZIP compression
-							byte[] fileBytes;
-							try(FileInputStream src = new FileInputStream(file); GZIPInputStream in = new GZIPInputStream(src);
-							ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-								byte[] buffer = new byte[1024];
-								int bytesRead;
-								while((bytesRead = in.read(buffer)) != -1) out.write(buffer, 0, bytesRead);
-								fileBytes = out.toByteArray();
-							}
+							byte[] fileBytes = Files.readAllBytes(file.toPath());
+							fileBytes = Constants.compressGZIP(fileBytes, fileBytes.length);
 							
 							//Getting the file guid
 							String fileGuid = fileRecord.getValue(0, DSL.field("attachment.guid", String.class));
