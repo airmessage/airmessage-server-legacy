@@ -8,31 +8,6 @@ import java.util.ArrayList;
 public class SharedValues {
 	public static final int mmCommunicationsVersion = 3;
 	
-	public static final String headerCommVer = "MMS-Comm-Version";
-	public static final String headerSoftVersion = "MMS-Soft-Version";
-	public static final String headerSoftVersionCode = "MMS-Soft-Version-Code";
-	public static final String headerPassword = "Password";
-	
-	public static final int resultBadRequest = 4000;
-	public static final int resultClientOutdated = 4001;
-	public static final int resultServerOutdated = 4002;
-	public static final int resultUnauthorized = 4003;
-	
-	public static final byte wsFrameUpdate = 0;
-	public static final byte wsFrameTimeRetrieval = 1;
-	public static final byte wsFrameMassRetrieval = 2;
-	public static final byte wsFrameChatInfo = 3;
-	public static final byte wsFrameModifierUpdate = 4;
-	public static final byte wsFrameAttachmentReq = 5;
-	public static final byte wsFrameAttachmentReqConfirmed = 6;
-	public static final byte wsFrameAttachmentReqFailed = 7;
-	
-	public static final byte wsFrameSendResult = 100;
-	public static final byte wsFrameSendTextExisting = 101;
-	public static final byte wsFrameSendTextNew = 102;
-	public static final byte wsFrameSendFileExisting = 103;
-	public static final byte wsFrameSendFileNew = 104;
-	
 	//NHT = Net Header Type
 	public static final int nhtClose = -1;
 	public static final int nhtPing = -2;

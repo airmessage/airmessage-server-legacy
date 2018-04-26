@@ -8,6 +8,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
 
 class AppleScriptManager {
 	//Creating the AppleScript commands
@@ -135,7 +136,7 @@ class AppleScriptManager {
 			if(linesRead) return false;
 		} catch(IOException exception) {
 			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;
@@ -180,7 +181,7 @@ class AppleScriptManager {
 			if(linesRead) return false;
 		} catch(IOException exception) {
 			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;
@@ -215,7 +216,7 @@ class AppleScriptManager {
 			if(linesRead) return false;
 		} catch(IOException exception) {
 			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;
@@ -260,7 +261,7 @@ class AppleScriptManager {
 			if(linesRead) return false;
 		} catch(IOException exception) {
 			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;
@@ -483,7 +484,7 @@ class AppleScriptManager {
 					}
 				} catch(IOException | InterruptedException exception) {
 					//Printing the stack trace
-					exception.printStackTrace();
+					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
 					
 					//Failing the download

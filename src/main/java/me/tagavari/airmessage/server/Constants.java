@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.*;
 import java.util.Random;
+import java.util.logging.Level;
 import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -190,7 +191,7 @@ class Constants {
 			for(int i = 0; i < mac.length; i++) stringBuilder.append(String.format("%02X%s", mac[i], (i < mac.length - 1) ? "-" : ""));
 			return stringBuilder.toString();
 		} catch(UnknownHostException | SocketException exception) {
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			return null;
 		}
 	}

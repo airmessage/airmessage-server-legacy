@@ -62,7 +62,7 @@
 		<dependency>
 			<groupId>org.jooq</groupId>
 			<artifactId>jooq</artifactId>
-			<version>3.10.2</version>
+			<version>3.10.6</version>
 		</dependency>
 
 		<!-- Cosmopolitan / Internationalization library -->

@@ -185,7 +185,7 @@ public class PreferencesManager {
 					document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(prefFile);
 				} catch(ParserConfigurationException | IOException | SAXException exception) {
 					//Logging the error
-					Main.getLogger().log(Level.SEVERE, "Couldn't create document builder", exception);
+					Main.getLogger().log(Level.SEVERE, "Couldn't create document builder / " + exception.getMessage(), exception);
 					
 					//Returning false
 					return false;
@@ -305,7 +305,7 @@ public class PreferencesManager {
 				//Writing the XML document
 				TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(prefFile));
 			} catch(TransformerException exception) {
-				exception.printStackTrace();
+				Main.getLogger().log(Level.SEVERE, "Couldn't create document builder / " + exception.getMessage(), exception);
 			}
 		}
 		

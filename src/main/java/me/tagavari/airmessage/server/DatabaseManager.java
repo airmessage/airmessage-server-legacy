@@ -22,6 +22,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Level;
 
 class DatabaseManager {
 	//Creating the reference variables
@@ -64,14 +65,14 @@ class DatabaseManager {
 			for(; connectionsEstablished < connections.length; connectionsEstablished++) connections[connectionsEstablished] = DriverManager.getConnection(databaseLocation);
 		} catch(SQLException exception) {
 			//Logging a message
-			Main.getLogger().severe("Failed to connect to chat message database: " + exception.getMessage());
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			
 			//Closing the connections
 			for(int i = 0; i < connectionsEstablished; i++) {
 				try {
 					connections[i].close();
 				} catch(SQLException exception2) {
-					exception2.printStackTrace();
+					Main.getLogger().log(Level.WARNING, exception2.getMessage(), exception2);
 				}
 			}
 			
@@ -114,8 +115,8 @@ class DatabaseManager {
 			dbSupportsAssociation = resultSet.next();
 			resultSet.close();
 		} catch(SQLException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
-			exception.printStackTrace();
 		}
 		
 		//Creating the threads
@@ -181,8 +182,8 @@ class DatabaseManager {
 					//Updating the last check time
 					//lastCheckTime = System.currentTimeMillis();
 				} catch(IOException | NoSuchAlgorithmException exception) {
+					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
-					exception.printStackTrace();
 				} catch(InterruptedException exception) {
 					//Returning
 					return;
@@ -199,8 +200,8 @@ class DatabaseManager {
 						//Sending the data
 						NetServerManager.sendPacket(null, SharedValues.nhtMessageUpdate, bos.toByteArray());
 					} catch(IOException exception) {
+						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 						Sentry.capture(exception);
-						exception.printStackTrace();
 					}
 				}
 				
@@ -344,8 +345,8 @@ class DatabaseManager {
 				//Sending the conversation info
 				NetServerManager.sendPacket(request.connection, SharedValues.nhtConversationUpdate, bos.toByteArray());
 			} catch(IOException exception) {
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
-				exception.printStackTrace();
 			}
 		}
 	}
@@ -421,8 +422,8 @@ class DatabaseManager {
 					succeeded = false;
 				}
 			} catch(IOException exception) {
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
-				exception.printStackTrace();
 			}
 		}
 		
@@ -439,8 +440,8 @@ class DatabaseManager {
 					//Sending the data
 					NetServerManager.sendPacket(request.connection, SharedValues.nhtAttachmentReqFail, bos.toByteArray());
 				} catch(IOException exception) {
+					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
-					exception.printStackTrace();
 				}
 			}
 		}
@@ -462,8 +463,8 @@ class DatabaseManager {
 				}
 			}
 		} catch(NoSuchAlgorithmException | IOException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
-			exception.printStackTrace();
 		}
 	}
 	
@@ -529,8 +530,8 @@ class DatabaseManager {
 				}
 			}
 		} catch(IOException | NoSuchAlgorithmException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
-			exception.printStackTrace();
 		}
 	}
 	
@@ -538,10 +539,10 @@ class DatabaseManager {
 		//Creating the DSL context
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
-		List<SelectField<?>> fields = new ArrayList<>(Arrays.asList(new SelectField<?>[] {DSL.field("message.ROWID", Long.class), DSL.field("message.guid", String.class), DSL.field("message.date", Long.class), DSL.field("message.item_type", Integer.class), DSL.field("message.group_action_type", Integer.class), DSL.field("message.text", String.class), DSL.field("message.error", Integer.class), DSL.field("message.date_read", Long.class), DSL.field("message.is_from_me", Boolean.class), DSL.field("message.group_title", String.class),
+		List<SelectField<?>> fields = new ArrayList<>(Arrays.asList(DSL.field("message.ROWID", Long.class), DSL.field("message.guid", String.class), DSL.field("message.date", Long.class), DSL.field("message.item_type", Integer.class), DSL.field("message.group_action_type", Integer.class), DSL.field("message.text", String.class), DSL.field("message.error", Integer.class), DSL.field("message.date_read", Long.class), DSL.field("message.is_from_me", Boolean.class), DSL.field("message.group_title", String.class),
 				DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.is_delivered", Boolean.class),
 				DSL.field("sender_handle.id", String.class), DSL.field("other_handle.id", String.class),
-				DSL.field("chat.guid", String.class)}));
+				DSL.field("chat.guid", String.class)));
 		if(dbSupportsSendStyle) fields.add(DSL.field("message.expressive_send_style_id", String.class));
 		if(dbSupportsAssociation) {
 			fields.add(DSL.field("message.associated_message_guid", String.class));
@@ -870,8 +871,8 @@ class DatabaseManager {
 			//Sending the data
 			NetServerManager.sendPacket(null, SharedValues.nhtModifierUpdate, bos.toByteArray());
 		} catch(IOException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
-			exception.printStackTrace();
 		}
 	}
 	

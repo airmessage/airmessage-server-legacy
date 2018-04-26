@@ -86,7 +86,7 @@ public class SystemTrayManager {
 			SystemTray.getSystemTray().add(trayIcon);
 		} catch(AWTException exception) {
 			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;

@@ -10,6 +10,8 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.security.Security;
 import java.text.DateFormat;
@@ -228,7 +230,13 @@ class Main {
 			
 			@Override
 			public String format(LogRecord record) {
-				return dateFormat.format(record.getMillis()) + ' ' + '[' + record.getLevel().toString() + ']' + ' ' + formatMessage(record) + '\n';
+				String stackTrace = "";
+				if(record.getThrown() != null) {
+					StringWriter errors = new StringWriter();
+					record.getThrown().printStackTrace(new PrintWriter(errors));
+					stackTrace = errors.toString();
+				}
+				return dateFormat.format(record.getMillis()) + ' ' + '[' + record.getLevel().toString() + ']' + ' ' + formatMessage(record) + '\n' + stackTrace;
 			}
 		};
 	}

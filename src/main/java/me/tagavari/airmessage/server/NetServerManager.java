@@ -14,14 +14,22 @@ import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Level;
 
 class NetServerManager {
+	//Creating the reference values
+	//private static final long keepAliveMillis = 30 * 1000; //30 seconds
+	private static final long keepAliveMillis = 30 * 60 * 1000; //30 minutes
+	private static final long pingTimeout = 30 * 1000; //30 seconds
+	
 	//Creating the values
 	private static boolean serverRunning = false;
 	private static int currentPort = -1;
 	private static ListenerThread listenerThread = null;
 	private static WriterThread writerThread = null;
-	private static List<SocketManager> connectionList = Collections.synchronizedList(new ArrayList<>());
+	private static final List<SocketManager> connectionList = Collections.synchronizedList(new ArrayList<>());
 	
 	static boolean createServer(int port, boolean recreate) {
 		//Returning true if the server is already running
@@ -41,9 +49,9 @@ class NetServerManager {
 			//Starting the listener thread
 			listenerThread = new ListenerThread(serverSocket);
 			listenerThread.start();
-			
-		} catch(IOException exception) {
-			exception.printStackTrace();
+		} catch(Exception exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
 			return false;
 		}
 		
@@ -91,8 +99,8 @@ class NetServerManager {
 			//Sending the data
 			sendPacket(target, SharedValues.nhtSendResult, bos.toByteArray());
 		} catch(IOException exception) {
-			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			Sentry.capture(exception);
 		}
 	}
 	
@@ -103,10 +111,22 @@ class NetServerManager {
 	private static class ListenerThread extends Thread {
 		//Creating the server values
 		private ServerSocket serverSocket;
-		//private int clientID = 0;
+		private final Timer pingTimer = new Timer();
 		
 		ListenerThread(ServerSocket serverSocket) {
+			//Setting the socket
 			this.serverSocket = serverSocket;
+			
+			//Starting the timer
+			pingTimer.scheduleAtFixedRate(new TimerTask() {
+				@Override
+				public void run() {
+					//Sending a ping to all clients
+					synchronized(connectionList) {
+						for(SocketManager connection : connectionList) connection.testConnectionSync();
+					}
+				}
+			}, keepAliveMillis, keepAliveMillis);
 		}
 		
 		@Override
@@ -115,15 +135,19 @@ class NetServerManager {
 			while(!isInterrupted()) {
 				try {
 					new SocketManager(serverSocket.accept());
-				} catch(SocketException exception) {
-					return;
+				/* } catch(SocketException exception) {
+					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+					return; */
 				} catch(IOException exception) {
-					exception.printStackTrace();
+					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				}
 			}
 		}
 		
 		void closeServer() {
+			//Stopping the ping timer
+			pingTimer.cancel();
+			
 			//Closing the connections
 			for(SocketManager connection : connectionList) connection.initiateClose();
 			
@@ -131,7 +155,7 @@ class NetServerManager {
 			try {
 				serverSocket.close();
 			} catch(IOException exception) {
-				exception.printStackTrace();
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			}
 			
 			//Stopping the writer thread
@@ -150,6 +174,7 @@ class NetServerManager {
 					PacketStruct packet = uploadQueue.take();
 					if(packet.target == null) for(SocketManager target : connectionList) target.sendDataSync(packet.type, packet.content);
 					else packet.target.sendDataSync(packet.type, packet.content);
+					if(packet.sentRunnable != null) packet.sentRunnable.run();
 				}
 			} catch(InterruptedException exception) {
 				return;
@@ -164,11 +189,17 @@ class NetServerManager {
 			final SocketManager target;
 			final int type;
 			final byte[] content;
+			Runnable sentRunnable = null;
 			
 			PacketStruct(SocketManager target, int type, byte[] content) {
 				this.target = target;
 				this.type = type;
 				this.content = content;
+			}
+			
+			PacketStruct(SocketManager target, int type, byte[] content, Runnable sentRunnable) {
+				this(target, type, content);
+				this.sentRunnable = sentRunnable;
 			}
 		}
 	}
@@ -188,6 +219,9 @@ class NetServerManager {
 		
 		private Timer registrationExpiryTimer;
 		private boolean clientRegistered = false;
+		
+		private final Lock pingResponseTimerLock = new ReentrantLock();
+		private Timer pingResponseTimer = new Timer();
 		
 		private SocketManager(Socket socket) throws IOException {
 			//Setting the socket information
@@ -235,7 +269,7 @@ class NetServerManager {
 			} catch(IOException exception) {
 				if(isConnected() && Constants.checkDisconnected(exception)) closeConnection();
 				else {
-					exception.printStackTrace();
+					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
 				}
 				
@@ -244,6 +278,17 @@ class NetServerManager {
 		}
 		
 		private void processData(int messageType, byte[] data) {
+			//Resetting the ping timer
+			pingResponseTimerLock.lock();
+			try {
+				if(pingResponseTimer != null) {
+					pingResponseTimer.cancel();
+					pingResponseTimer = null;
+				}
+			} finally {
+				pingResponseTimerLock.unlock();
+			}
+			
 			//Checking if the client is registered
 			if(clientRegistered) {
 				switch(messageType) {
@@ -261,7 +306,7 @@ class NetServerManager {
 							timeLower = in.readLong();
 							timeUpper = in.readLong();
 						} catch(IOException | RuntimeException exception) {
-							exception.printStackTrace();
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
 						
@@ -287,7 +332,7 @@ class NetServerManager {
 							list = new ArrayList<>();
 							for(int i = 0; i < count; i++) list.add(in.readUTF());
 						} catch(IOException | RuntimeException exception) {
-							exception.printStackTrace();
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
 						
@@ -307,7 +352,7 @@ class NetServerManager {
 							fileGUID = in.readUTF();
 							chunkSize = in.readInt();
 						} catch(IOException | RuntimeException exception) {
-							exception.printStackTrace();
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
 						
@@ -320,7 +365,7 @@ class NetServerManager {
 							//Sending the data
 							sendPacket(this, SharedValues.nhtAttachmentReqConfirm, bos.toByteArray());
 						} catch(IOException exception) {
-							exception.printStackTrace();
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							Sentry.capture(exception);
 							
 							break;
@@ -342,7 +387,7 @@ class NetServerManager {
 							chatGUID = in.readUTF();
 							message = in.readUTF();
 						} catch(IOException | RuntimeException exception) {
-							exception.printStackTrace();
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
 						
@@ -368,7 +413,7 @@ class NetServerManager {
 							message = in.readUTF();
 							service = in.readUTF();
 						} catch(IOException | RuntimeException exception) {
-							exception.printStackTrace();
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
 						
@@ -398,7 +443,7 @@ class NetServerManager {
 							if(requestIndex == 0) fileName = in.readUTF();
 							isLast = in.readBoolean();
 						} catch(IOException | RuntimeException exception) {
-							exception.printStackTrace();
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
 						
@@ -430,7 +475,7 @@ class NetServerManager {
 							}
 							isLast = in.readBoolean();
 						} catch(IOException | RuntimeException exception) {
-							exception.printStackTrace();
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
 						
@@ -459,23 +504,27 @@ class NetServerManager {
 					
 					password = in.readUTF();
 				} catch(EOFException | UTFDataFormatException exception) {
-					exception.printStackTrace();
+					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					
-					//Sending a message
+					//Sending a message and closing the connection
 					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
 						out.writeInt(SharedValues.mmCommunicationsVersion); //Communications protocol version
 						out.writeInt(SharedValues.nhtAuthenticationBadRequest); //Authentication result
 						out.flush();
 						
-						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray()));
+						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray(), this::closeConnection));
 					} catch(IOException buildException) {
-						buildException.printStackTrace();
+						//Recording the error
+						Main.getLogger().log(Level.WARNING, buildException.getMessage(), buildException);
 						Sentry.capture(buildException);
+						
+						//Closing the connection
+						closeConnection();
 					}
 					
 					return;
 				} catch(IOException | RuntimeException exception) {
-					exception.printStackTrace();
+					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					return;
 				}
 				
@@ -490,46 +539,81 @@ class NetServerManager {
 				
 				//Sending a message if the versions are not applicable
 				if(!versionsApplicable) {
-					//Sending a message
+					//Sending a message and closing the connection
 					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
 						out.writeInt(SharedValues.mmCommunicationsVersion); //Communications protocol version
 						out.writeInt(SharedValues.nhtAuthenticationVersionMismatch); //Authentication result
 						out.flush();
 						
-						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray()));
+						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray(), this::initiateClose));
 					} catch(IOException exception) {
-						exception.printStackTrace();
+						//Recording the error
+						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 						Sentry.capture(exception);
+						
+						//Closing the connection
+						initiateClose();
 					}
+					
+					return;
 				}
 				
 				//Validating the password
 				boolean passwordValid = PreferencesManager.matchPassword(password);
 				
-				//Sending a message
-				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-					out.writeInt(SharedValues.mmCommunicationsVersion); //Communications protocol version
-					out.writeInt(passwordValid ? SharedValues.nhtAuthenticationOK : SharedValues.nhtAuthenticationUnauthorized); //Authentication result
-					out.flush();
+				if(passwordValid) {
+					//Sending a message
+					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+						out.writeInt(SharedValues.mmCommunicationsVersion); //Communications protocol version
+						out.writeInt(SharedValues.nhtAuthenticationOK); //Authentication result
+						out.flush();
+						
+						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray()));
+					} catch(IOException exception) {
+						//Recording the error
+						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+						Sentry.capture(exception);
+						
+						//Closing the connection
+						initiateClose();
+					}
 					
-					writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray()));
-				} catch(IOException exception) {
-					exception.printStackTrace();
-					Sentry.capture(exception);
+					//Marking the client as registered
+					clientRegistered = true;
+				} else {
+					//Sending a message and closing the connection
+					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+						out.writeInt(SharedValues.mmCommunicationsVersion); //Communications protocol version
+						out.writeInt(SharedValues.nhtAuthenticationUnauthorized); //Authentication result
+						out.flush();
+						
+						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray(), this::initiateClose));
+					} catch(IOException exception) {
+						//Recording the error
+						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+						Sentry.capture(exception);
+						
+						//Closing the connection
+						initiateClose();
+					}
 				}
-				
-				//Acting upon the result
-				if(passwordValid) clientRegistered = true;
-				else closeConnection();
 			}
 		}
 		
-		void initiateClose() {
-			//Sending a message
-			writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtClose, new byte[0]));
+		/* void initiateClose(int code) {
+			//Sending a message and closing the connection
+			writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtClose, ByteBuffer.allocate(Integer.SIZE / 8).putInt(code).array(), this::closeConnection));
 			
 			//Closing the connection
-			closeConnection();
+			//closeConnection();
+		} */
+		
+		void initiateClose() {
+			//Sending a message and closing the connection
+			writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtClose, new byte[0], this::closeConnection));
+			
+			//Closing the connection
+			//closeConnection();
 		}
 		
 		private void closeConnection() {
@@ -543,7 +627,18 @@ class NetServerManager {
 				//Closing the socket
 				socket.close();
 			} catch(IOException exception) {
-				exception.printStackTrace();
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			}
+			
+			//Resetting the ping timer
+			pingResponseTimerLock.lock();
+			try {
+				if(pingResponseTimer != null) {
+					pingResponseTimer.cancel();
+					pingResponseTimer = null;
+				}
+			} finally {
+				pingResponseTimerLock.unlock();
 			}
 			
 			//Finishing the reader thread
@@ -561,6 +656,36 @@ class NetServerManager {
 		
 		boolean isConnected() {
 			return isConnected.get();
+		}
+		
+		/**
+		 * Sends a ping to the client, and awaits the connection
+		 * The connection will be closed if no response is received within the time limit
+		 */
+		void testConnectionSync() {
+			sendDataSync(SharedValues.nhtPing, new byte[0]);
+			
+			pingResponseTimerLock.lock();
+			try {
+				if(pingResponseTimer == null) {
+					pingResponseTimer = new Timer();
+					pingResponseTimer.schedule(new TimerTask() {
+						@Override
+						public void run() {
+							closeConnection();
+							
+							pingResponseTimerLock.lock();
+							try {
+								if(pingResponseTimer != null) pingResponseTimer.cancel();
+							} finally {
+								pingResponseTimerLock.unlock();
+							}
+						}
+					}, pingTimeout);
+				}
+			} finally {
+				pingResponseTimerLock.unlock();
+			}
 		}
 		
 		private class ReaderThread extends Thread {
@@ -617,7 +742,7 @@ class NetServerManager {
 						processData(messageType, content);
 					} catch(IOException exception) {
 						//Logging the error
-						exception.printStackTrace();
+						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 						
 						//Closing the connection
 						closeConnection();
