@@ -181,7 +181,7 @@ class DatabaseManager {
 					
 					//Updating the last check time
 					//lastCheckTime = System.currentTimeMillis();
-				} catch(IOException | NoSuchAlgorithmException exception) {
+				} catch(IOException | NoSuchAlgorithmException | OutOfMemoryError | RuntimeException exception) {
 					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
 				} catch(InterruptedException exception) {
@@ -379,15 +379,15 @@ class DatabaseManager {
 		
 		//Checking if there have been no errors so far
 		if(succeeded) {
+			//Preparing to read the data
+			byte[] buffer = new byte[request.chunkSize];
+			byte[] compressedBuffer;
+			int bytesRead;
+			boolean moreDataRead;
+			int requestIndex = 0;
+			
 			//Streaming the file
 			try(FileInputStream inputStream = new FileInputStream(file)) {
-				//Preparing to read the data
-				byte[] buffer = new byte[request.chunkSize];
-				byte[] compressedBuffer;
-				int bytesRead;
-				boolean moreDataRead;
-				int requestIndex = 0;
-				
 				//Attempting to read the data
 				if((bytesRead = inputStream.read(buffer)) != -1) {
 					do {
@@ -421,6 +421,9 @@ class DatabaseManager {
 					//Setting the succeeded variable to false
 					succeeded = false;
 				}
+			} catch(OutOfMemoryError exception) {
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+				Sentry.capture(exception);
 			} catch(IOException exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
@@ -462,7 +465,7 @@ class DatabaseManager {
 					NetServerManager.sendPacket(request.connection, request.messageResponseType, bos.toByteArray());
 				}
 			}
-		} catch(NoSuchAlgorithmException | IOException exception) {
+		} catch(NoSuchAlgorithmException | IOException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 		}
@@ -529,7 +532,7 @@ class DatabaseManager {
 					NetServerManager.sendPacket(request.connection, SharedValues.nhtMassRetrieval, bos.toByteArray());
 				}
 			}
-		} catch(IOException | NoSuchAlgorithmException exception) {
+		} catch(NoSuchAlgorithmException | IOException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 		}

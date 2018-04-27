@@ -21,7 +21,7 @@ import java.util.logging.*;
 
 class Main {
 	//Creating the reference values
-	static final boolean MODE_DEBUG = true;
+	static final boolean MODE_DEBUG = false;
 	static final int serverStateStarting = 0;
 	static final int serverStateRunning = 1;
 	static final int serverStateFailedDatabase = 2;

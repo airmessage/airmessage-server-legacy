@@ -482,7 +482,7 @@ class AppleScriptManager {
 							return;
 						}
 					}
-				} catch(IOException | InterruptedException exception) {
+				} catch(IOException | InterruptedException | OutOfMemoryError exception) {
 					//Printing the stack trace
 					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);

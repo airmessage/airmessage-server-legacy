@@ -723,9 +723,11 @@ class NetServerManager {
 								bytesRemaining -= readCount;
 							}
 						}
+						//Creating the values
 						ByteBuffer headerBuffer = ByteBuffer.wrap(header);
 						int messageType = headerBuffer.getInt();
 						int contentLen = headerBuffer.getInt();
+						
 						
 						//Reading the content
 						byte[] content = new byte[contentLen];
@@ -745,12 +747,22 @@ class NetServerManager {
 						
 						//Processing the data
 						processData(messageType, content);
+					} catch(OutOfMemoryError exception) {
+						//Logging the error
+						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+						Sentry.capture(exception);
+						
+						//Closing the connection
+						initiateClose();
+						
+						//Breaking
+						break;
 					} catch(IOException exception) {
 						//Logging the error
 						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 						
 						//Closing the connection
-						closeConnection();
+						initiateClose();
 						
 						//Breaking
 						break;

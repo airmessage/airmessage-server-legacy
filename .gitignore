@@ -32,3 +32,6 @@ target/
 .Spotlight-V100
 .Trashes
 ehthumbs.db
+
+# Helper files
+packaging-dir
