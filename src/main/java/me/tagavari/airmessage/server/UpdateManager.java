@@ -24,6 +24,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 
 public class UpdateManager {
 	//Creating the reference values
@@ -42,7 +43,7 @@ public class UpdateManager {
 			String result = scanner.next();
 			jRoot = new JSONObject(result);
 		} catch(IOException exception) {
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			return;
 		}
 		
@@ -90,8 +91,8 @@ public class UpdateManager {
 			//Showing the update window
 			UIHelper.getDisplay().asyncExec(() -> openUpdateWindow(relVerName, relMessageHTML, relTargetLink));
 		} catch(Exception exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
-			exception.printStackTrace();
 			
 			throw exception;
 		}
@@ -103,14 +104,14 @@ public class UpdateManager {
 	}
 	
 	static void stopUpdateChecker() {
-		handleUpdateCheck.cancel(false);
+		if(handleUpdateCheck != null) handleUpdateCheck.cancel(false);
 	}
 	
 	private static URL makeURL(String target) {
 		try {
 			return new URL(target);
 		} catch(MalformedURLException exception) {
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
 			throw new IllegalArgumentException(exception);

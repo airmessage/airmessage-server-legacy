@@ -86,7 +86,7 @@ public class SystemTrayManager {
 			SystemTray.getSystemTray().add(trayIcon);
 		} catch(AWTException exception) {
 			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;
@@ -127,7 +127,7 @@ public class SystemTrayManager {
 				break;
 			case Main.serverStateRunning:
 				miStatus.setText(I18N.i.menu_running());
-				miStatusSub.setText(I18N.i.menu_clientsConnected(WSServerManager.getConnectionCount()));
+				miStatusSub.setText(I18N.i.menu_clientsConnected(NetServerManager.getConnectionCount()));
 				miStatusSub.setEnabled(false);
 				break;
 			case Main.serverStateFailedDatabase:
@@ -148,7 +148,7 @@ public class SystemTrayManager {
 		if(Main.getServerState() != Main.serverStateRunning) return;
 		
 		//Updating the message
-		miStatusSub.setText(I18N.i.menu_clientsConnected(WSServerManager.getConnectionCount()));
+		miStatusSub.setText(I18N.i.menu_clientsConnected(NetServerManager.getConnectionCount()));
 	}
 	
 	private static Image getTrayIcon() {

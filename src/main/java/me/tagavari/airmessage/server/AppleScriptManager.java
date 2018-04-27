@@ -1,15 +1,14 @@
 package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
-import me.tagavari.airmessage.common.SharedValues;
-import org.java_websocket.WebSocket;
 
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.zip.DataFormatException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
 
 class AppleScriptManager {
 	//Creating the AppleScript commands
@@ -137,7 +136,7 @@ class AppleScriptManager {
 			if(linesRead) return false;
 		} catch(IOException exception) {
 			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;
@@ -182,7 +181,7 @@ class AppleScriptManager {
 			if(linesRead) return false;
 		} catch(IOException exception) {
 			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;
@@ -217,7 +216,7 @@ class AppleScriptManager {
 			if(linesRead) return false;
 		} catch(IOException exception) {
 			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;
@@ -262,7 +261,7 @@ class AppleScriptManager {
 			if(linesRead) return false;
 		} catch(IOException exception) {
 			//Printing the stack trace
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;
@@ -273,15 +272,13 @@ class AppleScriptManager {
 	}
 	
 	private static final List<FileUploadRequest> fileUploadRequests = Collections.synchronizedList(new ArrayList<>());
-	static void addFileFragment(WebSocket connection, short requestID, String chatGUID, String fileName, int index, byte[] compressedBytes, boolean isLast) {
+	static void addFileFragment(NetServerManager.SocketManager connection, short requestID, String chatGUID, String fileName, int index, byte[] compressedBytes, boolean isLast) {
 		//Attempting to find a matching request
 		FileUploadRequest request = null;
-		synchronized(fileUploadRequests) {
-			for(FileUploadRequest allRequests : fileUploadRequests) {
-				if(!allRequests.connection.equals(connection) || allRequests.requestID != requestID || allRequests.chatGUID == null || !allRequests.chatGUID.equals(chatGUID)) continue;
-				request = allRequests;
-				break;
-			}
+		for(FileUploadRequest allRequests : fileUploadRequests) {
+			if(allRequests.connection != connection || allRequests.requestID != requestID || allRequests.chatGUID == null || !allRequests.chatGUID.equals(chatGUID)) continue;
+			request = allRequests;
+			break;
 		}
 		
 		//Checking if the request is invalid (there is no request currently in the list)
@@ -303,11 +300,11 @@ class AppleScriptManager {
 		request.addFileFragment(new FileUploadRequest.FileFragment(index, compressedBytes, isLast));
 	}
 	
-	static void addFileFragment(WebSocket connection, short requestID, String[] chatMembers, String service, String fileName, int index, byte[] compressedBytes, boolean isLast) {
+	static void addFileFragment(NetServerManager.SocketManager connection, short requestID, String[] chatMembers, String service, String fileName, int index, byte[] compressedBytes, boolean isLast) {
 		//Attempting to find a matching request
 		FileUploadRequest request = null;
 		for(FileUploadRequest allRequests : fileUploadRequests) {
-			if(!allRequests.connection.equals(connection) || allRequests.requestID != requestID || allRequests.chatMembers == null || !Arrays.equals(allRequests.chatMembers, chatMembers)) continue;
+			if(allRequests.connection != connection || allRequests.requestID != requestID || allRequests.chatMembers == null || !Arrays.equals(allRequests.chatMembers, chatMembers)) continue;
 			request = allRequests;
 			break;
 		}
@@ -333,7 +330,7 @@ class AppleScriptManager {
 	
 	private static class FileUploadRequest {
 		//Creating the request variables
-		final WebSocket connection;
+		final NetServerManager.SocketManager connection;
 		final short requestID;
 		final String chatGUID;
 		final String[] chatMembers;
@@ -347,7 +344,7 @@ class AppleScriptManager {
 		private AttachmentWriter writerThread = null;
 		private int lastIndex = -1;
 		
-		FileUploadRequest(WebSocket connection, short requestID, String chatGUID, String fileName) {
+		FileUploadRequest(NetServerManager.SocketManager connection, short requestID, String chatGUID, String fileName) {
 			//Setting the variables
 			this.connection = connection;
 			this.requestID = requestID;
@@ -357,7 +354,7 @@ class AppleScriptManager {
 			this.fileName = fileName;
 		}
 		
-		FileUploadRequest(WebSocket connection, short requestID, String[] chatMembers, String service, String fileName) {
+		FileUploadRequest(NetServerManager.SocketManager connection, short requestID, String[] chatMembers, String service, String fileName) {
 			//Setting the variables
 			this.connection = connection;
 			this.requestID = requestID;
@@ -392,7 +389,6 @@ class AppleScriptManager {
 				writerThread.start();
 			}
 			
-			
 			//Adding the file fragment
 			writerThread.dataQueue.add(fileFragment);
 		}
@@ -425,7 +421,7 @@ class AppleScriptManager {
 			if(writerThread != null) writerThread.stopThread();
 			
 			//Sending a negative response
-			WSServerManager.sendMessageResponse(connection, requestID, false);
+			NetServerManager.sendMessageRequestResponse(connection, requestID, false);
 		}
 		
 		private void onDownloadSuccessful(File file) {
@@ -436,7 +432,7 @@ class AppleScriptManager {
 			boolean result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service);
 			
 			//Sending the response
-			WSServerManager.sendMessageResponse(connection, requestID, result);
+			NetServerManager.sendMessageRequestResponse(connection, requestID, result);
 		}
 		
 		private class AttachmentWriter extends Thread {
@@ -449,7 +445,7 @@ class AppleScriptManager {
 			//Creating the process values
 			private File targetDir;
 			private File targetFile;
-			private boolean isRunning = true;
+			private final AtomicBoolean requestKill = new AtomicBoolean(false);
 			
 			AttachmentWriter(String fileName) {
 				this.fileName = fileName;
@@ -466,8 +462,8 @@ class AppleScriptManager {
 				targetDir.mkdir();
 				targetFile = new File(targetDir, fileName);
 				
-				try(FileOutputStream outputStream = new FileOutputStream(targetFile)) {
-					while(isRunning) {
+				try(FileOutputStream out = new FileOutputStream(targetFile)) {
+					while(!requestKill.get()) {
 						//Getting the data struct
 						FileFragment fileFragment = dataQueue.poll(timeout, TimeUnit.MILLISECONDS);
 						
@@ -475,7 +471,7 @@ class AppleScriptManager {
 						if(fileFragment == null) continue;
 						
 						//Writing the file to disk
-						outputStream.write(SharedValues.decompress(fileFragment.compressedData));
+						out.write(Constants.decompressGZIP(fileFragment.compressedData));
 						
 						//Checking if the file is the last one
 						if(fileFragment.isLast) {
@@ -486,27 +482,27 @@ class AppleScriptManager {
 							return;
 						}
 					}
-				} catch(IOException | DataFormatException | InterruptedException exception) {
+				} catch(IOException | InterruptedException exception) {
 					//Printing the stack trace
-					exception.printStackTrace();
+					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
 					
 					//Failing the download
 					failRequest();
 					
-					//Setting the thread as not running
-					isRunning = false;
+					//Terminating the thread
+					requestKill.set(true);
 				}
 				
 				//Checking if the thread was stopped
-				if(!isRunning) {
+				if(requestKill.get()) {
 					//Cleaning up
 					Constants.recursiveDelete(targetDir);
 				}
 			}
 			
 			void stopThread() {
-				isRunning = false;
+				requestKill.set(true);
 			}
 		}
 		

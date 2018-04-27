@@ -8,18 +8,26 @@ import io.sentry.event.UserBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.swing.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.nio.file.Files;
 import java.security.Security;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.logging.*;
 
 class Main {
 	//Creating the reference values
-	static final boolean MODE_DEBUG = false;
+	static final boolean MODE_DEBUG = true;
 	static final int serverStateStarting = 0;
 	static final int serverStateRunning = 1;
 	static final int serverStateFailedDatabase = 2;
 	static final int serverStateFailedServer = 3;
+	
+	private static final File logFile = new File(Constants.applicationSupportDir, "logs/latest.log");
 	
 	//Creating the variables
 	private static TimeHelper timeHelper;
@@ -27,8 +35,8 @@ class Main {
 	
 	private static int serverState = serverStateStarting;
 	
-	public static void main(String[] args) {
-		System.setProperty("java.awt.headless", "true");
+	public static void main(String[] args) throws IOException {
+		//System.setProperty("apple.eawt.quitStrategy", "CLOSE_ALL_WINDOWS");
 		
 		//Initializing Sentry
 		if(!MODE_DEBUG) {
@@ -38,21 +46,30 @@ class Main {
 			if(macAddress != null) context.setUser(new UserBuilder().setId(macAddress).build());
 		}
 		
+		//Preparing the support directory
+		if(!Constants.prepareSupportDir()) return;
+		
 		//Configuring the logger
 		logger = Logger.getGlobal();
 		logger.setLevel(Level.FINEST);
+		if(!logFile.getParentFile().exists()) logFile.getParentFile().mkdir();
+		else if(logFile.exists()) Files.move(logFile.toPath(), Constants.findFreeFile(logFile.getParentFile(), new SimpleDateFormat("YYYY-MM-dd").format(new Date()) + ".log", "-", 1).toPath());
+		
 		for(Handler handler : logger.getParent().getHandlers()) logger.getParent().removeHandler(handler);
-		ConsoleHandler handler = new ConsoleHandler();
-		handler.setLevel(Level.FINEST);
-		handler.setFormatter(new Formatter() {
-			private final DateFormat dateFormat = new SimpleDateFormat("dd/MM/yy HH:mm:ss");
-			
-			@Override
-			public String format(LogRecord record) {
-				return dateFormat.format(record.getMillis()) + ' ' + '[' + record.getLevel().toString() + ']' + ' ' + formatMessage(record) + '\n';
-			}
-		});
-		logger.addHandler(handler);
+		
+		{
+			FileHandler handler = new FileHandler(logFile.getPath());
+			handler.setLevel(Level.FINEST);
+			handler.setFormatter(getLoggerFormatter());
+			logger.addHandler(handler);
+		}
+		
+		{
+			ConsoleHandler handler = new ConsoleHandler();
+			handler.setLevel(Level.FINEST);
+			handler.setFormatter(getLoggerFormatter());
+			logger.addHandler(handler);
+		}
 		
 		//Configuring the internationalization engine
 		C10N.configure(new DefaultC10NAnnotations());
@@ -62,9 +79,6 @@ class Main {
 		
 		//Registering BouncyCastle as a security provider
 		Security.addProvider(new BouncyCastleProvider());
-		
-		//Preparing the support directory
-		if(!Constants.prepareSupportDir()) return;
 		
 		//Preparing the preferences
 		if(!PreferencesManager.loadPreferences()) return;
@@ -80,10 +94,10 @@ class Main {
 		
 		//Getting the time system
 		timeHelper = TimeHelper.getCorrectTimeSystem();
-		Main.getLogger().info("Using time system " + Main.getTimeHelper().toString() + " with current time " + System.currentTimeMillis() + " -> " + Main.getTimeHelper().toDatabaseTime(System.currentTimeMillis()));
+		getLogger().info("Using time system " + Main.getTimeHelper().toString() + " with current time " + System.currentTimeMillis() + " -> " + Main.getTimeHelper().toDatabaseTime(System.currentTimeMillis()));
 		
 		//Hiding JOOQ's splash
-		System.getProperties().setProperty("org.jooq.no-logo", "true");
+		System.setProperty("org.jooq.no-logo", "true");
 		
 		//Logging the startup messages
 		//getLogger().info("Thank you for using jOOQ " + org.jooq.Constants.FULL_VERSION);
@@ -98,7 +112,7 @@ class Main {
 		//Adding a shutdown hook
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			//Stopping the services
-			WSServerManager.stopServer();
+			NetServerManager.destroyServer();
 			DatabaseManager.stop();
 			UpdateManager.stopUpdateChecker();
 			
@@ -134,7 +148,7 @@ class Main {
 		}
 		
 		//Starting the web socket manager
-		result = WSServerManager.startServer(PreferencesManager.getServerPort());
+		result = NetServerManager.createServer(PreferencesManager.getServerPort(), false);
 		if(!result) {
 			//Updating the server state
 			setServerState(serverStateFailedServer);
@@ -158,7 +172,7 @@ class Main {
 		SystemTrayManager.updateStatusMessage();
 		
 		//Starting the web socket manager
-		boolean result = WSServerManager.restartServer(PreferencesManager.getServerPort());
+		boolean result = NetServerManager.createServer(PreferencesManager.getServerPort(), true);
 		if(!result) {
 			//Updating the server state
 			setServerState(serverStateFailedServer);
@@ -209,6 +223,23 @@ class Main {
 			if(argument.equals("-debug")) getLogger().setLevel(Level.FINEST);
 		}
 	} */
+	
+	private static Formatter getLoggerFormatter() {
+		return new Formatter() {
+			private final DateFormat dateFormat = new SimpleDateFormat("dd/MM/yy HH:mm:ss");
+			
+			@Override
+			public String format(LogRecord record) {
+				String stackTrace = "";
+				if(record.getThrown() != null) {
+					StringWriter errors = new StringWriter();
+					record.getThrown().printStackTrace(new PrintWriter(errors));
+					stackTrace = errors.toString();
+				}
+				return dateFormat.format(record.getMillis()) + ' ' + '[' + record.getLevel().toString() + ']' + ' ' + formatMessage(record) + '\n' + stackTrace;
+			}
+		};
+	}
 	
 	static TimeHelper getTimeHelper() {
 		return timeHelper;

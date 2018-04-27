@@ -60,7 +60,7 @@ public interface I18N {
 	@En("Welcome to AirMessage Server!")
 	String intro_title();
 	
-	@En("AirMessage Server lives in your menu bar. Click the icon to check the server's status and configuration.\nBefore connecting the app, changing the server password is strongly recommended.")
+	@En("AirMessage Server lives in your menu bar. Click the icon to check the server status and configuration.\nBefore connecting the app, changing the server password is strongly recommended.")
 	String intro_text();
 	
 	@En("Preferences")

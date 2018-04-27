@@ -59,8 +59,7 @@ public class SecurityManager {
 			outputStream.close();
 		} catch (Exception exception) {
 			//Logging an error
-			System.out.println("Failed to create keystore: " + exception.getMessage());
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning false
 			return false;
@@ -246,38 +245,33 @@ public class SecurityManager {
 		}
 	} */
 	
-	static SSLContext conjureSSLContext() {
-		try {
-			//Generating the key pair
-			KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
-			keyGen.initialize(2048, new SecureRandom());
-			KeyPair keyPair = keyGen.generateKeyPair();
-			
-			//Creating a self-signed certificate
-			X509Certificate certificate = selfSign(keyPair, "CN=My Application,O=My Organisation,L=My City,C=DE");
-			
-			//Generating a password
-			char[] password = Constants.randomAlphaNumericString(16).toCharArray();
-			
-			//Creating the keystore
-			KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-			keyStore.load(null, null);
-			keyStore.setKeyEntry("server", keyPair.getPrivate(), password, new X509Certificate[]{certificate});
-			
-			//Creating the managers
-			KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()); //KeyManagerFactory.getDefaultAlgorithm()
-			kmf.init(keyStore, password);
-			TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()); //TrustManagerFactory.getDefaultAlgorithm()
-			tmf.init(keyStore);
-			
-			//Creating and returning the SSL context
-			SSLContext sslContext = SSLContext.getInstance("TLS");
-			sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
-			return sslContext;
-		} catch(Exception exception) {
-			exception.printStackTrace();
-			return null;
-		}
+	static SSLContext conjureSSLContext() throws IOException, NoSuchAlgorithmException, CertificateException, OperatorCreationException, KeyStoreException, UnrecoverableKeyException, KeyManagementException {
+		//Generating the key pair
+		KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+		keyGen.initialize(2048, new SecureRandom());
+		KeyPair keyPair = keyGen.generateKeyPair();
+		
+		//Creating a self-signed certificate
+		X509Certificate certificate = selfSign(keyPair, "CN=My Application,O=My Organisation,L=My City,C=DE");
+		
+		//Generating a password
+		char[] password = Constants.randomAlphaNumericString(16).toCharArray();
+		
+		//Creating the keystore
+		KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+		keyStore.load(null, null);
+		keyStore.setKeyEntry("server", keyPair.getPrivate(), password, new X509Certificate[]{certificate});
+		
+		//Creating the managers
+		KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()); //KeyManagerFactory.getDefaultAlgorithm()
+		kmf.init(keyStore, password);
+		TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()); //TrustManagerFactory.getDefaultAlgorithm()
+		tmf.init(keyStore);
+		
+		//Creating and returning the SSL context
+		SSLContext sslContext = SSLContext.getInstance("TLS");
+		sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
+		return sslContext;
 	}
 	
 	/* static SSLContext createSSLContext() {
@@ -315,7 +309,7 @@ public class SecurityManager {
 			sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
 			return sslContext;
 		} catch(Exception exception) {
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			return null;
 		}
 	} */
@@ -336,7 +330,7 @@ public class SecurityManager {
 			return context;
 			//return SSLContext.getDefault();
 		} catch(NoSuchAlgorithmException | KeyStoreException | IOException | CertificateException | UnrecoverableKeyException | KeyManagementException exception) {
-			exception.printStackTrace();
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			return null;
 		}
 	} */
