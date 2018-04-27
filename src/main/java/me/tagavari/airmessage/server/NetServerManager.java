@@ -672,13 +672,18 @@ class NetServerManager {
 					pingResponseTimer.schedule(new TimerTask() {
 						@Override
 						public void run() {
-							closeConnection();
-							
-							pingResponseTimerLock.lock();
 							try {
-								if(pingResponseTimer != null) pingResponseTimer.cancel();
-							} finally {
-								pingResponseTimerLock.unlock();
+								closeConnection();
+								
+								pingResponseTimerLock.lock();
+								try {
+									if(pingResponseTimer != null) pingResponseTimer.cancel();
+								} finally {
+									pingResponseTimerLock.unlock();
+								}
+							} catch(Exception exception) {
+								Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+								Sentry.capture(exception);
 							}
 						}
 					}, pingTimeout);

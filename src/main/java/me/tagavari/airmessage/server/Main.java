@@ -36,7 +36,7 @@ class Main {
 	private static int serverState = serverStateStarting;
 	
 	public static void main(String[] args) throws IOException {
-		System.setProperty("apple.eawt.quitStrategy", "CLOSE_ALL_WINDOWS");
+		//System.setProperty("apple.eawt.quitStrategy", "CLOSE_ALL_WINDOWS");
 		
 		//Initializing Sentry
 		if(!MODE_DEBUG) {
