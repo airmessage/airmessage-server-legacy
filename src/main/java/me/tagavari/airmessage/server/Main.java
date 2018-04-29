@@ -21,7 +21,7 @@ import java.util.logging.*;
 
 class Main {
 	//Creating the reference values
-	static final boolean MODE_DEBUG = false;
+	static final boolean MODE_DEBUG = true;
 	static final int serverStateStarting = 0;
 	static final int serverStateRunning = 1;
 	static final int serverStateFailedDatabase = 2;
@@ -36,14 +36,17 @@ class Main {
 	private static int serverState = serverStateStarting;
 	
 	public static void main(String[] args) throws IOException {
-		//System.setProperty("apple.eawt.quitStrategy", "CLOSE_ALL_WINDOWS");
-		
-		//Initializing Sentry
 		if(!MODE_DEBUG) {
+			//Initializing Sentry
 			Sentry.init(Constants.SENTRY_DSN + "?release=" + Constants.SERVER_VERSION);
 			Context context = Sentry.getContext();
+			
+			//Marking the user's ID (with their MAC address)
 			String macAddress = Constants.getMACAddress();
 			if(macAddress != null) context.setUser(new UserBuilder().setId(macAddress).build());
+			
+			//Recording the system version
+			context.addTag("system_version", System.getProperty("os.version"));
 		}
 		
 		//Preparing the support directory

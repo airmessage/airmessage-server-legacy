@@ -1,6 +1,7 @@
 package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
+import io.sentry.event.BreadcrumbBuilder;
 import me.tagavari.airmessage.common.SharedValues;
 import org.jooq.impl.DSL;
 
@@ -149,7 +150,7 @@ class NetServerManager {
 			pingTimer.cancel();
 			
 			//Closing the connections
-			for(SocketManager connection : connectionList) connection.initiateClose();
+			for(SocketManager connection : connectionList) connection.initiateCloseSync();
 			
 			//Closing the socket
 			try {
@@ -158,7 +159,8 @@ class NetServerManager {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			}
 			
-			//Stopping the writer thread
+			//Stopping the threads
+			interrupt();
 			writerThread.interrupt();
 		}
 	}
@@ -254,7 +256,7 @@ class NetServerManager {
 			Main.getLogger().info("Client connected from " + socket.getInetAddress().getHostName() + " (" + socket.getInetAddress().getHostAddress() + ")");
 		}
 		
-		private synchronized boolean sendDataSync(int messageType, byte[] data) {
+		synchronized boolean sendDataSync(int messageType, byte[] data) {
 			//if(!isConnected()) return false;
 			try {
 				outputStream.write(ByteBuffer.allocate(Integer.SIZE / 8 * 2).putInt(messageType).putInt(data.length).array());
@@ -611,9 +613,11 @@ class NetServerManager {
 		void initiateClose() {
 			//Sending a message and closing the connection
 			writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtClose, new byte[0], this::closeConnection));
-			
-			//Closing the connection
-			//closeConnection();
+		}
+		
+		void initiateCloseSync() {
+			sendDataSync(SharedValues.nhtClose, new byte[0]);
+			closeConnection();
 		}
 		
 		private void closeConnection() {
@@ -728,6 +732,13 @@ class NetServerManager {
 						int messageType = headerBuffer.getInt();
 						int contentLen = headerBuffer.getInt();
 						
+						//Adding a breadcrumb
+						{
+							Map<String, String> dataMap = new HashMap<>(2);
+							dataMap.put("Message type", Integer.toString(messageType));
+							dataMap.put("Content length", Integer.toString(contentLen));
+							Sentry.getContext().recordBreadcrumb(new BreadcrumbBuilder().setCategory(Constants.sentryBCatPacket).setMessage("New packet received").setData(dataMap).build());
+						}
 						
 						//Reading the content
 						byte[] content = new byte[contentLen];
@@ -758,8 +769,10 @@ class NetServerManager {
 						//Breaking
 						break;
 					} catch(IOException exception) {
-						//Logging the error
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+						if(socket.isConnected()) {
+							//Logging the error
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+						}
 						
 						//Closing the connection
 						initiateClose();

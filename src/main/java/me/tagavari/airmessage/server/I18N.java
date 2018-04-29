@@ -57,6 +57,9 @@ public interface I18N {
 	@En("Preferences\u2026")
 	String menu_preferences();
 	
+	@En("Check for Updates\u2026")
+	String menu_checkForUpdates();
+	
 	@En("Welcome to AirMessage Server!")
 	String intro_title();
 	
@@ -68,6 +71,9 @@ public interface I18N {
 	
 	@En("Software Update")
 	String title_update();
+	
+	@En("Updating AirMessage")
+	String title_updateCheck();
 	
 	@En("Server port:")
 	String pref_port();
@@ -95,6 +101,15 @@ public interface I18N {
 	
 	@En("{0} is outside of the valid port range (1 to 65535)")
 	String warning_portRange(int port); */
+	
+	@En("Checking for updates\u2026")
+	String message_checkingUpdates();
+	
+	@En("You’re up-to-date!")
+	String message_upToDate();
+	
+	@En("AirMessage {0} is currently the newest version available.")
+	String message_upToDate_desc(String version);
 	
 	@En("A new version of {0} is available!")
 	String message_updateAvailable_title(String name);

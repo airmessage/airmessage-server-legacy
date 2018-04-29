@@ -1,5 +1,6 @@
 package me.tagavari.airmessage.server;
 
+import io.sentry.Sentry;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
@@ -7,6 +8,8 @@ import org.eclipse.swt.graphics.*;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
+
+import java.util.logging.Level;
 
 public class UIHelper {
 	//Creating the reference values
@@ -107,7 +110,12 @@ public class UIHelper {
 	}
 	
 	static void startEventLoop() {
-		while(!display.isDisposed()) if(!display.readAndDispatch()) display.sleep();
+		try {
+			while(!display.isDisposed()) if(!display.readAndDispatch()) display.sleep();
+		} catch(Exception exception) {
+			Sentry.capture(exception);
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+		}
 		System.exit(0);
 	}
 	

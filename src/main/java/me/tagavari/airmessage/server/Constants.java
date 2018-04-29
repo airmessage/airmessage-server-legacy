@@ -31,6 +31,9 @@ class Constants {
 	static final String reExInteger = "^\\d+$";
 	static final String regExSplitFilename = "\\.(?=[^.]+$)";
 	
+	//Creating the reporting values
+	static final String sentryBCatPacket = "packet-info";
+	
 	//Creating the other values
 	static final int minPort = 0;
 	static final int maxPort = 65535;
