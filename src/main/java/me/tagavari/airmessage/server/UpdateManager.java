@@ -296,12 +296,15 @@ class UpdateManager {
 		manualUpdateShell.open();
 		manualUpdateShell.forceActive();
 		
-		//Restarting the update timer
-		if(PreferencesManager.getAutoCheckUpdates()) {
-			stopUpdateChecker();
-			startUpdateChecker();
-		} else {
-			new Thread(runUpdateCheck).start();
+		//Checking if there is not currently an update check in progress
+		if(!updateCheckInProgress.get()) {
+			//Starting an update check
+			if(PreferencesManager.getAutoCheckUpdates()) {
+				stopUpdateChecker();
+				startUpdateChecker();
+			} else {
+				new Thread(runUpdateCheck).start();
+			}
 		}
 	}
 	
