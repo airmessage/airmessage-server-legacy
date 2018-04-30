@@ -6,6 +6,7 @@ import me.tagavari.airmessage.common.SharedValues;
 import org.jooq.impl.DSL;
 
 import javax.net.ServerSocketFactory;
+import javax.net.ssl.SSLHandshakeException;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -123,9 +124,7 @@ class NetServerManager {
 				@Override
 				public void run() {
 					//Sending a ping to all clients
-					synchronized(connectionList) {
-						for(SocketManager connection : connectionList) connection.testConnectionSync();
-					}
+					for(SocketManager connection : connectionList) connection.testConnectionSync();
 				}
 			}, keepAliveMillis, keepAliveMillis);
 		}
@@ -149,8 +148,8 @@ class NetServerManager {
 			//Stopping the ping timer
 			pingTimer.cancel();
 			
-			//Closing the connections
-			for(SocketManager connection : connectionList) connection.initiateCloseSync();
+			//Closing the connections (copying list to prevent ConcurrentModificationException)
+			for(SocketManager connection : new ArrayList<>(connectionList)) connection.initiateCloseSync();
 			
 			//Closing the socket
 			try {
@@ -257,7 +256,8 @@ class NetServerManager {
 		}
 		
 		synchronized boolean sendDataSync(int messageType, byte[] data) {
-			//if(!isConnected()) return false;
+			if(!isConnected()) return false;
+			
 			try {
 				outputStream.write(ByteBuffer.allocate(Integer.SIZE / 8 * 2).putInt(messageType).putInt(data.length).array());
 				outputStream.write(data);
@@ -659,7 +659,7 @@ class NetServerManager {
 		}
 		
 		boolean isConnected() {
-			return isConnected.get();
+			return isConnected.get() && socket.isConnected();
 		}
 		
 		/**
@@ -768,8 +768,11 @@ class NetServerManager {
 						
 						//Breaking
 						break;
+					} catch(SSLHandshakeException exception) {
+						if(Main.MODE_DEBUG) Main.getLogger().log(Level.WARNING, Main.PREFIX_DEBUG + exception.getMessage(), exception);
+						closeConnection();
 					} catch(IOException exception) {
-						if(socket.isConnected()) {
+						if(isConnected()) {
 							//Logging the error
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 						}
