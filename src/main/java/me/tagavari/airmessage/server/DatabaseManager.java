@@ -181,7 +181,7 @@ class DatabaseManager {
 					
 					//Updating the last check time
 					//lastCheckTime = System.currentTimeMillis();
-				} catch(IOException | NoSuchAlgorithmException exception) {
+				} catch(IOException | NoSuchAlgorithmException | OutOfMemoryError | RuntimeException exception) {
 					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
 				} catch(InterruptedException exception) {
@@ -189,7 +189,7 @@ class DatabaseManager {
 					return;
 				}
 				
-				//Checking if there are no new messages
+				//Checking if there are new messages
 				if(dataFetchResult != null && !dataFetchResult.conversationItems.isEmpty()) {
 					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
 						//Serializing the data
@@ -343,7 +343,8 @@ class DatabaseManager {
 				out.flush();
 				
 				//Sending the conversation info
-				NetServerManager.sendPacket(request.connection, SharedValues.nhtConversationUpdate, bos.toByteArray());
+				request.connection.sendDataSync(SharedValues.nhtConversationUpdate, bos.toByteArray());
+				//NetServerManager.sendPacket(request.connection, SharedValues.nhtConversationUpdate, bos.toByteArray());
 			} catch(IOException exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
@@ -379,15 +380,15 @@ class DatabaseManager {
 		
 		//Checking if there have been no errors so far
 		if(succeeded) {
+			//Preparing to read the data
+			byte[] buffer = new byte[request.chunkSize];
+			byte[] compressedBuffer;
+			int bytesRead;
+			boolean moreDataRead;
+			int requestIndex = 0;
+			
 			//Streaming the file
 			try(FileInputStream inputStream = new FileInputStream(file)) {
-				//Preparing to read the data
-				byte[] buffer = new byte[request.chunkSize];
-				byte[] compressedBuffer;
-				int bytesRead;
-				boolean moreDataRead;
-				int requestIndex = 0;
-				
 				//Attempting to read the data
 				if((bytesRead = inputStream.read(buffer)) != -1) {
 					do {
@@ -409,8 +410,8 @@ class DatabaseManager {
 							out.writeBoolean(!moreDataRead); //Is last
 							out.flush();
 							
-							//Sending the data
-							NetServerManager.sendPacket(request.connection, SharedValues.nhtAttachmentReq, bos.toByteArray());
+							//Sending the data (synchronously, as otherwise this can cause a memory build-up)
+							request.connection.sendDataSync(SharedValues.nhtAttachmentReq, bos.toByteArray());
 							//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
 						}
 						
@@ -421,6 +422,9 @@ class DatabaseManager {
 					//Setting the succeeded variable to false
 					succeeded = false;
 				}
+			} catch(OutOfMemoryError exception) {
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+				Sentry.capture(exception);
 			} catch(IOException exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
@@ -438,7 +442,8 @@ class DatabaseManager {
 					out.flush();
 					
 					//Sending the data
-					NetServerManager.sendPacket(request.connection, SharedValues.nhtAttachmentReqFail, bos.toByteArray());
+					request.connection.sendDataSync(SharedValues.nhtAttachmentReqFail, bos.toByteArray());
+					//NetServerManager.sendPacket(request.connection, SharedValues.nhtAttachmentReqFail, bos.toByteArray());
 				} catch(IOException exception) {
 					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
@@ -459,10 +464,11 @@ class DatabaseManager {
 					out.flush();
 					
 					//Sending the data
-					NetServerManager.sendPacket(request.connection, request.messageResponseType, bos.toByteArray());
+					request.connection.sendDataSync(request.messageResponseType, bos.toByteArray());
+					//NetServerManager.sendPacket(request.connection, request.messageResponseType, bos.toByteArray());
 				}
 			}
-		} catch(NoSuchAlgorithmException | IOException exception) {
+		} catch(NoSuchAlgorithmException | IOException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 		}
@@ -526,10 +532,11 @@ class DatabaseManager {
 					out.flush();
 					
 					//Sending the data
-					NetServerManager.sendPacket(request.connection, SharedValues.nhtMassRetrieval, bos.toByteArray());
+					request.connection.sendDataSync(SharedValues.nhtMassRetrieval, bos.toByteArray());
+					//NetServerManager.sendPacket(request.connection, SharedValues.nhtMassRetrieval, bos.toByteArray());
 				}
 			}
-		} catch(IOException | NoSuchAlgorithmException exception) {
+		} catch(NoSuchAlgorithmException | IOException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 		}

@@ -51,6 +51,11 @@ public class SystemTrayManager {
 		miPrefs.setText(I18N.i.menu_preferences());
 		miPrefs.addListener(SWT.Selection, event -> PreferencesManager.openWindow());
 		
+		//Check for updates
+		MenuItem miUpdate = new MenuItem(menu, SWT.PUSH);
+		miUpdate.setText(I18N.i.menu_checkForUpdates());
+		miUpdate.addListener(SWT.Selection, event -> UpdateManager.requestManualUpdateCheck());
+		
 		//Divider
 		new MenuItem(menu, SWT.SEPARATOR);
 		

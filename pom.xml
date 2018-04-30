@@ -76,14 +76,14 @@
 		<dependency>
 			<groupId>org.eclipse.platform</groupId>
 			<artifactId>org.eclipse.swt</artifactId>
-			<version>4.8M6</version>
+			<version>4.7.3a</version>
 		</dependency>
 
-		<dependency>
+		<!-- <dependency>
 			<groupId>org.eclipse</groupId>
 			<artifactId>jface</artifactId>
 			<version>3.9.0</version>
-		</dependency>
+		</dependency> -->
 
 		<!-- Sentry / Crash reporting library -->
 		<dependency>

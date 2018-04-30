@@ -16,8 +16,8 @@ class Constants {
 	static final String SENTRY_DSN = "https://4240bd1f5e2f4ecfac822f78dda19fce:00d4dcd23b244f46a4489b5b80811d39@sentry.io/301837";
 	
 	//Creating the version values
-	static final String SERVER_VERSION = "0.2";
-	static final int SERVER_VERSION_CODE = 1;
+	static final String SERVER_VERSION = "0.2.1";
+	static final int SERVER_VERSION_CODE = 2;
 	
 	//Creating the file values
 	static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
@@ -30,6 +30,9 @@ class Constants {
 	//Creating the regex values
 	static final String reExInteger = "^\\d+$";
 	static final String regExSplitFilename = "\\.(?=[^.]+$)";
+	
+	//Creating the reporting values
+	static final String sentryBCatPacket = "packet-info";
 	
 	//Creating the other values
 	static final int minPort = 0;
@@ -215,7 +218,7 @@ class Constants {
 		}
 	} */
 	
-	static byte[] compressGZIP(byte[] data, int length) throws IOException {
+	static byte[] compressGZIP(byte[] data, int length) throws IOException, OutOfMemoryError {
 		try(ByteArrayOutputStream fin = new ByteArrayOutputStream(); GZIPOutputStream out = new GZIPOutputStream(fin)) {
 			out.write(data, 0, length);
 			out.close();
@@ -223,7 +226,7 @@ class Constants {
 		}
 	}
 	
-	static byte[] decompressGZIP(byte[] data) throws IOException {
+	static byte[] decompressGZIP(byte[] data) throws IOException, OutOfMemoryError {
 		try(ByteArrayInputStream src = new ByteArrayInputStream(data); GZIPInputStream in = new GZIPInputStream(src);
 			ByteArrayOutputStream out = new ByteArrayOutputStream()) {
 			byte[] buffer = new byte[1024];

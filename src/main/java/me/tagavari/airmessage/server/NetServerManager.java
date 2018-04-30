@@ -1,10 +1,12 @@
 package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
+import io.sentry.event.BreadcrumbBuilder;
 import me.tagavari.airmessage.common.SharedValues;
 import org.jooq.impl.DSL;
 
 import javax.net.ServerSocketFactory;
+import javax.net.ssl.SSLHandshakeException;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -122,9 +124,7 @@ class NetServerManager {
 				@Override
 				public void run() {
 					//Sending a ping to all clients
-					synchronized(connectionList) {
-						for(SocketManager connection : connectionList) connection.testConnectionSync();
-					}
+					for(SocketManager connection : connectionList) connection.testConnectionSync();
 				}
 			}, keepAliveMillis, keepAliveMillis);
 		}
@@ -148,8 +148,8 @@ class NetServerManager {
 			//Stopping the ping timer
 			pingTimer.cancel();
 			
-			//Closing the connections
-			for(SocketManager connection : connectionList) connection.initiateClose();
+			//Closing the connections (copying list to prevent ConcurrentModificationException)
+			for(SocketManager connection : new ArrayList<>(connectionList)) connection.initiateCloseSync();
 			
 			//Closing the socket
 			try {
@@ -158,7 +158,8 @@ class NetServerManager {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			}
 			
-			//Stopping the writer thread
+			//Stopping the threads
+			interrupt();
 			writerThread.interrupt();
 		}
 	}
@@ -254,8 +255,9 @@ class NetServerManager {
 			Main.getLogger().info("Client connected from " + socket.getInetAddress().getHostName() + " (" + socket.getInetAddress().getHostAddress() + ")");
 		}
 		
-		private synchronized boolean sendDataSync(int messageType, byte[] data) {
-			//if(!isConnected()) return false;
+		synchronized boolean sendDataSync(int messageType, byte[] data) {
+			if(!isConnected()) return false;
+			
 			try {
 				outputStream.write(ByteBuffer.allocate(Integer.SIZE / 8 * 2).putInt(messageType).putInt(data.length).array());
 				outputStream.write(data);
@@ -611,9 +613,11 @@ class NetServerManager {
 		void initiateClose() {
 			//Sending a message and closing the connection
 			writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtClose, new byte[0], this::closeConnection));
-			
-			//Closing the connection
-			//closeConnection();
+		}
+		
+		void initiateCloseSync() {
+			sendDataSync(SharedValues.nhtClose, new byte[0]);
+			closeConnection();
 		}
 		
 		private void closeConnection() {
@@ -655,7 +659,7 @@ class NetServerManager {
 		}
 		
 		boolean isConnected() {
-			return isConnected.get();
+			return isConnected.get() && socket.isConnected();
 		}
 		
 		/**
@@ -723,9 +727,18 @@ class NetServerManager {
 								bytesRemaining -= readCount;
 							}
 						}
+						//Creating the values
 						ByteBuffer headerBuffer = ByteBuffer.wrap(header);
 						int messageType = headerBuffer.getInt();
 						int contentLen = headerBuffer.getInt();
+						
+						//Adding a breadcrumb
+						{
+							Map<String, String> dataMap = new HashMap<>(2);
+							dataMap.put("Message type", Integer.toString(messageType));
+							dataMap.put("Content length", Integer.toString(contentLen));
+							Sentry.getContext().recordBreadcrumb(new BreadcrumbBuilder().setCategory(Constants.sentryBCatPacket).setMessage("New packet received").setData(dataMap).build());
+						}
 						
 						//Reading the content
 						byte[] content = new byte[contentLen];
@@ -745,12 +758,27 @@ class NetServerManager {
 						
 						//Processing the data
 						processData(messageType, content);
-					} catch(IOException exception) {
+					} catch(OutOfMemoryError exception) {
 						//Logging the error
 						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+						Sentry.capture(exception);
 						
 						//Closing the connection
+						initiateClose();
+						
+						//Breaking
+						break;
+					} catch(SSLHandshakeException exception) {
+						if(Main.MODE_DEBUG) Main.getLogger().log(Level.WARNING, Main.PREFIX_DEBUG + exception.getMessage(), exception);
 						closeConnection();
+					} catch(IOException exception) {
+						if(isConnected()) {
+							//Logging the error
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+						}
+						
+						//Closing the connection
+						initiateClose();
 						
 						//Breaking
 						break;
