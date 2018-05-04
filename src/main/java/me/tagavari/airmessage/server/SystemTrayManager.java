@@ -140,8 +140,13 @@ public class SystemTrayManager {
 				miStatusSub.setText(I18N.i.button_retry());
 				miStatusSub.setEnabled(true);
 				break;
-			case Main.serverStateFailedServer:
-				miStatus.setText(I18N.i.menu_err_server());
+			case Main.serverStateFailedServerPort:
+				miStatus.setText(I18N.i.menu_err_server_port());
+				miStatusSub.setText(I18N.i.button_retry());
+				miStatusSub.setEnabled(true);
+				break;
+			case Main.serverStateFailedServerInternal:
+				miStatus.setText(I18N.i.menu_err_server_internal());
 				miStatusSub.setText(I18N.i.button_retry());
 				miStatusSub.setEnabled(true);
 				break;

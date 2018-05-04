@@ -43,7 +43,10 @@ public interface I18N {
 	String menu_running();
 	
 	@En("Failed to start server; port is unavailable")
-	String menu_err_server();
+	String menu_err_server_port();
+	
+	@En("Failed to start server; an internal error occurred")
+	String menu_err_server_internal();
 	
 	@En("Failed to connect to database")
 	String menu_err_database();
