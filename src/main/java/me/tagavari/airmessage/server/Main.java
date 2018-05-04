@@ -20,7 +20,7 @@ import java.util.logging.*;
 
 class Main {
 	//Creating the reference values
-	static final boolean MODE_DEBUG = false;
+	static final boolean MODE_DEBUG = true;
 	static final String PREFIX_DEBUG = "DEBUG LOG: ";
 	static final int serverStateStarting = 0;
 	static final int serverStateRunning = 1;

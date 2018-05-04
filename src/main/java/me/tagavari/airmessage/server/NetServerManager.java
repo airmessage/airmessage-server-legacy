@@ -740,7 +740,6 @@ class NetServerManager {
 								
 								offset += readCount;
 								bytesRemaining -= readCount;
-								System.out.println("Read " + offset + " (+" + readCount + ") total bytes from header");
 							}
 						}
 						//Creating the values
@@ -770,10 +769,8 @@ class NetServerManager {
 							
 							offset += readCount;
 							bytesRemaining -= readCount;
-							System.out.println("Read " + offset + " (+" + readCount + ") total bytes from body");
 						}
 						
-						System.out.println("New packet (" + messageType + " / " + contentLen + ")");
 						//Processing the data
 						processData(messageType, content);
 					} catch(OutOfMemoryError exception) {
