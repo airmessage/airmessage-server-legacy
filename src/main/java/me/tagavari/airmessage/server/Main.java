@@ -3,7 +3,6 @@ package me.tagavari.airmessage.server;
 import com.github.rodionmoiseev.c10n.C10N;
 import com.github.rodionmoiseev.c10n.annotations.DefaultC10NAnnotations;
 import io.sentry.Sentry;
-import io.sentry.context.Context;
 import io.sentry.event.UserBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
@@ -26,7 +25,8 @@ class Main {
 	static final int serverStateStarting = 0;
 	static final int serverStateRunning = 1;
 	static final int serverStateFailedDatabase = 2;
-	static final int serverStateFailedServer = 3;
+	static final int serverStateFailedServerPort = 3;
+	static final int serverStateFailedServerInternal = 4;
 	
 	private static final File logFile = new File(Constants.applicationSupportDir, "logs/latest.log");
 	
@@ -37,6 +37,9 @@ class Main {
 	private static int serverState = serverStateStarting;
 	
 	public static void main(String[] args) throws IOException {
+		//Preparing the support directory
+		if(!Constants.prepareSupportDir()) return;
+		
 		//Configuring the logger
 		logger = Logger.getGlobal();
 		logger.setLevel(Level.FINEST);
@@ -64,18 +67,14 @@ class Main {
 		} else {
 			//Initializing Sentry
 			Sentry.init(Constants.SENTRY_DSN + "?release=" + Constants.SERVER_VERSION);
-			Context context = Sentry.getContext();
 			
 			//Marking the user's ID (with their MAC address)
 			String macAddress = Constants.getMACAddress();
-			if(macAddress != null) context.setUser(new UserBuilder().setId(macAddress).build());
+			if(macAddress != null) Sentry.getContext().setUser(new UserBuilder().setId(macAddress).build());
 			
 			//Recording the system version
-			context.addTag("system_version", System.getProperty("os.version"));
+			Sentry.getContext().addTag("system_version", System.getProperty("os.version"));
 		}
-		
-		//Preparing the support directory
-		if(!Constants.prepareSupportDir()) return;
 		
 		//Configuring the internationalization engine
 		C10N.configure(new DefaultC10NAnnotations());
@@ -135,33 +134,34 @@ class Main {
 		setServerState(serverStateStarting);
 		SystemTrayManager.updateStatusMessage();
 		
-		//Creating the result variable
-		boolean result;
-		
 		//Loading the credentials
 		//result = SecurityManager.loadCredentials();
 		//if(!result) System.exit(1);
 		
 		//Starting the database scanner
-		result = DatabaseManager.start((int) (PreferencesManager.getScanFrequency() * 1000));
-		if(!result) {
-			//Updating the server state
-			setServerState(serverStateFailedDatabase);
-			SystemTrayManager.updateStatusMessage();
-			
-			//Returning
-			return;
+		{
+			boolean result = DatabaseManager.start((int) (PreferencesManager.getScanFrequency() * 1000));
+			if(!result) {
+				//Updating the server state
+				setServerState(serverStateFailedDatabase);
+				SystemTrayManager.updateStatusMessage();
+				
+				//Returning
+				return;
+			}
 		}
 		
 		//Starting the web socket manager
-		result = NetServerManager.createServer(PreferencesManager.getServerPort(), false);
-		if(!result) {
-			//Updating the server state
-			setServerState(serverStateFailedServer);
-			SystemTrayManager.updateStatusMessage();
-			
-			//Returning
-			return;
+		{
+			int result = NetServerManager.createServer(PreferencesManager.getServerPort(), false);
+			if(result != NetServerManager.createServerResultOK) {
+				//Updating the server state
+				setServerState(NetServerManager.createServerErrorToServerState(result));
+				SystemTrayManager.updateStatusMessage();
+				
+				//Returning
+				return;
+			}
 		}
 		
 		//Updating the server state
@@ -178,10 +178,10 @@ class Main {
 		SystemTrayManager.updateStatusMessage();
 		
 		//Starting the web socket manager
-		boolean result = NetServerManager.createServer(PreferencesManager.getServerPort(), true);
-		if(!result) {
+		int result = NetServerManager.createServer(PreferencesManager.getServerPort(), true);
+		if(result != NetServerManager.createServerResultOK) {
 			//Updating the server state
-			setServerState(serverStateFailedServer);
+			setServerState(NetServerManager.createServerErrorToServerState(result));
 			SystemTrayManager.updateStatusMessage();
 			
 			//Returning

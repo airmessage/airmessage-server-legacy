@@ -6,7 +6,7 @@ import me.tagavari.airmessage.common.SharedValues;
 import org.jooq.impl.DSL;
 
 import javax.net.ServerSocketFactory;
-import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLException;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -22,6 +22,10 @@ import java.util.logging.Level;
 
 class NetServerManager {
 	//Creating the reference values
+	static final int createServerResultOK = 0;
+	static final int createServerResultPort = 1;
+	static final int createServerResultInternal = 2;
+	
 	//private static final long keepAliveMillis = 30 * 1000; //30 seconds
 	private static final long keepAliveMillis = 30 * 60 * 1000; //30 minutes
 	private static final long pingTimeout = 30 * 1000; //30 seconds
@@ -33,15 +37,15 @@ class NetServerManager {
 	private static WriterThread writerThread = null;
 	private static final List<SocketManager> connectionList = Collections.synchronizedList(new ArrayList<>());
 	
-	static boolean createServer(int port, boolean recreate) {
-		//Returning true if the server is already running
-		if(serverRunning && (!recreate || port == currentPort)) return true;
-		
-		//Returning false if the requested port is already bound
-		if(!Constants.checkPortAvailability(port)) return false;
+	static int createServer(int port, boolean recreate) {
+		//Returning OK if the server is already running
+		if(serverRunning && (!recreate || port == currentPort)) return createServerResultOK;
 		
 		//Destroying the server if it exists
-		if(serverRunning) listenerThread.closeServer();
+		if(serverRunning) destroyServer();
+		
+		//Returning false if the requested port is already bound
+		if(!Constants.checkPortAvailability(port)) return createServerResultPort;
 		
 		try {
 			//Creating the server socket
@@ -54,7 +58,7 @@ class NetServerManager {
 		} catch(Exception exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
-			return false;
+			return createServerResultInternal;
 		}
 		
 		//Starting the writer thread
@@ -66,7 +70,18 @@ class NetServerManager {
 		currentPort = port;
 		
 		//Returning true
-		return true;
+		return createServerResultOK;
+	}
+	
+	static int createServerErrorToServerState(int value) {
+		switch(value) {
+			default:
+				throw new IllegalArgumentException("Expected a create server result error; instead got " + value);
+			case createServerResultPort:
+				return Main.serverStateFailedServerPort;
+			case createServerResultInternal:
+				return Main.serverStateFailedServerInternal;
+		}
 	}
 	
 	static void destroyServer() {
@@ -215,7 +230,7 @@ class NetServerManager {
 		 */
 		private final Socket socket;
 		private final ReaderThread readerThread;
-		private final BufferedOutputStream outputStream;
+		private final OutputStream outputStream;
 		private final AtomicBoolean isConnected = new AtomicBoolean(true);
 		
 		private Timer registrationExpiryTimer;
@@ -227,9 +242,9 @@ class NetServerManager {
 		private SocketManager(Socket socket) throws IOException {
 			//Setting the socket information
 			this.socket = socket;
-			readerThread = new ReaderThread(new BufferedInputStream(socket.getInputStream()));
+			readerThread = new ReaderThread(socket.getInputStream());
 			readerThread.start();
-			outputStream = new BufferedOutputStream(socket.getOutputStream());
+			outputStream = socket.getOutputStream();
 
 			//Starting the state timer
 			registrationExpiryTimer = new Timer();
@@ -621,6 +636,9 @@ class NetServerManager {
 		}
 		
 		private void closeConnection() {
+			//Removing the connection record
+			if(connectionList.contains(this)) connectionList.remove(this);
+			
 			//Returning if the connection is not open
 			if(!isConnected()) return;
 			
@@ -647,9 +665,6 @@ class NetServerManager {
 			
 			//Finishing the reader thread
 			readerThread.interrupt();
-			
-			//Removing the connection record
-			connectionList.remove(this);
 			
 			//Updating the UI
 			UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);
@@ -699,9 +714,9 @@ class NetServerManager {
 		
 		private class ReaderThread extends Thread {
 			//Creating the stream
-			private final BufferedInputStream inputStream;
+			private final InputStream inputStream;
 			
-			ReaderThread(BufferedInputStream inputStream) {
+			ReaderThread(InputStream inputStream) {
 				this.inputStream = inputStream;
 			}
 			
@@ -768,7 +783,7 @@ class NetServerManager {
 						
 						//Breaking
 						break;
-					} catch(SSLHandshakeException exception) {
+					} catch(SSLException exception) {
 						if(Main.MODE_DEBUG) Main.getLogger().log(Level.WARNING, Main.PREFIX_DEBUG + exception.getMessage(), exception);
 						closeConnection();
 					} catch(IOException exception) {
