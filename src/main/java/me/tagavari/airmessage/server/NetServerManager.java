@@ -139,7 +139,7 @@ class NetServerManager {
 				@Override
 				public void run() {
 					//Sending a ping to all clients
-					for(SocketManager connection : connectionList) connection.testConnectionSync();
+					for(SocketManager connection : new ArrayList<>(connectionList)) connection.testConnectionSync();
 				}
 			}, keepAliveMillis, keepAliveMillis);
 		}
@@ -188,7 +188,7 @@ class NetServerManager {
 			try {
 				while(!isInterrupted()) {
 					PacketStruct packet = uploadQueue.take();
-					if(packet.target == null) for(SocketManager target : connectionList) target.sendDataSync(packet.type, packet.content);
+					if(packet.target == null) for(SocketManager target : new ArrayList<>(connectionList)) target.sendDataSync(packet.type, packet.content);
 					else packet.target.sendDataSync(packet.type, packet.content);
 					if(packet.sentRunnable != null) packet.sentRunnable.run();
 				}
@@ -279,7 +279,7 @@ class NetServerManager {
 				outputStream.flush();
 				
 				return true;
-			} catch(SocketException exception) {
+			} catch(SocketException | SSLException exception) {
 				if(isConnected() && Constants.checkDisconnected(exception)) closeConnection();
 				
 				return false;
