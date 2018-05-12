@@ -20,7 +20,6 @@ import java.util.logging.*;
 
 class Main {
 	//Creating the reference values
-	static final boolean MODE_DEBUG = true;
 	static final String PREFIX_DEBUG = "DEBUG LOG: ";
 	static final int serverStateStarting = 0;
 	static final int serverStateRunning = 1;
@@ -31,12 +30,16 @@ class Main {
 	private static final File logFile = new File(Constants.applicationSupportDir, "logs/latest.log");
 	
 	//Creating the variables
+	private static boolean debugMode = false;
 	private static TimeHelper timeHelper;
 	private static Logger logger;
 	
 	private static int serverState = serverStateStarting;
 	
 	public static void main(String[] args) throws IOException {
+		//Processing the arguments
+		processArgs(args);
+		
 		//Preparing the support directory
 		if(!Constants.prepareSupportDir()) return;
 		
@@ -62,7 +65,7 @@ class Main {
 			logger.addHandler(handler);
 		}
 		
-		if(MODE_DEBUG) {
+		if(isDebugMode()) {
 			getLogger().log(Level.INFO, "Server running in debug mode");
 		} else {
 			//Initializing Sentry
@@ -222,13 +225,17 @@ class Main {
 		return true;
 	}
 	
-	/* private static void processArgs(String[] args) {
+	private static void processArgs(String[] args) {
 		//Iterating over the arguments
 		for(String argument : args) {
 			//Debug
-			if(argument.equals("-debug")) getLogger().setLevel(Level.FINEST);
+			if("-debug".equals(argument)) debugMode = true;
 		}
-	} */
+	}
+	
+	static boolean isDebugMode() {
+		return debugMode;
+	}
 	
 	private static Formatter getLoggerFormatter() {
 		return new Formatter() {
