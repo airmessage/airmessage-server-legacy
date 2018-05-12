@@ -783,8 +783,8 @@ class NetServerManager {
 						
 						//Breaking
 						break;
-					} catch(SSLException exception) {
-						if(Main.MODE_DEBUG) Main.getLogger().log(Level.WARNING, Main.PREFIX_DEBUG + exception.getMessage(), exception);
+					} catch(SocketException | SSLException | EOFException exception) {
+						if(Main.isDebugMode()) Main.getLogger().log(Level.WARNING, Main.PREFIX_DEBUG + exception.getMessage(), exception);
 						closeConnection();
 					} catch(IOException exception) {
 						if(isConnected()) {
