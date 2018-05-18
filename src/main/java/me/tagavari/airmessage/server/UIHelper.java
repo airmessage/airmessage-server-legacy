@@ -18,7 +18,11 @@ public class UIHelper {
 	static final int dialogButtonBarMargin = 8;
 	static final int minButtonWidth = 100;
 	static final int smallMinButtonWidth = 80;
-	private static final Display display = new Display();
+	private static Display display;
+	
+	static void initialize() {
+		display = new Display();
+	}
 	
 	static boolean displayVersionWarning() {
 		//Showing an alert dialog

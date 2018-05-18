@@ -91,6 +91,9 @@ class Main {
 		//Preparing the preferences
 		if(!PreferencesManager.loadPreferences()) return;
 		
+		//Initializing the UI helper
+		UIHelper.initialize();
+		
 		//Opening the intro window
 		if(PreferencesManager.checkFirstRun()) UIHelper.openIntroWindow();
 		
