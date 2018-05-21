@@ -42,7 +42,6 @@ public class SharedValues {
 	public static final int nhtAuthenticationOK = 0;
 	public static final int nhtAuthenticationUnauthorized = 1;
 	public static final int nhtAuthenticationBadRequest = 2;
-	public static final int nhtAuthenticationVersionMismatch = 3;
 	
 	public static final String hashAlgorithm = "MD5";
 	public static final String transmissionCheck = "4yAIlVK0Ce_Y7nv6at_hvgsFtaMq!lZYKipV40Fp5E%VSsLSML";

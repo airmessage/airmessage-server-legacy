@@ -4,7 +4,6 @@ import com.github.rodionmoiseev.c10n.C10N;
 import com.github.rodionmoiseev.c10n.annotations.DefaultC10NAnnotations;
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.swing.*;
 import java.io.File;
@@ -12,7 +11,6 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
-import java.security.Security;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -86,7 +84,7 @@ class Main {
 		if(!runSystemCheck()) return;
 		
 		//Registering BouncyCastle as a security provider
-		Security.addProvider(new BouncyCastleProvider());
+		//Security.addProvider(new BouncyCastleProvider());
 		
 		//Preparing the preferences
 		if(!PreferencesManager.loadPreferences()) return;

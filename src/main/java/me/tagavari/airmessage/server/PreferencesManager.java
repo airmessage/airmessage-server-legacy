@@ -1,5 +1,6 @@
 package me.tagavari.airmessage.server;
 
+import io.sentry.Sentry;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.*;
@@ -17,9 +18,7 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import java.io.*;
-import java.nio.file.Files;
-import java.util.*;
-import java.util.List;
+import java.util.Base64;
 import java.util.logging.Level;
 
 class PreferencesManager {
@@ -27,7 +26,6 @@ class PreferencesManager {
 	private static final int SCHEMA_VERSION = 2;
 	
 	private static final File prefFile = new File(Constants.applicationSupportDir, "prefs.xml");
-	private static final File userFile = new File(Constants.applicationSupportDir, "users.txt");
 	
 	private static final int defaultPort = 1359;
 	private static final String defaultPassword = "cookiesandmilk";
@@ -125,18 +123,30 @@ class PreferencesManager {
 				}
 			}
 			
+			boolean preferencesUpdateRequired = false;
+			
+			System.out.println("Loaded preferences with schema version " + schemaVersion);
 			//Checking if the document's schema version is invalid
 			if(schemaVersion == -1 || schemaVersion > SCHEMA_VERSION) {
 				//Discarding and re-creating the preferences
 				return createPreferences();
 			} else if(schemaVersion < SCHEMA_VERSION) {
+				//Requesting a preferences update (to save the upgrade data)
+				preferencesUpdateRequired = true;
+				
 				boolean result;
 				while(true) {
 					//Upgrading the schema
 					result = upgradeSchema(document, schemaVersion);
 					
-					//Breaking from the loop if the result is true
-					if(result) break;
+					//Checking if the result is a success
+					if(result) {
+						//Updating the schema value in the preferences
+						findCreateElement(document, findCreateRootNode(document), domTagSchemaVer).setTextContent(Integer.toString(SCHEMA_VERSION));
+						
+						//Breaking from the loop
+						break;
+					}
 					
 					//Displaying a schema upgrade failure warning (abort / continue)
 					int selection = UIHelper.displaySchemaWarning();
@@ -150,36 +160,70 @@ class PreferencesManager {
 			}
 			
 			//Reading the preferences
-			boolean preferencesUpdateRequired = false;
-			
-			String portString = document.getElementsByTagName(domTagPort).item(0).getTextContent();
-			if(portString.matches("^\\d+$")) prefServerPort = Integer.parseInt(portString);
-			else {
-				prefServerPort = defaultPort;
-				preferencesUpdateRequired = true;
+			{
+				Node element = findElement(document, domTagPort);
+				String value;
+				if(element != null && (value = element.getTextContent()).matches("^\\d+$")) {
+					prefServerPort = Integer.parseInt(value);
+				} else {
+					prefServerPort = defaultPort;
+					preferencesUpdateRequired = true;
+				}
 			}
 			
-			String autoCheckUpdatesString = document.getElementsByTagName(domTagAutoCheckUpdates).item(0).getTextContent();
-			if("true".equals(autoCheckUpdatesString)) prefAutoCheckUpdates = true;
-			else if("false".equals(autoCheckUpdatesString)) prefAutoCheckUpdates = false;
-			else {
-				prefAutoCheckUpdates = defaultAutoCheckUpdates;
-				preferencesUpdateRequired = true;
+			{
+				Node element = findElement(document, domTagAutoCheckUpdates);
+				
+				boolean valueValidated = false;
+				if(element != null) {
+					String value = element.getTextContent();
+					if(value.equals("true")) {
+						prefAutoCheckUpdates = true;
+						valueValidated = true;
+					} else if(value.equals("false")) {
+						prefAutoCheckUpdates = false;
+						valueValidated = true;
+					}
+				}
+				
+				if(!valueValidated) {
+					prefServerPort = defaultPort;
+					preferencesUpdateRequired = true;
+				}
 			}
 			
-			String scanFrequencyString = document.getElementsByTagName(domTagScanFrequency).item(0).getTextContent();
-			if(scanFrequencyString.matches("^\\d+\\.\\d+$")) prefScanFrequency = Float.parseFloat(scanFrequencyString);
-			else {
-				prefScanFrequency = defaultScanFrequency;
-				preferencesUpdateRequired = true;
+			{
+				Node element = findElement(document, domTagScanFrequency);
+				String value;
+				if(element != null && (value = element.getTextContent()).matches("^\\d+\\.\\d+$")) {
+					prefScanFrequency = Float.parseFloat(value);
+				} else {
+					prefScanFrequency = defaultScanFrequency;
+					preferencesUpdateRequired = true;
+				}
 			}
 			
-			String passwordString = document.getElementsByTagName(domTagPassword).item(0).getTextContent();
-			try {
-				prefPassword = new String(Base64.getDecoder().decode(passwordString));
-			} catch(IllegalArgumentException exception) {
-				prefPassword = defaultPassword;
-				preferencesUpdateRequired = true;
+			{
+				Node element = findElement(document, domTagPassword);
+				
+				boolean valueValidated = false;
+				if(element != null) {
+					String value = element.getTextContent();
+					try {
+						prefPassword = new String(Base64.getDecoder().decode(value), textEncoding);
+						valueValidated = true;
+					} catch(UnsupportedEncodingException exception) {
+						Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+						Sentry.capture(exception);
+					} catch(IllegalArgumentException exception) {
+						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+					}
+				}
+				
+				if(!valueValidated) {
+					prefScanFrequency = defaultScanFrequency;
+					preferencesUpdateRequired = true;
+				}
 			}
 			
 			//Updating the preferences if it has been requested
@@ -195,18 +239,54 @@ class PreferencesManager {
 	
 	private static boolean upgradeSchema(Document document, int oldVersion) {
 		switch(oldVersion) {
-			case 1: //Multiple passwords (insecure) to single prefPassword (used for encryption)
-				//Reading the first prefPassword
-				String password;
+			case 1: { //Multiple passwords (insecure) to single prefPassword (used for encryption)
+				//Creating the file
+				File userFile = new File(Constants.applicationSupportDir, "users.txt");
+				
+				//Reading the first password
+				String encodedPassword;
 				if(!userFile.exists()) {
-					password = defaultPassword;
+					try {
+						encodedPassword = Base64.getEncoder().encodeToString(defaultPassword.getBytes(textEncoding));
+					} catch(UnsupportedEncodingException exception) {
+						//Logging the exception
+						Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+						Sentry.capture(exception);
+						
+						//Returning false
+						return false;
+					}
 				} else {
-					try(BufferedReader brTest = new BufferedReader(new FileReader(userFile))) {
-					
+					String line = null;
+					try(BufferedReader reader = new BufferedReader(new FileReader(userFile))) {
+						line = reader.readLine();
 					} catch(IOException exception) {
+						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+					}
 					
+					//Decoding the password
+					if(line == null) {
+						try {
+							encodedPassword = Base64.getEncoder().encodeToString(defaultPassword.getBytes(textEncoding));
+						} catch(UnsupportedEncodingException exception) {
+							//Logging the exception
+							Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+							Sentry.capture(exception);
+							
+							//Returning false
+							return false;
+						}
+					} else {
+						encodedPassword = line;
 					}
 				}
+				
+				//Writing the password
+				findCreateElement(document, findCreateRootNode(document), domTagPassword).setTextContent(encodedPassword);
+				
+				//Deleting the user file
+				userFile.delete();
+			}
 		}
 		
 		//Returning true
@@ -238,18 +318,19 @@ class PreferencesManager {
 			} else document = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument();
 			
 			//Building the XML structure
-			Node rootNode = findCreateElement(document, document, domTagRoot);
+			Node rootNode = findCreateRootNode(document);
 			findCreateElement(document, rootNode, domTagSchemaVer).setTextContent(Integer.toString(SCHEMA_VERSION));
 			findCreateElement(document, rootNode, domTagPort).setTextContent(Integer.toString(prefServerPort));
 			findCreateElement(document, rootNode, domTagAutoCheckUpdates).setTextContent(Boolean.toString(prefAutoCheckUpdates));
 			findCreateElement(document, rootNode, domTagScanFrequency).setTextContent(Float.toString(prefScanFrequency));
-			findCreateElement(document, rootNode, domTagPassword).setTextContent(Base64.getEncoder().encodeToString(prefPassword.getBytes()));
+			findCreateElement(document, rootNode, domTagPassword).setTextContent(Base64.getEncoder().encodeToString(prefPassword.getBytes(textEncoding)));
 			
 			//Writing the XML document
 			TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(prefFile));
-		} catch(ParserConfigurationException | TransformerException exception) {
-			//Printing the stack trace
-			Main.getLogger().log(Level.SEVERE, "Couldn't create new XML document", exception);
+		} catch(ParserConfigurationException | TransformerException | UnsupportedEncodingException exception) {
+			//Logging the exception
+			Main.getLogger().log(Level.SEVERE, "Couldn't create new XML document: " + exception.getMessage(), exception);
+			Sentry.capture(exception);
 			
 			//Returning false
 			return false;
@@ -257,6 +338,22 @@ class PreferencesManager {
 		
 		//Returning true
 		return true;
+	}
+	
+	private static Node findCreateRootNode(Document document) {
+		return findCreateElement(document, document, domTagRoot);
+	}
+	
+	/**
+	 * Finds the specified element in the document
+	 * @param document the document to search
+	 * @param name the name of the element to find
+	 * @return the first instance of specified element, or null if the element couldn't be found
+	 */
+	private static Node findElement(Document document, String name) {
+		NodeList list = document.getElementsByTagName(name);
+		if(list.getLength() == 0) return null;
+		else return list.item(0);
 	}
 	
 	private static Node findCreateElement(Document document, Node parent, String name) {
@@ -569,9 +666,6 @@ class PreferencesManager {
 	}
 	
 	private static void openPrefsPasswordWindow(Shell parentShell) {
-		//Loading the passwords
-		String[] passwords = loadPasswords();
-		
 		//Creating the shell flags
 		Constants.ValueWrapper<Boolean> textEditorOpen = new Constants.ValueWrapper<>(Boolean.FALSE);
 		
@@ -598,13 +692,13 @@ class PreferencesManager {
 			listLabel.setText(I18N.i.pref_passwords());
 			
 			//Creating the text
-			passText = new Text(shell, SWT.BORDER | SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL);
-			passText.setText(Constants.getDelimitedString(passwords, "\n"));
+			passText = new Text(shell, SWT.BORDER);
+			passText.setText(prefPassword);
 			
 			GridData passTextGD = new GridData();
 			passTextGD.horizontalAlignment = GridData.FILL;
-			passTextGD.verticalAlignment = GridData.FILL;
-			passTextGD.grabExcessVerticalSpace = true;
+			//passTextGD.verticalAlignment = GridData.FILL;
+			//passTextGD.grabExcessVerticalSpace = true;
 			passTextGD.grabExcessHorizontalSpace = true;
 			passText.setLayoutData(passTextGD);
 		}
@@ -628,15 +722,10 @@ class PreferencesManager {
 			acceptButtonFD.right = new FormAttachment(100);
 			acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
 			acceptButton.setLayoutData(acceptButtonFD);
+			passText.addModifyListener(event -> acceptButton.setEnabled(!passText.getText().isEmpty()));
 			acceptButton.addListener(SWT.Selection, event -> {
-				//Retrieving the lines and filtering out the empty ones
-				LinkedList<String> filterList = new LinkedList<>();
-				Collections.addAll(filterList, passText.getText().split("\n"));
-				for(ListIterator<String> iterator = filterList.listIterator(); iterator.hasNext();) if(iterator.next().isEmpty()) iterator.remove();
-				String[] newPasswords = filterList.toArray(new String[0]);
-				
-				//Saving the new passwords
-				if(!Arrays.equals(passwords, newPasswords)) savePasswords(newPasswords);
+				//Setting the password
+				prefPassword = passText.getText();
 				
 				//Closing the shell
 				shell.close();
@@ -660,94 +749,8 @@ class PreferencesManager {
 		
 		//Opening the dialog
 		shell.pack();
-		shell.setSize(300, 200);
+		shell.setSize(300, shell.getSize().y);
 		shell.open();
-	}
-	
-	private static String[] loadPasswords() {
-		//Checking if the users file exists
-		if(userFile.exists()) {
-			try {
-				//Reading the file
-				List<String> list = Files.readAllLines(userFile.toPath());
-				for(ListIterator<String> iterator = list.listIterator(); iterator.hasNext();) {
-					String line = iterator.next();
-					try {
-						iterator.set(new String(Base64.getDecoder().decode(line)));
-					} catch(IllegalArgumentException exception) {
-						//Logging a warning
-						Main.getLogger().log(Level.WARNING, "Failed to decode prefPassword line (" + line + ")", exception);
-						
-						//Removing the item
-						iterator.remove();
-					}
-				}
-				
-				//Returning the list
-				return list.toArray(new String[0]);
-			} catch(IOException exception) {
-				//Printing the stack trace
-				Main.getLogger().log(Level.SEVERE, "Failed to read users file at " + userFile.getPath(), exception);
-				
-				//Returning an empty list
-				return new String[0];
-			}
-		} else {
-			//Writing the default prefPassword list to disk
-			savePasswords(defaultPasswords);
-			
-			//Returning the default prefPassword list
-			return defaultPasswords;
-		}
-	}
-	
-	private static void savePasswords(String[] list) {
-		//Creating the print writer
-		try(PrintWriter writer = new PrintWriter(userFile, textEncoding)) {
-			//Writing the passwords
-			for(String line : list) writer.println(Base64.getEncoder().encodeToString(line.getBytes()));
-		} catch(FileNotFoundException | UnsupportedEncodingException exception) {
-			//Printing the stack trace
-			Main.getLogger().log(Level.SEVERE, "Failed to write users file at " + userFile.getPath(), exception);
-		}
-	}
-	
-	static boolean matchPassword(String comparePass) {
-		//Returning true if the file doesn't exist
-		if(!userFile.exists()) return true;
-		
-		//Preparing the prefPassword containers
-		byte[] comparePassBytes = comparePass.getBytes();
-		byte[] storedPassBytes = new byte[0];
-		
-		//Reading the file
-		try(BufferedReader reader = new BufferedReader(new FileReader(userFile))) {
-			//Iterating over the lines and returning true if one of them matches
-			String line;
-			while((line = reader.readLine()) != null) {
-				try {
-					storedPassBytes = Base64.getDecoder().decode(line);
-					if(Arrays.equals(comparePassBytes, storedPassBytes)) return true;
-				} catch(IllegalArgumentException exception) {
-					//Logging a warning
-					Main.getLogger().log(Level.WARNING, "Failed to decode prefPassword line (" + line + ")", exception);
-				}
-			}
-		} catch(IOException exception) {
-			//Printing the stack trace
-			Main.getLogger().log(Level.SEVERE, "Failed to read users file at " + userFile.getPath(), exception);
-			
-			//Returning false
-			return false;
-		} finally {
-			//Clearing the prefPassword containers
-			byte zero = 0;
-			Arrays.fill(comparePassBytes, zero);
-			Arrays.fill(storedPassBytes, zero);
-		}
-		
-		//Returning false
-		return false;
 	}
 	
 	static int getPrefServerPort() {

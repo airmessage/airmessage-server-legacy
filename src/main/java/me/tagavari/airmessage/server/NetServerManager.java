@@ -5,7 +5,6 @@ import io.sentry.event.BreadcrumbBuilder;
 import me.tagavari.airmessage.common.SharedValues;
 import org.jooq.impl.DSL;
 
-import javax.net.ServerSocketFactory;
 import javax.net.ssl.SSLException;
 import java.io.*;
 import java.net.ServerSocket;
@@ -50,8 +49,7 @@ class NetServerManager {
 		
 		try {
 			//Creating the server socket
-			ServerSocketFactory ssf = SecurityManager.conjureSSLContext().getServerSocketFactory();
-			ServerSocket serverSocket = ssf.createServerSocket(port);
+			ServerSocket serverSocket = new ServerSocket(port);
 			
 			//Starting the listener thread
 			listenerThread = new ListenerThread(serverSocket);
@@ -334,7 +332,7 @@ class NetServerManager {
 						//Reading the data
 						final long timeLower;
 						final long timeUpper;
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							timeLower = in.readLong();
 							timeUpper = in.readLong();
 						} catch(IOException | RuntimeException exception) {
@@ -359,7 +357,7 @@ class NetServerManager {
 					case SharedValues.nhtConversationUpdate: {
 						//Reading the chat GUID list
 						List<String> list;
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							int count = in.readInt();
 							list = new ArrayList<>();
 							for(int i = 0; i < count; i++) list.add(in.readUTF());
@@ -379,7 +377,7 @@ class NetServerManager {
 						String fileGUID;
 						int chunkSize;
 						
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
 							fileGUID = in.readUTF();
 							chunkSize = in.readInt();
@@ -389,13 +387,13 @@ class NetServerManager {
 						}
 						
 						//Sending a reply
-						try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+						try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt)) {
 							out.writeShort(requestID); //Request ID
 							out.writeUTF(fileGUID); //File GUID
 							out.flush();
 							
 							//Sending the data
-							sendPacket(this, SharedValues.nhtAttachmentReqConfirm, bos.toByteArray(), false);
+							sendPacket(this, SharedValues.nhtAttachmentReqConfirm, trgt.toByteArray(), false);
 						} catch(IOException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							Sentry.capture(exception);
@@ -414,7 +412,7 @@ class NetServerManager {
 						String chatGUID;
 						String message;
 						
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
 							chatGUID = in.readUTF();
 							message = in.readUTF();
@@ -438,7 +436,7 @@ class NetServerManager {
 						String message;
 						String service;
 						
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
 							chatMembers = new String[in.readInt()];
 							for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = in.readUTF();
@@ -466,7 +464,7 @@ class NetServerManager {
 						String fileName = null;
 						boolean isLast;
 						
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
 							requestIndex = in.readInt();
 							chatGUID = in.readUTF();
@@ -494,7 +492,7 @@ class NetServerManager {
 						String service = null;
 						boolean isLast;
 						
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
 							requestIndex = in.readInt();
 							chatMembers = new String[in.readInt()];
@@ -528,21 +526,18 @@ class NetServerManager {
 				
 				//Reading the data
 				String transmissionWord;
-				try {
-					transmissionWord = new String(data, "UTF-8");
-				} catch(UnsupportedEncodingException exception) {
-					//Logging the error
-					Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+				try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
+					SharedValues.EncryptedData pack = (SharedValues.EncryptedData) in.readObject();
+					transmissionWord = new String(pack.data, "UTF-8");
+				} catch(IOException | ClassNotFoundException exception) {
+					//Sending a message and closing the connection
+					writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(SharedValues.nhtAuthenticationBadRequest).array(), false, this::initiateClose));
 					
-					//Closing the connection
-					initiateClose();
 					return;
 				}
 				
 				//Validating the transmission
-				boolean transmissionValid = SharedValues.transmissionCheck.equals(transmissionWord);
-				
-				if(transmissionValid) {
+				if(SharedValues.transmissionCheck.equals(transmissionWord)) {
 					//Marking the client as registered
 					clientRegistered = true;
 					
