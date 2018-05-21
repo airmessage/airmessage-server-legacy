@@ -198,7 +198,7 @@ class DatabaseManager {
 						out.flush();
 						
 						//Sending the data
-						NetServerManager.sendPacket(null, SharedValues.nhtMessageUpdate, bos.toByteArray());
+						NetServerManager.sendPacket(null, SharedValues.nhtMessageUpdate, bos.toByteArray(), true);
 					} catch(IOException exception) {
 						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 						Sentry.capture(exception);
@@ -333,7 +333,7 @@ class DatabaseManager {
 			conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers));
 		}
 		
-		//Checking if the connection is still open
+		//Checking if the connection is registered and is still open
 		if(request.connection.isConnected()) {
 			//Preparing to serialize the data
 			try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
@@ -349,6 +349,8 @@ class DatabaseManager {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
 			}
+		} else {
+			Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
 		}
 	}
 	
@@ -398,21 +400,27 @@ class DatabaseManager {
 						//Reading the next chunk
 						moreDataRead = (bytesRead = inputStream.read(buffer)) != -1;
 						
-						//Preparing to serialize the data
-						try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-							out.writeShort(request.requestID); //Request ID
-							out.writeUTF(request.fileGuid); //File GUID
-							out.writeInt(requestIndex); //Request index
-							out.writeInt(compressedBuffer.length); //Compressed chunk data
-							out.write(compressedBuffer);
-							out.reset();
-							if(requestIndex == 0) out.writeLong(file.length()); //Total file length
-							out.writeBoolean(!moreDataRead); //Is last
-							out.flush();
-							
-							//Sending the data (synchronously, as otherwise this can cause a memory build-up)
-							request.connection.sendDataSync(SharedValues.nhtAttachmentReq, bos.toByteArray());
-							//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
+						//Checking if the connection is ready
+						if(request.connection.isClientRegistered() && request.connection.isConnected()) {
+							//Preparing to serialize the data
+							try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+								out.writeShort(request.requestID); //Request ID
+								out.writeUTF(request.fileGuid); //File GUID
+								out.writeInt(requestIndex); //Request index
+								out.writeInt(compressedBuffer.length); //Compressed chunk data
+								out.write(compressedBuffer);
+								out.reset();
+								if(requestIndex == 0) out.writeLong(file.length()); //Total file length
+								out.writeBoolean(!moreDataRead); //Is last
+								out.flush();
+								
+								//Sending the data (synchronously, as otherwise this can cause a memory build-up)
+								request.connection.sendDataSync(SharedValues.nhtAttachmentReq, bos.toByteArray());
+								//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
+							}
+						} else {
+							Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
+							break;
 						}
 						
 						//Adding to the request index
@@ -876,7 +884,7 @@ class DatabaseManager {
 			out.flush();
 			
 			//Sending the data
-			NetServerManager.sendPacket(null, SharedValues.nhtModifierUpdate, bos.toByteArray());
+			NetServerManager.sendPacket(null, SharedValues.nhtModifierUpdate, bos.toByteArray(), true);
 		} catch(IOException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);

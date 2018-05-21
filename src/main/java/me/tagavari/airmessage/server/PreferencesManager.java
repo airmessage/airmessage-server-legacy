@@ -22,15 +22,15 @@ import java.util.*;
 import java.util.List;
 import java.util.logging.Level;
 
-public class PreferencesManager {
+class PreferencesManager {
 	//Creating the reference values
-	private static final int SCHEMA_VERSION = 1;
+	private static final int SCHEMA_VERSION = 2;
 	
 	private static final File prefFile = new File(Constants.applicationSupportDir, "prefs.xml");
 	private static final File userFile = new File(Constants.applicationSupportDir, "users.txt");
 	
 	private static final int defaultPort = 1359;
-	private static final String[] defaultPasswords = {"cookiesandmilk"};
+	private static final String defaultPassword = "cookiesandmilk";
 	private static final boolean defaultAutoCheckUpdates = true;
 	private static final float defaultScanFrequency = 2;
 	
@@ -40,14 +40,16 @@ public class PreferencesManager {
 	private static final String domTagPort = "Port";
 	private static final String domTagAutoCheckUpdates = "AutomaticUpdateCheck";
 	private static final String domTagScanFrequency = "ScanFrequency";
+	private static final String domTagPassword = "Password";
 	
-	private static final String encryptionAlgorithm = "AES";
+	//private static final String encryptionAlgorithm = "AES";
 	private static final String textEncoding = "UTF-8";
 	
 	//Creating the preference values
-	private static int serverPort = defaultPort;
-	private static boolean autoCheckUpdates = defaultAutoCheckUpdates;
-	private static float scanFrequency = defaultScanFrequency;
+	private static int prefServerPort = defaultPort;
+	private static boolean prefAutoCheckUpdates = defaultAutoCheckUpdates;
+	private static float prefScanFrequency = defaultScanFrequency;
+	private static String prefPassword = defaultPassword;
 	
 	//Creating the window values
 	private static Text pwTextPort;
@@ -114,46 +116,69 @@ public class PreferencesManager {
 			}
 			
 			//Checking the schema version
-			boolean schemaValid = false;
+			int schemaVersion = -1;
 			NodeList schemaVerNodeList = document.getElementsByTagName(domTagSchemaVer);
 			if(schemaVerNodeList.getLength() != 0) {
 				String schemaVerString = schemaVerNodeList.item(0).getTextContent();
 				if(schemaVerString.matches(Constants.reExInteger)) {
-					int schemaVersion = Integer.parseInt(schemaVerString);
-					
-					//TODO compare for older schema version and upgrade XML
-					schemaValid = schemaVersion == SCHEMA_VERSION;
+					schemaVersion = Integer.parseInt(schemaVerString);
 				}
 			}
 			
 			//Checking if the document's schema version is invalid
-			if(!schemaValid) {
+			if(schemaVersion == -1 || schemaVersion > SCHEMA_VERSION) {
 				//Discarding and re-creating the preferences
 				return createPreferences();
+			} else if(schemaVersion < SCHEMA_VERSION) {
+				boolean result;
+				while(true) {
+					//Upgrading the schema
+					result = upgradeSchema(document, schemaVersion);
+					
+					//Breaking from the loop if the result is true
+					if(result) break;
+					
+					//Displaying a schema upgrade failure warning (abort / continue)
+					int selection = UIHelper.displaySchemaWarning();
+					
+					//Returning false if the selection was "abort" (quitting the app)
+					if(selection == 0) return false;
+					//Discarding and re-creating the preferences if the selection was "ignore"
+					else if(selection == 2) return createPreferences();
+					//Otherwise, let the loop continue on and try again
+				}
 			}
 			
 			//Reading the preferences
 			boolean preferencesUpdateRequired = false;
 			
 			String portString = document.getElementsByTagName(domTagPort).item(0).getTextContent();
-			if(portString.matches("^\\d+$")) serverPort = Integer.parseInt(portString);
+			if(portString.matches("^\\d+$")) prefServerPort = Integer.parseInt(portString);
 			else {
-				serverPort = defaultPort;
+				prefServerPort = defaultPort;
 				preferencesUpdateRequired = true;
 			}
 			
 			String autoCheckUpdatesString = document.getElementsByTagName(domTagAutoCheckUpdates).item(0).getTextContent();
-			if("true".equals(autoCheckUpdatesString)) autoCheckUpdates = true;
-			else if("false".equals(autoCheckUpdatesString)) autoCheckUpdates = false;
+			if("true".equals(autoCheckUpdatesString)) prefAutoCheckUpdates = true;
+			else if("false".equals(autoCheckUpdatesString)) prefAutoCheckUpdates = false;
 			else {
-				autoCheckUpdates = defaultAutoCheckUpdates;
+				prefAutoCheckUpdates = defaultAutoCheckUpdates;
 				preferencesUpdateRequired = true;
 			}
 			
 			String scanFrequencyString = document.getElementsByTagName(domTagScanFrequency).item(0).getTextContent();
-			if(scanFrequencyString.matches("^\\d+\\.\\d+$")) scanFrequency = Float.parseFloat(scanFrequencyString);
+			if(scanFrequencyString.matches("^\\d+\\.\\d+$")) prefScanFrequency = Float.parseFloat(scanFrequencyString);
 			else {
-				scanFrequency = defaultScanFrequency;
+				prefScanFrequency = defaultScanFrequency;
+				preferencesUpdateRequired = true;
+			}
+			
+			String passwordString = document.getElementsByTagName(domTagPassword).item(0).getTextContent();
+			try {
+				prefPassword = new String(Base64.getDecoder().decode(passwordString));
+			} catch(IllegalArgumentException exception) {
+				prefPassword = defaultPassword;
 				preferencesUpdateRequired = true;
 			}
 			
@@ -168,9 +193,29 @@ public class PreferencesManager {
 		}
 	}
 	
+	private static boolean upgradeSchema(Document document, int oldVersion) {
+		switch(oldVersion) {
+			case 1: //Multiple passwords (insecure) to single prefPassword (used for encryption)
+				//Reading the first prefPassword
+				String password;
+				if(!userFile.exists()) {
+					password = defaultPassword;
+				} else {
+					try(BufferedReader brTest = new BufferedReader(new FileReader(userFile))) {
+					
+					} catch(IOException exception) {
+					
+					}
+				}
+		}
+		
+		//Returning true
+		return true;
+	}
+	
 	private static boolean createPreferences() {
 		//Setting the default values
-		serverPort = defaultPort;
+		prefServerPort = defaultPort;
 		
 		//Writing the preferences to disk
 		return savePreferences();
@@ -195,9 +240,10 @@ public class PreferencesManager {
 			//Building the XML structure
 			Node rootNode = findCreateElement(document, document, domTagRoot);
 			findCreateElement(document, rootNode, domTagSchemaVer).setTextContent(Integer.toString(SCHEMA_VERSION));
-			findCreateElement(document, rootNode, domTagPort).setTextContent(Integer.toString(serverPort));
-			findCreateElement(document, rootNode, domTagAutoCheckUpdates).setTextContent(Boolean.toString(autoCheckUpdates));
-			findCreateElement(document, rootNode, domTagScanFrequency).setTextContent(Float.toString(scanFrequency));
+			findCreateElement(document, rootNode, domTagPort).setTextContent(Integer.toString(prefServerPort));
+			findCreateElement(document, rootNode, domTagAutoCheckUpdates).setTextContent(Boolean.toString(prefAutoCheckUpdates));
+			findCreateElement(document, rootNode, domTagScanFrequency).setTextContent(Float.toString(prefScanFrequency));
+			findCreateElement(document, rootNode, domTagPassword).setTextContent(Base64.getEncoder().encodeToString(prefPassword.getBytes()));
 			
 			//Writing the XML document
 			TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(prefFile));
@@ -230,18 +276,18 @@ public class PreferencesManager {
 			String portText = pwTextPort.getText();
 			if(!portText.isEmpty()) {
 				//Updating the port
-				serverPort = Integer.parseInt(portText); //Input is forced to be numerical due to input filter
+				prefServerPort = Integer.parseInt(portText); //Input is forced to be numerical due to input filter
 			}
 		}
 		
 		{
 			//Getting the auto update
 			boolean autoCheckUpdatesControl = pwButtonAutoUpdate.getSelection();
-			if(autoCheckUpdates != autoCheckUpdatesControl) {
-				autoCheckUpdates = autoCheckUpdatesControl;
+			if(prefAutoCheckUpdates != autoCheckUpdatesControl) {
+				prefAutoCheckUpdates = autoCheckUpdatesControl;
 				
 				//Updating the update manager
-				if(autoCheckUpdates) UpdateManager.startUpdateChecker();
+				if(prefAutoCheckUpdates) UpdateManager.startUpdateChecker();
 				else UpdateManager.stopUpdateChecker();
 			}
 		}
@@ -251,7 +297,7 @@ public class PreferencesManager {
 			String scanFrequencyText = pwTextScanFrequency.getText();
 			if(!scanFrequencyText.isEmpty()) {
 				//Updating the port
-				scanFrequency = Float.parseFloat(scanFrequencyText); //Input is forced to be numerical due to input filter
+				prefScanFrequency = Float.parseFloat(scanFrequencyText); //Input is forced to be numerical due to input filter
 			}
 		}
 		
@@ -260,7 +306,7 @@ public class PreferencesManager {
 		
 		//Updating the database manager
 		DatabaseManager databaseManager = DatabaseManager.getInstance();
-		if(databaseManager != null) databaseManager.scannerThread.updateScanFrequency((int) (scanFrequency * 1000));
+		if(databaseManager != null) databaseManager.scannerThread.updateScanFrequency((int) (prefScanFrequency * 1000));
 		
 		//Restarting the server
 		Main.restartServer();
@@ -380,7 +426,7 @@ public class PreferencesManager {
 			textGD.grabExcessVerticalSpace = false;
 			textGD.widthHint = 43;
 			pwTextPort.setLayoutData(textGD);
-			pwTextPort.setText(Integer.toString(serverPort));
+			pwTextPort.setText(Integer.toString(prefServerPort));
 			/* GridData textWarningGD = new GridData();
 			textWarningGD.widthHint = 250;
 			textWarning.setLayoutData(textWarningGD); */
@@ -410,7 +456,7 @@ public class PreferencesManager {
 			pwButtonAutoUpdate.setText(I18N.i.pref_updates_auto());
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			pwButtonAutoUpdate.setLayoutData(prefGB);
-			pwButtonAutoUpdate.setSelection(autoCheckUpdates);
+			pwButtonAutoUpdate.setSelection(prefAutoCheckUpdates);
 		}
 		
 		{
@@ -458,7 +504,7 @@ public class PreferencesManager {
 				}
 			});
 			
-			pwTextScanFrequency.setText(Float.toString(scanFrequency));
+			pwTextScanFrequency.setText(Float.toString(prefScanFrequency));
 			
 			dbScanDesc.setText(I18N.i.pref_scanning_desc());
 			dbScanDesc.setFont(UIHelper.getFont(dbScanDesc.getFont(), 10, -1));
@@ -630,7 +676,7 @@ public class PreferencesManager {
 						iterator.set(new String(Base64.getDecoder().decode(line)));
 					} catch(IllegalArgumentException exception) {
 						//Logging a warning
-						Main.getLogger().log(Level.WARNING, "Failed to decode password line (" + line + ")", exception);
+						Main.getLogger().log(Level.WARNING, "Failed to decode prefPassword line (" + line + ")", exception);
 						
 						//Removing the item
 						iterator.remove();
@@ -647,10 +693,10 @@ public class PreferencesManager {
 				return new String[0];
 			}
 		} else {
-			//Writing the default password list to disk
+			//Writing the default prefPassword list to disk
 			savePasswords(defaultPasswords);
 			
-			//Returning the default password list
+			//Returning the default prefPassword list
 			return defaultPasswords;
 		}
 	}
@@ -670,7 +716,7 @@ public class PreferencesManager {
 		//Returning true if the file doesn't exist
 		if(!userFile.exists()) return true;
 		
-		//Preparing the password containers
+		//Preparing the prefPassword containers
 		byte[] comparePassBytes = comparePass.getBytes();
 		byte[] storedPassBytes = new byte[0];
 		
@@ -684,7 +730,7 @@ public class PreferencesManager {
 					if(Arrays.equals(comparePassBytes, storedPassBytes)) return true;
 				} catch(IllegalArgumentException exception) {
 					//Logging a warning
-					Main.getLogger().log(Level.WARNING, "Failed to decode password line (" + line + ")", exception);
+					Main.getLogger().log(Level.WARNING, "Failed to decode prefPassword line (" + line + ")", exception);
 				}
 			}
 		} catch(IOException exception) {
@@ -694,7 +740,7 @@ public class PreferencesManager {
 			//Returning false
 			return false;
 		} finally {
-			//Clearing the password containers
+			//Clearing the prefPassword containers
 			byte zero = 0;
 			Arrays.fill(comparePassBytes, zero);
 			Arrays.fill(storedPassBytes, zero);
@@ -704,15 +750,15 @@ public class PreferencesManager {
 		return false;
 	}
 	
-	static int getServerPort() {
-		return serverPort;
+	static int getPrefServerPort() {
+		return prefServerPort;
 	}
 	
-	static boolean getAutoCheckUpdates() {
-		return autoCheckUpdates;
+	static boolean getPrefAutoCheckUpdates() {
+		return prefAutoCheckUpdates;
 	}
 	
-	static float getScanFrequency() {
-		return scanFrequency;
+	static float getPrefScanFrequency() {
+		return prefScanFrequency;
 	}
 }

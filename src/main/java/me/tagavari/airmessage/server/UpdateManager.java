@@ -299,7 +299,7 @@ class UpdateManager {
 		//Checking if there is not currently an update check in progress
 		if(!updateCheckInProgress.get()) {
 			//Starting an update check
-			if(PreferencesManager.getAutoCheckUpdates()) {
+			if(PreferencesManager.getPrefAutoCheckUpdates()) {
 				stopUpdateChecker();
 				startUpdateChecker();
 			} else {

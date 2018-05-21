@@ -36,6 +36,26 @@ public class UIHelper {
 		return result == SWT.YES;
 	}
 	
+	static int displaySchemaWarning() {
+		//Showing an alert dialog
+		Shell shell = new Shell();
+		MessageBox dialog = new MessageBox(shell, SWT.ICON_WARNING | SWT.ABORT | SWT.RETRY | SWT.IGNORE);
+		dialog.setMessage(I18N.i.warning_schemaUpgradeError());
+		int result = dialog.open();
+		if(!shell.isDisposed()) shell.dispose();
+		
+		//Returning the result
+		switch(result) {
+			default:
+			case SWT.ABORT:
+				return 0;
+			case SWT.RETRY:
+				return 1;
+			case SWT.IGNORE:
+				return 2;
+		}
+	}
+	
 	static void openIntroWindow() {
 		//Creating the shell
 		Shell shell = new Shell(display, SWT.NONE);

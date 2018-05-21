@@ -36,6 +36,9 @@ public interface I18N {
 	@En("AirMessage Server is not supported on versions of macOS below 10.10 (Yosemite). Would you like to continue?")
 	String warning_osUnsupported();
 	
+	@En("An error occurred occurred while upgrading.\nSelecting \"Ignore\" will clear your user preferences.")
+	String warning_schemaUpgradeError();
+	
 	@En("Server starting...")
 	String menu_starting();
 	

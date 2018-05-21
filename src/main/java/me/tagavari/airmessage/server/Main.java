@@ -118,7 +118,7 @@ class Main {
 		startServer();
 		
 		//Starting the update checker
-		if(PreferencesManager.getAutoCheckUpdates()) UpdateManager.startUpdateChecker();
+		if(PreferencesManager.getPrefAutoCheckUpdates()) UpdateManager.startUpdateChecker();
 		
 		//Adding a shutdown hook
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -146,7 +146,7 @@ class Main {
 		
 		//Starting the database scanner
 		{
-			boolean result = DatabaseManager.start((int) (PreferencesManager.getScanFrequency() * 1000));
+			boolean result = DatabaseManager.start((int) (PreferencesManager.getPrefScanFrequency() * 1000));
 			if(!result) {
 				//Updating the server state
 				setServerState(serverStateFailedDatabase);
@@ -159,7 +159,7 @@ class Main {
 		
 		//Starting the web socket manager
 		{
-			int result = NetServerManager.createServer(PreferencesManager.getServerPort(), false);
+			int result = NetServerManager.createServer(PreferencesManager.getPrefServerPort(), false);
 			if(result != NetServerManager.createServerResultOK) {
 				//Updating the server state
 				setServerState(NetServerManager.createServerErrorToServerState(result));
@@ -184,7 +184,7 @@ class Main {
 		SystemTrayManager.updateStatusMessage();
 		
 		//Starting the web socket manager
-		int result = NetServerManager.createServer(PreferencesManager.getServerPort(), true);
+		int result = NetServerManager.createServer(PreferencesManager.getPrefServerPort(), true);
 		if(result != NetServerManager.createServerResultOK) {
 			//Updating the server state
 			setServerState(NetServerManager.createServerErrorToServerState(result));

@@ -96,12 +96,12 @@ class NetServerManager {
 	 * @param type The type of message sent in the header
 	 * @param content The content to send
 	 */
-	static void sendPacket(SocketManager target, int type, byte[] content) {
+	static void sendPacket(SocketManager target, int type, byte[] content, boolean isSensitive) {
 		//Returning if the connection is not ready for a transfer
 		if(writerThread == null || (target != null && !target.isConnected())) return;
 		
 		//Queuing the request
-		writerThread.sendPacket(new WriterThread.PacketStruct(target, type, content));
+		writerThread.sendPacket(new WriterThread.PacketStruct(target, type, content, isSensitive));
 	}
 	
 	static void sendMessageRequestResponse(SocketManager target, short requestID, boolean result) {
@@ -115,7 +115,7 @@ class NetServerManager {
 			out.flush();
 			
 			//Sending the data
-			sendPacket(target, SharedValues.nhtSendResult, bos.toByteArray());
+			sendPacket(target, SharedValues.nhtSendResult, bos.toByteArray(), false);
 		} catch(IOException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
@@ -189,8 +189,12 @@ class NetServerManager {
 			try {
 				while(!isInterrupted()) {
 					PacketStruct packet = uploadQueue.take();
-					if(packet.target == null) for(SocketManager target : new ArrayList<>(connectionList)) target.sendDataSync(packet.type, packet.content);
-					else packet.target.sendDataSync(packet.type, packet.content);
+					if(packet.target == null) for(SocketManager target : new ArrayList<>(connectionList)) {
+						if(!packet.isSensitive || target.isClientRegistered()) target.sendDataSync(packet.type, packet.content);
+					}
+					else {
+						if(!packet.isSensitive || packet.target.isClientRegistered()) packet.target.sendDataSync(packet.type, packet.content);
+					}
 					if(packet.sentRunnable != null) packet.sentRunnable.run();
 				}
 			} catch(InterruptedException exception) {
@@ -206,16 +210,18 @@ class NetServerManager {
 			final SocketManager target;
 			final int type;
 			final byte[] content;
+			final boolean isSensitive;
 			Runnable sentRunnable = null;
 			
-			PacketStruct(SocketManager target, int type, byte[] content) {
+			PacketStruct(SocketManager target, int type, byte[] content, boolean isSensitive) {
 				this.target = target;
 				this.type = type;
 				this.content = content;
+				this.isSensitive = isSensitive;
 			}
 			
-			PacketStruct(SocketManager target, int type, byte[] content, Runnable sentRunnable) {
-				this(target, type, content);
+			PacketStruct(SocketManager target, int type, byte[] content, boolean isSensitive, Runnable sentRunnable) {
+				this(target, type, content, isSensitive);
 				this.sentRunnable = sentRunnable;
 			}
 		}
@@ -251,7 +257,7 @@ class NetServerManager {
 			connectionList.add(this);
 			
 			//Sending the server version
-			sendPacket(this, SharedValues.nhtInformation, ByteBuffer.allocate(Integer.SIZE / 8).putInt(SharedValues.mmCommunicationsVersion).array());
+			sendPacket(this, SharedValues.nhtInformation, ByteBuffer.allocate(Integer.SIZE / 8).putInt(SharedValues.mmCommunicationsVersion).array(), false);
 			
 			//Starting the state timer
 			registrationExpiryTimer = new Timer();
@@ -317,7 +323,7 @@ class NetServerManager {
 				return;
 			}
 			else if(messageType == SharedValues.nhtPing) {
-				writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtPong, new byte[0]));
+				writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtPong, new byte[0], false));
 				return;
 			}
 			
@@ -389,7 +395,7 @@ class NetServerManager {
 							out.flush();
 							
 							//Sending the data
-							sendPacket(this, SharedValues.nhtAttachmentReqConfirm, bos.toByteArray());
+							sendPacket(this, SharedValues.nhtAttachmentReqConfirm, bos.toByteArray(), false);
 						} catch(IOException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							Sentry.capture(exception);
@@ -537,14 +543,14 @@ class NetServerManager {
 				boolean transmissionValid = SharedValues.transmissionCheck.equals(transmissionWord);
 				
 				if(transmissionValid) {
-					//Sending a message
-					writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(SharedValues.nhtAuthenticationOK).array()));
-					
 					//Marking the client as registered
 					clientRegistered = true;
+					
+					//Sending a message
+					writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(SharedValues.nhtAuthenticationOK).array(), false));
 				} else {
 					//Sending a message and closing the connection
-					writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(SharedValues.nhtAuthenticationUnauthorized).array(), this::initiateClose));
+					writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(SharedValues.nhtAuthenticationUnauthorized).array(), false, this::initiateClose));
 				}
 			}
 		}
@@ -559,7 +565,7 @@ class NetServerManager {
 		
 		void initiateClose() {
 			//Sending a message and closing the connection
-			writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtClose, new byte[0], this::closeConnection));
+			writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtClose, new byte[0], false, this::closeConnection));
 		}
 		
 		void initiateCloseSync() {
@@ -607,6 +613,10 @@ class NetServerManager {
 		
 		boolean isConnected() {
 			return isConnected.get() && socket.isConnected();
+		}
+		
+		boolean isClientRegistered() {
+			return clientRegistered;
 		}
 		
 		/**
