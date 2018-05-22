@@ -21,7 +21,7 @@ import java.io.*;
 import java.util.Base64;
 import java.util.logging.Level;
 
-class PreferencesManager {
+public class PreferencesManager {
 	//Creating the reference values
 	private static final int SCHEMA_VERSION = 2;
 	
@@ -125,7 +125,6 @@ class PreferencesManager {
 			
 			boolean preferencesUpdateRequired = false;
 			
-			System.out.println("Loaded preferences with schema version " + schemaVersion);
 			//Checking if the document's schema version is invalid
 			if(schemaVersion == -1 || schemaVersion > SCHEMA_VERSION) {
 				//Discarding and re-creating the preferences
@@ -536,7 +535,7 @@ class PreferencesManager {
 			securityLabel.setText(I18N.i.pref_security());
 			securityLabel.setLayoutData(new GridData(GridData.END, GridData.CENTER, false, false));
 			
-			prefsButton.setText(I18N.i.button_editPasswords());
+			prefsButton.setText(I18N.i.button_editPassword());
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			prefGB.horizontalIndent = -8;
 			prefsButton.setLayoutData(prefGB);
@@ -763,5 +762,9 @@ class PreferencesManager {
 	
 	static float getPrefScanFrequency() {
 		return prefScanFrequency;
+	}
+	
+	public static String getPrefPassword() {
+		return prefPassword;
 	}
 }

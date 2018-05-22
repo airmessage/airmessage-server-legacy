@@ -6,7 +6,9 @@ import org.jooq.*;
 import org.jooq.impl.DSL;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
@@ -191,15 +193,19 @@ class DatabaseManager {
 				
 				//Checking if there are new messages
 				if(dataFetchResult != null && !dataFetchResult.conversationItems.isEmpty()) {
-					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+					try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
+						ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
 						//Serializing the data
-						out.writeInt(dataFetchResult.conversationItems.size());
-						for(SharedValues.ConversationItem item : dataFetchResult.conversationItems) out.writeObject(item);
+						outSec.writeInt(dataFetchResult.conversationItems.size());
+						for(SharedValues.ConversationItem item : dataFetchResult.conversationItems) outSec.writeObject(item);
+						outSec.flush();
+						
+						out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
 						out.flush();
 						
 						//Sending the data
-						NetServerManager.sendPacket(null, SharedValues.nhtMessageUpdate, bos.toByteArray(), true);
-					} catch(IOException exception) {
+						NetServerManager.sendPacket(null, NetServerManager.nhtMessageUpdate, trgt.toByteArray(), true);
+					} catch(IOException | GeneralSecurityException exception) {
 						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 						Sentry.capture(exception);
 					}
@@ -336,16 +342,20 @@ class DatabaseManager {
 		//Checking if the connection is registered and is still open
 		if(request.connection.isConnected()) {
 			//Preparing to serialize the data
-			try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+			try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
+				ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
 				//Serializing the data
-				out.writeInt(conversationInfoList.size());
-				for(SharedValues.ConversationInfo item : conversationInfoList) out.writeObject(item);
+				outSec.writeInt(conversationInfoList.size());
+				for(SharedValues.ConversationInfo item : conversationInfoList) outSec.writeObject(item);
+				outSec.flush();
+				
+				out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword())); //Encrypted data
 				out.flush();
 				
 				//Sending the conversation info
-				request.connection.sendDataSync(SharedValues.nhtConversationUpdate, bos.toByteArray());
+				request.connection.sendDataSync(NetServerManager.nhtConversationUpdate, trgt.toByteArray());
 				//NetServerManager.sendPacket(request.connection, SharedValues.nhtConversationUpdate, bos.toByteArray());
-			} catch(IOException exception) {
+			} catch(IOException | GeneralSecurityException exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
 			}
@@ -403,19 +413,23 @@ class DatabaseManager {
 						//Checking if the connection is ready
 						if(request.connection.isClientRegistered() && request.connection.isConnected()) {
 							//Preparing to serialize the data
-							try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+							try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos);
+								ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
 								out.writeShort(request.requestID); //Request ID
-								out.writeUTF(request.fileGuid); //File GUID
 								out.writeInt(requestIndex); //Request index
-								out.writeInt(compressedBuffer.length); //Compressed chunk data
-								out.write(compressedBuffer);
-								out.reset();
 								if(requestIndex == 0) out.writeLong(file.length()); //Total file length
 								out.writeBoolean(!moreDataRead); //Is last
+								
+								outSec.writeUTF(request.fileGuid); //File GUID
+								outSec.writeInt(compressedBuffer.length); //Compressed chunk data
+								outSec.write(compressedBuffer);
+								outSec.flush();
+								
+								out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
 								out.flush();
 								
 								//Sending the data (synchronously, as otherwise this can cause a memory build-up)
-								request.connection.sendDataSync(SharedValues.nhtAttachmentReq, bos.toByteArray());
+								request.connection.sendDataSync(NetServerManager.nhtAttachmentReq, bos.toByteArray());
 								//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
 							}
 						} else {
@@ -430,10 +444,7 @@ class DatabaseManager {
 					//Setting the succeeded variable to false
 					succeeded = false;
 				}
-			} catch(OutOfMemoryError exception) {
-				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-				Sentry.capture(exception);
-			} catch(IOException exception) {
+			} catch(IOException | GeneralSecurityException exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
 			}
@@ -441,22 +452,8 @@ class DatabaseManager {
 		
 		//Checking if the attempt was a failure
 		if(!succeeded) {
-			if(request.connection.isConnected()) {
-				//Preparing to serialize the data
-				try(ByteArrayOutputStream bos = new ByteArrayOutputStream();
-					ObjectOutputStream out = new ObjectOutputStream(bos)) {
-					out.writeShort(request.requestID); //Request ID
-					out.writeUTF(request.fileGuid); //File GUID
-					out.flush();
-					
-					//Sending the data
-					request.connection.sendDataSync(SharedValues.nhtAttachmentReqFail, bos.toByteArray());
-					//NetServerManager.sendPacket(request.connection, SharedValues.nhtAttachmentReqFail, bos.toByteArray());
-				} catch(IOException exception) {
-					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-					Sentry.capture(exception);
-				}
-			}
+			//Sending a reply
+			if(request.connection.isConnected()) request.connection.sendDataSync(NetServerManager.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8).putShort(request.requestID).array());
 		}
 	}
 	
@@ -466,17 +463,21 @@ class DatabaseManager {
 			DataFetchResult result = fetchData(connection, request.filter);
 			if(request.connection.isConnected()) {
 				//Serializing the data
-				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-					out.writeInt(result.conversationItems.size());
-					for(SharedValues.ConversationItem item : result.conversationItems) out.writeObject(item);
+				try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
+					ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
+					outSec.writeInt(result.conversationItems.size());
+					for(SharedValues.ConversationItem item : result.conversationItems) outSec.writeObject(item);
+					outSec.flush();
+					
+					out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
 					out.flush();
 					
 					//Sending the data
-					request.connection.sendDataSync(request.messageResponseType, bos.toByteArray());
+					request.connection.sendDataSync(request.messageResponseType, trgt.toByteArray());
 					//NetServerManager.sendPacket(request.connection, request.messageResponseType, bos.toByteArray());
 				}
 			}
-		} catch(NoSuchAlgorithmException | IOException | OutOfMemoryError | RuntimeException exception) {
+		} catch(IOException | GeneralSecurityException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 		}
@@ -528,23 +529,28 @@ class DatabaseManager {
 			//Checking if the connection is still open
 			if(request.connection.isConnected()) {
 				//Serializing the data
-				try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
+				try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
+					ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
 					//Writing the message list
-					out.writeInt(messageResult.conversationItems.size());
-					for(SharedValues.ConversationItem item : messageResult.conversationItems) out.writeObject(item);
+					outSec.writeInt(messageResult.conversationItems.size());
+					for(SharedValues.ConversationItem item : messageResult.conversationItems) outSec.writeObject(item);
 					
 					//Writing the conversation list
-					out.writeInt(conversationInfoList.size());
-					for(SharedValues.ConversationInfo item : conversationInfoList) out.writeObject(item);
+					outSec.writeInt(conversationInfoList.size());
+					for(SharedValues.ConversationInfo item : conversationInfoList) outSec.writeObject(item);
 					
+					outSec.flush();
+					
+					//Encrypting and writing the data
+					out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
 					out.flush();
 					
 					//Sending the data
-					request.connection.sendDataSync(SharedValues.nhtMassRetrieval, bos.toByteArray());
+					request.connection.sendDataSync(NetServerManager.nhtMassRetrieval, trgt.toByteArray());
 					//NetServerManager.sendPacket(request.connection, SharedValues.nhtMassRetrieval, bos.toByteArray());
 				}
 			}
-		} catch(NoSuchAlgorithmException | IOException | OutOfMemoryError | RuntimeException exception) {
+		} catch(IOException | OutOfMemoryError | RuntimeException | GeneralSecurityException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 		}
@@ -878,14 +884,18 @@ class DatabaseManager {
 		if(modifierList.isEmpty()) return;
 
 		//Serializing the data
-		try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-			out.writeInt(modifierList.size());
-			for(SharedValues.ModifierInfo item : modifierList) out.writeObject(item);
+		try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
+			ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
+			outSec.writeInt(modifierList.size());
+			for(SharedValues.ModifierInfo item : modifierList) outSec.writeObject(item);
+			outSec.flush();
+			
+			out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
 			out.flush();
 			
 			//Sending the data
-			NetServerManager.sendPacket(null, SharedValues.nhtModifierUpdate, bos.toByteArray(), true);
-		} catch(IOException exception) {
+			NetServerManager.sendPacket(null, NetServerManager.nhtModifierUpdate, trgt.toByteArray(), true);
+		} catch(IOException | GeneralSecurityException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 		}
@@ -916,7 +926,7 @@ class DatabaseManager {
 		if(!file.exists() || !file.isFile()) return null;
 		
 		//Preparing to read the file
-		MessageDigest messageDigest = MessageDigest.getInstance(SharedValues.hashAlgorithm);
+		MessageDigest messageDigest = MessageDigest.getInstance(NetServerManager.hashAlgorithm);
 		try (FileInputStream inputStream = new FileInputStream(file)) {
 			byte[] dataBytes = new byte[1024];
 			

@@ -18,8 +18,8 @@ public interface I18N {
 	@En("Cancel")
 	String button_cancel();
 	
-	@En("Edit Passwords\u2026")
-	String button_editPasswords();
+	@En("Edit Password\u2026")
+	String button_editPassword();
 	
 	@En("Retry")
 	String button_retry();
