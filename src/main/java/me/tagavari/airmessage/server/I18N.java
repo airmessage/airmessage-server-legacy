@@ -121,7 +121,7 @@ public interface I18N {
 	String message_updateAvailable_title(String name);
 	
 	@En("{0} {1} is now available - you have {2}. Would you like to download it now?")
-	String message_updateAvailable_description(String name, String currentVer, String newVer);
+	String message_updateAvailable_description(String name, String newVer, String currentVer);
 	
 	@En("Release Notes:")
 	String message_releaseNotes();

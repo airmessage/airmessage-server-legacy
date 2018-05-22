@@ -172,7 +172,7 @@ class UpdateManager {
 			labelTitle.setLayoutData(labelTitleGD);
 			
 			Label labelDescription = new Label(shell, SWT.WRAP);
-			labelDescription.setText(I18N.i.message_updateAvailable_description(Constants.APP_NAME, Constants.SERVER_VERSION, newVer));
+			labelDescription.setText(I18N.i.message_updateAvailable_description(Constants.APP_NAME, newVer, Constants.SERVER_VERSION));
 			GridData labelDescriptionGD = new GridData();
 			labelDescriptionGD.grabExcessHorizontalSpace = true;
 			labelDescriptionGD.horizontalAlignment = GridData.FILL;
