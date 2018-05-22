@@ -5,13 +5,13 @@ import io.sentry.event.BreadcrumbBuilder;
 import me.tagavari.airmessage.common.SharedValues;
 import org.jooq.impl.DSL;
 
-import javax.net.ServerSocketFactory;
 import javax.net.ssl.SSLException;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -21,10 +21,44 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
 class NetServerManager {
-	//Creating the reference values
+	//Creating the transmission header values
+	public static final int mmCommunicationsVersion = 4;
+	public static final int mmCommunicationsSubVersion = 1;
+	
+	//NHT = Net Header Type
+	public static final int nhtClose = -1;
+	public static final int nhtPing = -2;
+	public static final int nhtPong = -3;
+	public static final int nhtInformation = 0;
+	public static final int nhtAuthentication = 1;
+	public static final int nhtMessageUpdate = 2;
+	public static final int nhtTimeRetrieval = 3;
+	public static final int nhtMassRetrieval = 4;
+	public static final int nhtConversationUpdate = 5;
+	public static final int nhtModifierUpdate = 6;
+	public static final int nhtAttachmentReq = 7;
+	public static final int nhtAttachmentReqConfirm = 8;
+	public static final int nhtAttachmentReqFail = 9;
+	
+	public static final int nhtSendResult = 100;
+	public static final int nhtSendTextExisting = 101;
+	public static final int nhtSendTextNew = 102;
+	public static final int nhtSendFileExisting = 103;
+	public static final int nhtSendFileNew = 104;
+	
+	public static final int nhtAuthenticationOK = 0;
+	public static final int nhtAuthenticationUnauthorized = 1;
+	public static final int nhtAuthenticationBadRequest = 2;
+	
+	public static final String stringCharset = "UTF-8";
+	public static final String hashAlgorithm = "MD5";
+	public static final String transmissionCheck = "4yAIlVK0Ce_Y7nv6at_hvgsFtaMq!lZYKipV40Fp5E%VSsLSML";
+	
+	//Creating the other reference values
 	static final int createServerResultOK = 0;
 	static final int createServerResultPort = 1;
 	static final int createServerResultInternal = 2;
+	static final int maxPacketAllocation = 50 * 1024 * 1024; //50 MB
 	
 	//private static final long keepAliveMillis = 30 * 1000; //30 seconds
 	private static final long keepAliveMillis = 30 * 60 * 1000; //30 minutes
@@ -49,8 +83,7 @@ class NetServerManager {
 		
 		try {
 			//Creating the server socket
-			ServerSocketFactory ssf = SecurityManager.conjureSSLContext().getServerSocketFactory();
-			ServerSocket serverSocket = ssf.createServerSocket(port);
+			ServerSocket serverSocket = new ServerSocket(port);
 			
 			//Starting the listener thread
 			listenerThread = new ListenerThread(serverSocket);
@@ -95,30 +128,20 @@ class NetServerManager {
 	 * @param type The type of message sent in the header
 	 * @param content The content to send
 	 */
-	static void sendPacket(SocketManager target, int type, byte[] content) {
+	static void sendPacket(SocketManager target, int type, byte[] content, boolean isSensitive) {
 		//Returning if the connection is not ready for a transfer
 		if(writerThread == null || (target != null && !target.isConnected())) return;
 		
 		//Queuing the request
-		writerThread.sendPacket(new WriterThread.PacketStruct(target, type, content));
+		writerThread.sendPacket(new WriterThread.PacketStruct(target, type, content, isSensitive));
 	}
 	
 	static void sendMessageRequestResponse(SocketManager target, short requestID, boolean result) {
 		//Returning if the connection is not open
 		if(!target.isConnected()) return;
 		
-		//Preparing to serialize
-		try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-			out.writeShort(requestID); //Request ID
-			out.writeBoolean(result); //Result
-			out.flush();
-			
-			//Sending the data
-			sendPacket(target, SharedValues.nhtSendResult, bos.toByteArray());
-		} catch(IOException exception) {
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			Sentry.capture(exception);
-		}
+		//Sending the response
+		sendPacket(target, nhtSendResult, ByteBuffer.allocate(Short.SIZE / 8 + 1).putShort(requestID).put((byte) (result ? 1 : 0)).array(), false);
 	}
 	
 	static int getConnectionCount() {
@@ -188,8 +211,12 @@ class NetServerManager {
 			try {
 				while(!isInterrupted()) {
 					PacketStruct packet = uploadQueue.take();
-					if(packet.target == null) for(SocketManager target : new ArrayList<>(connectionList)) target.sendDataSync(packet.type, packet.content);
-					else packet.target.sendDataSync(packet.type, packet.content);
+					if(packet.target == null) for(SocketManager target : new ArrayList<>(connectionList)) {
+						if(!packet.isSensitive || target.isClientRegistered()) target.sendDataSync(packet.type, packet.content);
+					}
+					else {
+						if(!packet.isSensitive || packet.target.isClientRegistered()) packet.target.sendDataSync(packet.type, packet.content);
+					}
 					if(packet.sentRunnable != null) packet.sentRunnable.run();
 				}
 			} catch(InterruptedException exception) {
@@ -205,16 +232,18 @@ class NetServerManager {
 			final SocketManager target;
 			final int type;
 			final byte[] content;
+			final boolean isSensitive;
 			Runnable sentRunnable = null;
 			
-			PacketStruct(SocketManager target, int type, byte[] content) {
+			PacketStruct(SocketManager target, int type, byte[] content, boolean isSensitive) {
 				this.target = target;
 				this.type = type;
 				this.content = content;
+				this.isSensitive = isSensitive;
 			}
 			
-			PacketStruct(SocketManager target, int type, byte[] content, Runnable sentRunnable) {
-				this(target, type, content);
+			PacketStruct(SocketManager target, int type, byte[] content, boolean isSensitive, Runnable sentRunnable) {
+				this(target, type, content, isSensitive);
 				this.sentRunnable = sentRunnable;
 			}
 		}
@@ -222,18 +251,19 @@ class NetServerManager {
 	
 	static class SocketManager {
 		private static final long registrationTime = 1000 * 10; //10 seconds
+		private int testID = new Random().nextInt(100);
 		
 		/* HEADER DATA
 		 * 4 bytes: int - message type
 		 * 4 bytes: int - content length
-		 * Remainder: array - content
+		 * content length: array - content
 		 */
 		private final Socket socket;
 		private final ReaderThread readerThread;
-		private final OutputStream outputStream;
+		private final DataOutputStream outputStream;
 		private final AtomicBoolean isConnected = new AtomicBoolean(true);
 		
-		private Timer registrationExpiryTimer;
+		private Timer handshakeExpiryTimer;
 		private boolean clientRegistered = false;
 		
 		private final Lock pingResponseTimerLock = new ReentrantLock();
@@ -242,26 +272,29 @@ class NetServerManager {
 		private SocketManager(Socket socket) throws IOException {
 			//Setting the socket information
 			this.socket = socket;
-			readerThread = new ReaderThread(socket.getInputStream());
+			readerThread = new ReaderThread(new DataInputStream(socket.getInputStream()));
 			readerThread.start();
-			outputStream = socket.getOutputStream();
-
+			outputStream = new DataOutputStream(socket.getOutputStream());
+			
+			//Adding the connection
+			connectionList.add(this);
+			
+			//Sending the server version
+			sendPacket(this, nhtInformation, ByteBuffer.allocate(Integer.SIZE * 2 / 8).putInt(mmCommunicationsVersion).putInt(mmCommunicationsSubVersion).array(), false);
+			
 			//Starting the state timer
-			registrationExpiryTimer = new Timer();
-			registrationExpiryTimer.schedule(new TimerTask() {
+			handshakeExpiryTimer = new Timer();
+			handshakeExpiryTimer.schedule(new TimerTask() {
 				@Override
 				public void run() {
 					//Stopping the registration timer
-					registrationExpiryTimer.cancel();
-					registrationExpiryTimer = null;
+					handshakeExpiryTimer.cancel();
+					handshakeExpiryTimer = null;
 					
 					//Closing the connection
 					initiateClose();
 				}
 			}, registrationTime);
-			
-			//Adding the connection
-			connectionList.add(this);
 			
 			//Updating the UI
 			UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);
@@ -274,21 +307,21 @@ class NetServerManager {
 			if(!isConnected()) return false;
 			
 			try {
-				outputStream.write(ByteBuffer.allocate(Integer.SIZE / 8 * 2).putInt(messageType).putInt(data.length).array());
+				outputStream.writeInt(messageType);
+				outputStream.writeInt(data.length);
 				outputStream.write(data);
 				outputStream.flush();
 				
 				return true;
 			} catch(SocketException | SSLException exception) {
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				if(isConnected() && Constants.checkDisconnected(exception)) closeConnection();
 				
 				return false;
 			} catch(IOException exception) {
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				if(isConnected() && Constants.checkDisconnected(exception)) closeConnection();
-				else {
-					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-					Sentry.capture(exception);
-				}
+				else Sentry.capture(exception);
 				
 				return false;
 			}
@@ -306,49 +339,55 @@ class NetServerManager {
 				pingResponseTimerLock.unlock();
 			}
 			
+			//Responding to standard requests
+			if(messageType == nhtClose) {
+				closeConnection();
+				return;
+			}
+			else if(messageType == nhtPing) {
+				writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtPong, new byte[0], false));
+				return;
+			}
+			
 			//Checking if the client is registered
 			if(clientRegistered) {
 				switch(messageType) {
-					case SharedValues.nhtClose:
-						closeConnection();
-						break;
-					case SharedValues.nhtPing:
-						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtPong, new byte[0]));
-						break;
-					case SharedValues.nhtTimeRetrieval: {
+					case nhtTimeRetrieval: {
 						//Reading the data
 						final long timeLower;
 						final long timeUpper;
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
-							timeLower = in.readLong();
-							timeUpper = in.readLong();
-						} catch(IOException | RuntimeException exception) {
-							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-							break;
-						}
+						
+						ByteBuffer byteBuffer = ByteBuffer.wrap(data);
+						timeLower = byteBuffer.getLong();
+						timeUpper = byteBuffer.getLong();
 						
 						//Creating a new request and queuing it
 						DatabaseManager.getInstance().addClientRequest(new DatabaseManager.CustomRetrievalRequest(
 								this,
 								() -> DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper))),
-								SharedValues.nhtTimeRetrieval));
+								nhtTimeRetrieval));
 						
 						break;
 					}
-					case SharedValues.nhtMassRetrieval: {
+					case nhtMassRetrieval: {
 						//Creating a new request and queuing it
 						DatabaseManager.getInstance().addClientRequest(new DatabaseManager.MassRetrievalRequest(this));
 						
 						break;
 					}
-					case SharedValues.nhtConversationUpdate: {
+					case nhtConversationUpdate: {
 						//Reading the chat GUID list
 						List<String> list;
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
-							int count = in.readInt();
-							list = new ArrayList<>();
-							for(int i = 0; i < count; i++) list.add(in.readUTF());
-						} catch(IOException | RuntimeException exception) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
+							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							dataSec.decrypt(PreferencesManager.getPrefPassword());
+							
+							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
+								int count = inSec.readInt();
+								list = new ArrayList<>(count);
+								for(int i = 0; i < count; i++) list.add(inSec.readUTF());
+							}
+						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -358,52 +397,54 @@ class NetServerManager {
 						
 						break;
 					}
-					case SharedValues.nhtAttachmentReq: {
+					case nhtAttachmentReq: {
 						//Getting the request information
 						short requestID;
-						String fileGUID;
 						int chunkSize;
+
+						String fileGUID;
 						
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
-							fileGUID = in.readUTF();
 							chunkSize = in.readInt();
-						} catch(IOException | RuntimeException exception) {
+							
+							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							dataSec.decrypt(PreferencesManager.getPrefPassword());
+							
+							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
+								fileGUID = inSec.readUTF();
+							}
+						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
 						
 						//Sending a reply
-						try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-							out.writeShort(requestID); //Request ID
-							out.writeUTF(fileGUID); //File GUID
-							out.flush();
-							
-							//Sending the data
-							sendPacket(this, SharedValues.nhtAttachmentReqConfirm, bos.toByteArray());
-						} catch(IOException exception) {
-							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-							Sentry.capture(exception);
-							
-							break;
-						}
+						sendPacket(this, nhtAttachmentReqConfirm, ByteBuffer.allocate(Short.SIZE / 8).putShort(requestID).array(), false);
 						
 						//Adding the request
 						DatabaseManager.getInstance().addClientRequest(new DatabaseManager.FileRequest(this, fileGUID, requestID, chunkSize));
 						
 						break;
 					}
-					case SharedValues.nhtSendTextExisting: {
+					case nhtSendTextExisting: {
 						//Getting the request information
 						short requestID;
+						
 						String chatGUID;
 						String message;
 						
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
-							chatGUID = in.readUTF();
-							message = in.readUTF();
-						} catch(IOException | RuntimeException exception) {
+							
+							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							dataSec.decrypt(PreferencesManager.getPrefPassword());
+							
+							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
+								chatGUID = inSec.readUTF();
+								message = inSec.readUTF();
+							}
+						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -416,20 +457,27 @@ class NetServerManager {
 						
 						break;
 					}
-					case SharedValues.nhtSendTextNew: {
+					case nhtSendTextNew: {
 						//Getting the request information
 						short requestID;
+						
 						String[] chatMembers;
 						String message;
 						String service;
 						
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
-							chatMembers = new String[in.readInt()];
-							for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = in.readUTF();
-							message = in.readUTF();
-							service = in.readUTF();
-						} catch(IOException | RuntimeException exception) {
+							
+							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							dataSec.decrypt(PreferencesManager.getPrefPassword());
+							
+							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
+								chatMembers = new String[inSec.readInt()];
+								for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = inSec.readUTF();
+								message = inSec.readUTF();
+								service = inSec.readUTF();
+							}
+						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -442,24 +490,31 @@ class NetServerManager {
 						
 						break;
 					}
-					case SharedValues.nhtSendFileExisting: {
+					case nhtSendFileExisting: {
 						//Getting the request information
 						short requestID;
 						int requestIndex;
+						boolean isLast;
+						
 						String chatGUID;
 						byte[] compressedBytes;
 						String fileName = null;
-						boolean isLast;
 						
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
 							requestIndex = in.readInt();
-							chatGUID = in.readUTF();
-							compressedBytes = new byte[in.readInt()];
-							in.readFully(compressedBytes);
-							if(requestIndex == 0) fileName = in.readUTF();
 							isLast = in.readBoolean();
-						} catch(IOException | RuntimeException exception) {
+							
+							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							dataSec.decrypt(PreferencesManager.getPrefPassword());
+							
+							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
+								chatGUID = inSec.readUTF();
+								compressedBytes = new byte[inSec.readInt()];
+								inSec.readFully(compressedBytes);
+								if(requestIndex == 0) fileName = inSec.readUTF();
+							}
+						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -469,29 +524,36 @@ class NetServerManager {
 						
 						break;
 					}
-					case SharedValues.nhtSendFileNew: {
+					case nhtSendFileNew: {
 						//Getting the request information
 						short requestID;
 						int requestIndex;
+						boolean isLast;
+						
 						String[] chatMembers;
 						byte[] compressedBytes;
 						String fileName = null;
 						String service = null;
-						boolean isLast;
 						
-						try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
 							requestIndex = in.readInt();
-							chatMembers = new String[in.readInt()];
-							for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = in.readUTF();
-							compressedBytes = new byte[in.readInt()];
-							in.readFully(compressedBytes);
-							if(requestIndex == 0) {
-								fileName = in.readUTF();
-								service = in.readUTF();
-							}
 							isLast = in.readBoolean();
-						} catch(IOException | RuntimeException exception) {
+							
+							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							dataSec.decrypt(PreferencesManager.getPrefPassword());
+							
+							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
+								chatMembers = new String[inSec.readInt()];
+								for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = inSec.readUTF();
+								compressedBytes = new byte[inSec.readInt()];
+								inSec.readFully(compressedBytes);
+								if(requestIndex == 0) {
+									fileName = inSec.readUTF();
+									service = inSec.readUTF();
+								}
+							}
+						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -503,123 +565,48 @@ class NetServerManager {
 					}
 				}
 			} else {
-				if(messageType != SharedValues.nhtAuthentication) return;
+				if(messageType != nhtAuthentication) return;
 				
 				//Stopping the registration timer
-				if(registrationExpiryTimer != null) {
-					registrationExpiryTimer.cancel();
-					registrationExpiryTimer = null;
+				if(handshakeExpiryTimer != null) {
+					handshakeExpiryTimer.cancel();
+					handshakeExpiryTimer = null;
 				}
 				
 				//Reading the data
-				int[] clientVersions;
-				String password;
-				try(ByteArrayInputStream bis = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(bis)) {
-					int verCount = in.readInt();
-					clientVersions = new int[verCount];
-					for(int i = 0; i < verCount; i++) clientVersions[i] = in.readInt();
-					
-					password = in.readUTF();
-				} catch(EOFException | UTFDataFormatException exception) {
-					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+				String transmissionWord;
+				try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
+					SharedValues.EncryptableData pack = (SharedValues.EncryptableData) in.readObject();
+					pack.decrypt(PreferencesManager.getPrefPassword());
+					transmissionWord = new String(pack.data, stringCharset);
+				} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
+					//Logging the exception
+					Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
 					
 					//Sending a message and closing the connection
-					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-						out.writeInt(SharedValues.mmCommunicationsVersion); //Communications protocol version
-						out.writeInt(SharedValues.nhtAuthenticationBadRequest); //Authentication result
-						out.flush();
-						
-						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray(), this::closeConnection));
-					} catch(IOException buildException) {
-						//Recording the error
-						Main.getLogger().log(Level.WARNING, buildException.getMessage(), buildException);
-						Sentry.capture(buildException);
-						
-						//Closing the connection
-						closeConnection();
-					}
-					
-					return;
-				} catch(IOException | RuntimeException exception) {
-					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-					return;
-				}
-				
-				//Finding an applicable version
-				boolean versionsApplicable = false;
-				for(int version : clientVersions) {
-					if(SharedValues.mmCommunicationsVersion == version) {
-						versionsApplicable = true;
-						break;
-					}
-				}
-				
-				//Sending a message if the versions are not applicable
-				if(!versionsApplicable) {
-					//Sending a message and closing the connection
-					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-						out.writeInt(SharedValues.mmCommunicationsVersion); //Communications protocol version
-						out.writeInt(SharedValues.nhtAuthenticationVersionMismatch); //Authentication result
-						out.flush();
-						
-						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray(), this::initiateClose));
-					} catch(IOException exception) {
-						//Recording the error
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						Sentry.capture(exception);
-						
-						//Closing the connection
-						initiateClose();
-					}
+					int responseCode = exception instanceof GeneralSecurityException ? nhtAuthenticationUnauthorized : nhtAuthenticationBadRequest;
+					writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(responseCode).array(), false, this::initiateClose));
 					
 					return;
 				}
 				
-				//Validating the password
-				boolean passwordValid = PreferencesManager.matchPassword(password);
-				
-				if(passwordValid) {
-					//Sending a message
-					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-						out.writeInt(SharedValues.mmCommunicationsVersion); //Communications protocol version
-						out.writeInt(SharedValues.nhtAuthenticationOK); //Authentication result
-						out.flush();
-						
-						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray()));
-					} catch(IOException exception) {
-						//Recording the error
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						Sentry.capture(exception);
-						
-						//Closing the connection
-						initiateClose();
-					}
-					
+				//Validating the transmission
+				if(transmissionCheck.equals(transmissionWord)) {
 					//Marking the client as registered
 					clientRegistered = true;
+					
+					//Sending a message
+					writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(nhtAuthenticationOK).array(), false));
 				} else {
 					//Sending a message and closing the connection
-					try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos)) {
-						out.writeInt(SharedValues.mmCommunicationsVersion); //Communications protocol version
-						out.writeInt(SharedValues.nhtAuthenticationUnauthorized); //Authentication result
-						out.flush();
-						
-						writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtAuthentication, bos.toByteArray(), this::initiateClose));
-					} catch(IOException exception) {
-						//Recording the error
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						Sentry.capture(exception);
-						
-						//Closing the connection
-						initiateClose();
-					}
+					writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(nhtAuthenticationUnauthorized).array(), false, this::initiateClose));
 				}
 			}
 		}
 		
 		/* void initiateClose(int code) {
 			//Sending a message and closing the connection
-			writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtClose, ByteBuffer.allocate(Integer.SIZE / 8).putInt(code).array(), this::closeConnection));
+			writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtClose, ByteBuffer.allocate(Integer.SIZE / 8).putInt(code).array(), this::closeConnection));
 			
 			//Closing the connection
 			//closeConnection();
@@ -627,17 +614,17 @@ class NetServerManager {
 		
 		void initiateClose() {
 			//Sending a message and closing the connection
-			writerThread.sendPacket(new WriterThread.PacketStruct(this, SharedValues.nhtClose, new byte[0], this::closeConnection));
+			writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtClose, new byte[0], false, this::closeConnection));
 		}
 		
 		void initiateCloseSync() {
-			sendDataSync(SharedValues.nhtClose, new byte[0]);
+			sendDataSync(nhtClose, new byte[0]);
 			closeConnection();
 		}
 		
 		private void closeConnection() {
 			//Removing the connection record
-			if(connectionList.contains(this)) connectionList.remove(this);
+			connectionList.remove(this);
 			
 			//Returning if the connection is not open
 			if(!isConnected()) return;
@@ -677,12 +664,16 @@ class NetServerManager {
 			return isConnected.get() && socket.isConnected();
 		}
 		
+		boolean isClientRegistered() {
+			return clientRegistered;
+		}
+		
 		/**
 		 * Sends a ping to the client, and awaits the connection
 		 * The connection will be closed if no response is received within the time limit
 		 */
 		void testConnectionSync() {
-			sendDataSync(SharedValues.nhtPing, new byte[0]);
+			sendDataSync(nhtPing, new byte[0]);
 			
 			pingResponseTimerLock.lock();
 			try {
@@ -714,9 +705,9 @@ class NetServerManager {
 		
 		private class ReaderThread extends Thread {
 			//Creating the stream
-			private final InputStream inputStream;
+			private final DataInputStream inputStream;
 			
-			ReaderThread(InputStream inputStream) {
+			ReaderThread(DataInputStream inputStream) {
 				this.inputStream = inputStream;
 			}
 			
@@ -725,27 +716,8 @@ class NetServerManager {
 				while(!isInterrupted() && isConnected()) {
 					try {
 						//Reading the header data
-						byte[] header = new byte[Integer.SIZE / 8 * 2];
-						{
-							int bytesRemaining = header.length;
-							int offset = 0;
-							int readCount;
-							
-							while(bytesRemaining > 0) {
-								readCount = inputStream.read(header, offset, bytesRemaining);
-								if(readCount == -1) { //No data read, stream is closed
-									closeConnection();
-									return;
-								}
-								
-								offset += readCount;
-								bytesRemaining -= readCount;
-							}
-						}
-						//Creating the values
-						ByteBuffer headerBuffer = ByteBuffer.wrap(header);
-						int messageType = headerBuffer.getInt();
-						int contentLen = headerBuffer.getInt();
+						int messageType = inputStream.readInt();
+						int contentLen = inputStream.readInt();
 						
 						//Adding a breadcrumb
 						{
@@ -755,21 +727,21 @@ class NetServerManager {
 							Sentry.getContext().recordBreadcrumb(new BreadcrumbBuilder().setCategory(Constants.sentryBCatPacket).setMessage("New packet received").setData(dataMap).build());
 						}
 						
+						Main.getLogger().log(Level.FINEST, "New message received: " + messageType + " / " + contentLen);
+						//Checking if the content length is greater than the maximum packet allocation
+						if(contentLen > maxPacketAllocation) {
+							//Logging the error
+							Main.getLogger().log(Level.WARNING, "Rejecting large packet (size " + contentLen + ")");
+							Sentry.getContext().recordBreadcrumb(new BreadcrumbBuilder().setCategory(Constants.sentryBCatPacket).setMessage("Rejecting large packet (type: " + messageType + " - size: " + contentLen + ")").build());
+							
+							//Closing the connection
+							initiateClose();
+							return;
+						}
+						
 						//Reading the content
 						byte[] content = new byte[contentLen];
-						int bytesRemaining = contentLen;
-						int offset = 0;
-						int readCount;
-						while(bytesRemaining > 0) {
-							readCount = inputStream.read(content, offset, bytesRemaining);
-							if(readCount == -1) { //No data read, stream is closed
-								closeConnection();
-								return;
-							}
-							
-							offset += readCount;
-							bytesRemaining -= readCount;
-						}
+						inputStream.readFully(content);
 						
 						//Processing the data
 						processData(messageType, content);
@@ -783,9 +755,12 @@ class NetServerManager {
 						
 						//Breaking
 						break;
-					} catch(SocketException | SSLException | EOFException exception) {
-						if(Main.isDebugMode()) Main.getLogger().log(Level.WARNING, Main.PREFIX_DEBUG + exception.getMessage(), exception);
+					} catch(SocketException | SSLException | EOFException | RuntimeException exception) {
+						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 						closeConnection();
+						
+						//Breaking
+						break;
 					} catch(IOException exception) {
 						if(isConnected()) {
 							//Logging the error

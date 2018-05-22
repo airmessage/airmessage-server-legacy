@@ -18,8 +18,8 @@ public interface I18N {
 	@En("Cancel")
 	String button_cancel();
 	
-	@En("Edit Passwords\u2026")
-	String button_editPasswords();
+	@En("Edit Password\u2026")
+	String button_editPassword();
 	
 	@En("Retry")
 	String button_retry();
@@ -35,6 +35,9 @@ public interface I18N {
 	
 	@En("AirMessage Server is not supported on versions of macOS below 10.10 (Yosemite). Would you like to continue?")
 	String warning_osUnsupported();
+	
+	@En("An error occurred occurred while upgrading.\nSelecting \"Ignore\" will clear your user preferences.")
+	String warning_schemaUpgradeError();
 	
 	@En("Server starting...")
 	String menu_starting();
@@ -84,7 +87,7 @@ public interface I18N {
 	@En("Security:")
 	String pref_security();
 	
-	@En("Passwords (one per line):")
+	@En("Password:")
 	String pref_passwords();
 	
 	@En("Updates:")
@@ -118,7 +121,7 @@ public interface I18N {
 	String message_updateAvailable_title(String name);
 	
 	@En("{0} {1} is now available - you have {2}. Would you like to download it now?")
-	String message_updateAvailable_description(String name, String currentVer, String newVer);
+	String message_updateAvailable_description(String name, String newVer, String currentVer);
 	
 	@En("Release Notes:")
 	String message_releaseNotes();

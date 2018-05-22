@@ -36,11 +36,11 @@
 			<url>http://www.jabylon.org/maven/</url>
 		</repository>
 
-		<repository>
+		<!-- <repository>
 			<id>Sonatype-public</id>
 			<name>SnakeYAML repository</name>
 			<url>http://oss.sonatype.org/content/groups/public/</url>
-		</repository>
+		</repository> -->
 	</repositories>
 
 	<dependencies>
@@ -100,7 +100,7 @@
 		</dependency>
 
 		<!-- Bouncycastle / Crypto library -->
-		<dependency>
+		<!-- <dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcprov-jdk15on</artifactId>
 			<version>1.59</version>
@@ -109,7 +109,7 @@
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcmail-jdk15on</artifactId>
 			<version>1.59</version>
-		</dependency>
+		</dependency> -->
 
 		<!-- JSON in Java / JSON library -->
 		<dependency>

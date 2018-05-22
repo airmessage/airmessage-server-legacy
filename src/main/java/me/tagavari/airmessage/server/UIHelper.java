@@ -18,7 +18,11 @@ public class UIHelper {
 	static final int dialogButtonBarMargin = 8;
 	static final int minButtonWidth = 100;
 	static final int smallMinButtonWidth = 80;
-	private static final Display display = new Display();
+	private static Display display;
+	
+	static void initialize() {
+		display = new Display();
+	}
 	
 	static boolean displayVersionWarning() {
 		//Showing an alert dialog
@@ -30,6 +34,26 @@ public class UIHelper {
 		
 		//Returning the result
 		return result == SWT.YES;
+	}
+	
+	static int displaySchemaWarning() {
+		//Showing an alert dialog
+		Shell shell = new Shell();
+		MessageBox dialog = new MessageBox(shell, SWT.ICON_WARNING | SWT.ABORT | SWT.RETRY | SWT.IGNORE);
+		dialog.setMessage(I18N.i.warning_schemaUpgradeError());
+		int result = dialog.open();
+		if(!shell.isDisposed()) shell.dispose();
+		
+		//Returning the result
+		switch(result) {
+			default:
+			case SWT.ABORT:
+				return 0;
+			case SWT.RETRY:
+				return 1;
+			case SWT.IGNORE:
+				return 2;
+		}
 	}
 	
 	static void openIntroWindow() {
