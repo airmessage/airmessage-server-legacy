@@ -23,7 +23,7 @@ import java.util.logging.Level;
 class NetServerManager {
 	//Creating the transmission header values
 	public static final int mmCommunicationsVersion = 4;
-	public static final int mmCommunicationsSubVersion = 1;
+	public static final int mmCommunicationsSubVersion = 2;
 	
 	//NHT = Net Header Type
 	public static final int nhtClose = -1;
