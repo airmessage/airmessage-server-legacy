@@ -34,6 +34,7 @@ class NetServerManager {
 	public static final int nhtMessageUpdate = 2;
 	public static final int nhtTimeRetrieval = 3;
 	public static final int nhtMassRetrieval = 4;
+	public static final int nhtMassRetrievalFinish = 10;
 	public static final int nhtConversationUpdate = 5;
 	public static final int nhtModifierUpdate = 6;
 	public static final int nhtAttachmentReq = 7;

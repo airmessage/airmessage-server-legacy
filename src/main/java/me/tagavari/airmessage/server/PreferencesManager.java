@@ -19,6 +19,7 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import java.io.*;
 import java.util.Base64;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 
 public class PreferencesManager {
@@ -47,7 +48,7 @@ public class PreferencesManager {
 	private static int prefServerPort = defaultPort;
 	private static boolean prefAutoCheckUpdates = defaultAutoCheckUpdates;
 	private static float prefScanFrequency = defaultScanFrequency;
-	private static String prefPassword = defaultPassword;
+	private static AtomicReference<String> prefPassword = new AtomicReference<>(defaultPassword);
 	
 	//Creating the window values
 	private static Text pwTextPort;
@@ -209,7 +210,7 @@ public class PreferencesManager {
 				if(element != null) {
 					String value = element.getTextContent();
 					try {
-						prefPassword = new String(Base64.getDecoder().decode(value), textEncoding);
+						prefPassword.set(new String(Base64.getDecoder().decode(value), textEncoding));
 						valueValidated = true;
 					} catch(UnsupportedEncodingException exception) {
 						Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
@@ -322,7 +323,7 @@ public class PreferencesManager {
 			findCreateElement(document, rootNode, domTagPort).setTextContent(Integer.toString(prefServerPort));
 			findCreateElement(document, rootNode, domTagAutoCheckUpdates).setTextContent(Boolean.toString(prefAutoCheckUpdates));
 			findCreateElement(document, rootNode, domTagScanFrequency).setTextContent(Float.toString(prefScanFrequency));
-			findCreateElement(document, rootNode, domTagPassword).setTextContent(Base64.getEncoder().encodeToString(prefPassword.getBytes(textEncoding)));
+			findCreateElement(document, rootNode, domTagPassword).setTextContent(Base64.getEncoder().encodeToString(prefPassword.get().getBytes(textEncoding)));
 			
 			//Writing the XML document
 			TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(prefFile));
@@ -692,7 +693,7 @@ public class PreferencesManager {
 			
 			//Creating the text
 			passText = new Text(shell, SWT.BORDER);
-			passText.setText(prefPassword);
+			passText.setText(prefPassword.get());
 			
 			GridData passTextGD = new GridData();
 			passTextGD.horizontalAlignment = GridData.FILL;
@@ -724,7 +725,7 @@ public class PreferencesManager {
 			passText.addModifyListener(event -> acceptButton.setEnabled(!passText.getText().isEmpty()));
 			acceptButton.addListener(SWT.Selection, event -> {
 				//Setting the password
-				prefPassword = passText.getText();
+				prefPassword.set(passText.getText());
 				
 				//Closing the shell
 				shell.close();
@@ -764,7 +765,7 @@ public class PreferencesManager {
 		return prefScanFrequency;
 	}
 	
-	public static String getPrefPassword() {
-		return prefPassword;
+	static String getPrefPassword() {
+		return prefPassword.get();
 	}
 }

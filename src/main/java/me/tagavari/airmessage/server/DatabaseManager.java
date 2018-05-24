@@ -176,7 +176,7 @@ class DatabaseManager {
 					dataFetchResult = fetchData(connection,
 							latestEntryID == -1 ?
 									() -> DSL.field("message.date").greaterThan(creationTime) :
-									() -> DSL.field("message.ROWID").greaterThan(latestEntryID));
+									() -> DSL.field("message.ROWID").greaterThan(latestEntryID), null);
 					
 					//Updating the latest entry ID
 					if(dataFetchResult.latestMessageID > latestEntryID) latestEntryID = dataFetchResult.latestMessageID;
@@ -257,6 +257,9 @@ class DatabaseManager {
 					else if(request instanceof MassRetrievalRequest) fulfillMassRetrievalRequest(connection, (MassRetrievalRequest) request);
 				}
 			} catch(InterruptedException exception) {
+				//Logging the message
+				exception.printStackTrace();
+				
 				return;
 			}
 		}
@@ -460,7 +463,7 @@ class DatabaseManager {
 	private void fulfillCustomRetrievalRequest(Connection connection, CustomRetrievalRequest request) {
 		try {
 			//Returning their data
-			DataFetchResult result = fetchData(connection, request.filter);
+			DataFetchResult result = fetchData(connection, request.filter, null);
 			if(request.connection.isConnected()) {
 				//Serializing the data
 				try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
@@ -485,10 +488,6 @@ class DatabaseManager {
 	
 	private void fulfillMassRetrievalRequest(Connection connection, MassRetrievalRequest request) {
 		try {
-			//Reading the message data
-			DataFetchResult messageResult = fetchData(connection, null);
-			//if(messageResult == null) continue;
-			
 			//Creating the DSL context
 			DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
 			
@@ -526,44 +525,114 @@ class DatabaseManager {
 				conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers));
 			}
 			
-			//Checking if the connection is still open
-			if(request.connection.isConnected()) {
-				//Serializing the data
-				try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
-					ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-					//Writing the message list
-					outSec.writeInt(messageResult.conversationItems.size());
-					for(SharedValues.ConversationItem item : messageResult.conversationItems) outSec.writeObject(item);
-					
-					//Writing the conversation list
-					outSec.writeInt(conversationInfoList.size());
-					for(SharedValues.ConversationInfo item : conversationInfoList) outSec.writeObject(item);
-					
-					outSec.flush();
-					
-					//Encrypting and writing the data
-					out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
-					out.flush();
-					
-					//Sending the data
-					request.connection.sendDataSync(NetServerManager.nhtMassRetrieval, trgt.toByteArray());
-					//NetServerManager.sendPacket(request.connection, SharedValues.nhtMassRetrieval, bos.toByteArray());
-				}
+			//Finding the amount of message entries in the database (roughly, because not all entries are messages)
+			int messagesCount = create.fetch("SELECT Count(*) FROM message;").get(0).get(0, Integer.class);
+			
+			//Returning if the connection is no longer open
+			if(!request.connection.isConnected()) return;
+			
+			//Serializing the data
+			try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
+				ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
+				//Writing the packet index
+				out.writeInt(0);
+				
+				//Writing the conversation list
+				outSec.writeInt(conversationInfoList.size());
+				for(SharedValues.ConversationInfo item : conversationInfoList) outSec.writeObject(item);
+				
+				//Writing the message count
+				outSec.writeInt(messagesCount);
+				
+				outSec.flush();
+				
+				//Encrypting and writing the data
+				out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
+				out.flush();
+				
+				//Sending the data
+				request.connection.sendDataSync(NetServerManager.nhtMassRetrieval, trgt.toByteArray());
 			}
+			
+			//Reading the message data
+			fetchData(connection, null, new DataFetchListener() {
+				//Creating the packet index value
+				int packetIndex = 1;
+				
+				@Override
+				void onChunkLoaded(List<SharedValues.ConversationItem> conversationItems, List<SharedValues.ModifierInfo> isolatedModifiers) {
+					//Checking if the connection is no longer open
+					if(!request.connection.isConnected()) {
+						//Cancelling the fetch and returning
+						cancel();
+						return;
+					}
+					
+					//Serializing the data
+					try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
+						ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
+						//Writing the packet index
+						out.writeInt(packetIndex++);
+						
+						//Writing the messages list
+						outSec.writeInt(conversationItems.size());
+						for(SharedValues.ConversationItem item : conversationItems) outSec.writeObject(item);
+						
+						outSec.flush();
+						
+						//Encrypting and writing the data
+						out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
+						out.flush();
+						
+						//Sending the data
+						request.connection.sendDataSync(NetServerManager.nhtMassRetrieval, trgt.toByteArray());
+					} catch(IOException | GeneralSecurityException exception) {
+						//Logging the exception
+						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+						Sentry.capture(exception);
+						
+						//Cancelling the fetch
+						cancel();
+					}
+				}
+				
+				@Override
+				void onFinished() {
+					//Returning if the connection is no longer open
+					if(!request.connection.isConnected()) return;
+					
+					//Sending the finish message
+					request.connection.sendDataSync(NetServerManager.nhtMassRetrievalFinish, new byte[0]);
+				}
+			});
 		} catch(IOException | OutOfMemoryError | RuntimeException | GeneralSecurityException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 		}
 	}
 	
-	private DataFetchResult fetchData(Connection connection, RetrievalFilter filter) throws IOException, NoSuchAlgorithmException {
+	private abstract class DataFetchListener {
+		private boolean cancelRequested = false;
+		
+		abstract void onChunkLoaded(List<SharedValues.ConversationItem> conversationItems, List<SharedValues.ModifierInfo> isolatedModifiers);
+		abstract void onFinished();
+		
+		void cancel() {
+			cancelRequested = true;
+		}
+	}
+	
+	private DataFetchResult fetchData(Connection connection, RetrievalFilter filter, DataFetchListener streamingListener) throws IOException, NoSuchAlgorithmException {
 		//Creating the DSL context
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
+		//Building the base query
 		List<SelectField<?>> fields = new ArrayList<>(Arrays.asList(DSL.field("message.ROWID", Long.class), DSL.field("message.guid", String.class), DSL.field("message.date", Long.class), DSL.field("message.item_type", Integer.class), DSL.field("message.group_action_type", Integer.class), DSL.field("message.text", String.class), DSL.field("message.error", Integer.class), DSL.field("message.date_read", Long.class), DSL.field("message.is_from_me", Boolean.class), DSL.field("message.group_title", String.class),
 				DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.is_delivered", Boolean.class),
 				DSL.field("sender_handle.id", String.class), DSL.field("other_handle.id", String.class),
 				DSL.field("chat.guid", String.class)));
+		
+		//Adding the extras (if applicable)
 		if(dbSupportsSendStyle) fields.add(DSL.field("message.expressive_send_style_id", String.class));
 		if(dbSupportsAssociation) {
 			fields.add(DSL.field("message.associated_message_guid", String.class));
@@ -571,6 +640,7 @@ class DatabaseManager {
 			fields.add(DSL.field("message.associated_message_range_location", Integer.class));
 		}
 		
+		//Compiling the selection into a build step
 		SelectOnConditionStep<?> buildStep
 				= context.select(fields)
 				.from(DSL.table("message"))
@@ -578,7 +648,6 @@ class DatabaseManager {
 				.innerJoin(DSL.table("chat")).on(DSL.field("chat_message_join.chat_id").eq(DSL.field("chat.ROWID")))
 				.leftJoin(DSL.table("handle").as("sender_handle")).on(DSL.field("message.handle_id").eq(DSL.field("sender_handle.ROWID")))
 				.leftJoin(DSL.table("handle").as("other_handle")).on(DSL.field("message.other_handle").eq(DSL.field("other_handle.ROWID")));
-		Result<?> generalMessageRecords = filter != null ? buildStep.where(filter.filter()).fetch() : buildStep.fetch();
 		
 		//Fetching the basic message info
 		/* SelectOnConditionStep<Record16<Long, String, Long, Integer, Integer, String, String, Integer, Boolean, String, Boolean, Boolean, Boolean, String, String, String>> buildStep
@@ -596,6 +665,95 @@ class DatabaseManager {
 		//Creating the result list
 		ArrayList<SharedValues.ConversationItem> conversationItems = new ArrayList<>();
 		ArrayList<SharedValues.ModifierInfo> isolatedModifiers = new ArrayList<>();
+		long latestMessageID = -1;
+		
+		//Checking if the data should be streamed
+		if(streamingListener != null) {
+			//Completing the query
+			Cursor<?> cursor = filter != null ? buildStep.where(filter.filter()).fetchLazy() : buildStep.fetchLazy();
+			Result<?> records;
+			
+			while(cursor.hasNext()) {
+				//Clearing the lists
+				conversationItems.clear();
+				isolatedModifiers.clear();
+				
+				//Fetching the next records
+				records = cursor.fetchNext(20);
+				
+				//Processing the data
+				processFetchDataResult(context, records, conversationItems, isolatedModifiers);
+				
+				//Sending the data
+				streamingListener.onChunkLoaded(conversationItems, isolatedModifiers);
+				
+				//Breaking from the loop if a cancel has been requested
+				if(streamingListener.cancelRequested) break;
+			}
+			
+			//Logging a message
+			Main.getLogger().finest("Fulfilled a mass retrieval request");
+			
+			//Calling the finished method
+			if(!streamingListener.cancelRequested) streamingListener.onFinished();
+			
+			//Returning
+			return null;
+		}
+		
+		//Completing the query
+		Result<?> records = filter != null ? buildStep.where(filter.filter()).fetch() : buildStep.fetch();
+		
+		//Processing the data
+		latestMessageID = processFetchDataResult(context, records, conversationItems, isolatedModifiers);
+		
+		//Returning null if the item list is empty
+		//if(conversationItems.isEmpty()) return null;
+		
+		//Adding applicable isolated modifiers to their messages
+		/* for(Iterator<SharedValues.ModifierInfo> iterator = isolatedModifiers.iterator(); iterator.hasNext();) {
+			//Getting the modifier
+			SharedValues.ModifierInfo modifier = iterator.next();
+			
+			//Checking if the modifier is a sticker
+			if(modifier instanceof SharedValues.StickerModifierInfo || modifier instanceof SharedValues.TapbackModifierInfo) {
+				//Iterating over all the items
+				for(SharedValues.ConversationItem allItems : conversationItems) {
+					//Skipping the remainder of the iteration if the item doesn't match
+					if(!modifier.message.equals(allItems.guid) || !(allItems instanceof SharedValues.MessageInfo)) continue;
+					
+					//Getting the message info
+					SharedValues.MessageInfo matchingItem = (SharedValues.MessageInfo) allItems;
+					
+					//Adding the modifier
+					if(modifier instanceof SharedValues.StickerModifierInfo) matchingItem.stickers.add((SharedValues.StickerModifierInfo) modifier);
+					else if(modifier instanceof SharedValues.TapbackModifierInfo) matchingItem.tapbacks.add((SharedValues.TapbackModifierInfo) modifier);
+					
+					//Removing the item from the isolated modifier list
+					iterator.remove();
+					
+					//Breaking from the loop
+					break;
+				}
+			}
+		} */
+		
+		//Logging a debug message
+		if(!conversationItems.isEmpty()) Main.getLogger().finest("Found " + conversationItems.size() + " new item(s) from latest scan");
+		
+		//Returning the result
+		return new DataFetchResult(conversationItems, isolatedModifiers, latestMessageID);
+	}
+	
+	/**
+	 * Processes a cursor from a data fetch
+	 * @param context the DSL context to access the database with
+	 * @param generalMessageRecords the cursor to pull data from
+	 * @param conversationItems the list to add new conversation items to
+	 * @param isolatedModifiers the list to add new loose modifiers to
+	 * @return the latest found message ID
+	 */
+	private long processFetchDataResult(DSLContext context, Result<?> generalMessageRecords, List<SharedValues.ConversationItem> conversationItems, List<SharedValues.ModifierInfo> isolatedModifiers) throws IOException, NoSuchAlgorithmException {
 		long latestMessageID = -1;
 		
 		//Iterating over the results
@@ -768,42 +926,8 @@ class DatabaseManager {
 			}
 		}
 		
-		//Returning null if the item list is empty
-		//if(conversationItems.isEmpty()) return null;
-		
-		//Adding applicable isolated modifiers to their messages
-		/* for(Iterator<SharedValues.ModifierInfo> iterator = isolatedModifiers.iterator(); iterator.hasNext();) {
-			//Getting the modifier
-			SharedValues.ModifierInfo modifier = iterator.next();
-			
-			//Checking if the modifier is a sticker
-			if(modifier instanceof SharedValues.StickerModifierInfo || modifier instanceof SharedValues.TapbackModifierInfo) {
-				//Iterating over all the items
-				for(SharedValues.ConversationItem allItems : conversationItems) {
-					//Skipping the remainder of the iteration if the item doesn't match
-					if(!modifier.message.equals(allItems.guid) || !(allItems instanceof SharedValues.MessageInfo)) continue;
-					
-					//Getting the message info
-					SharedValues.MessageInfo matchingItem = (SharedValues.MessageInfo) allItems;
-					
-					//Adding the modifier
-					if(modifier instanceof SharedValues.StickerModifierInfo) matchingItem.stickers.add((SharedValues.StickerModifierInfo) modifier);
-					else if(modifier instanceof SharedValues.TapbackModifierInfo) matchingItem.tapbacks.add((SharedValues.TapbackModifierInfo) modifier);
-					
-					//Removing the item from the isolated modifier list
-					iterator.remove();
-					
-					//Breaking from the loop
-					break;
-				}
-			}
-		} */
-		
-		//Logging a debug message
-		if(!conversationItems.isEmpty()) Main.getLogger().finest("Found " + conversationItems.size() + " new item(s) from latest scan");
-		
-		//Returning the result
-		return new DataFetchResult(conversationItems, isolatedModifiers, latestMessageID);
+		//Returning the latest message ID
+		return latestMessageID;
 	}
 	
 	private void updateMessageStates(Connection connection, ArrayList<SharedValues.ModifierInfo> modifierList) {
