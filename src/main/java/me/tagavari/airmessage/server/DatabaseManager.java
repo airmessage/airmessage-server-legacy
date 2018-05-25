@@ -1,6 +1,7 @@
 package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
+import me.tagavari.airmessage.common.Blocks;
 import me.tagavari.airmessage.common.SharedValues;
 import org.jooq.*;
 import org.jooq.impl.DSL;
@@ -197,7 +198,7 @@ class DatabaseManager {
 						ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
 						//Serializing the data
 						outSec.writeInt(dataFetchResult.conversationItems.size());
-						for(SharedValues.ConversationItem item : dataFetchResult.conversationItems) outSec.writeObject(item);
+						for(Blocks.ConversationItem item : dataFetchResult.conversationItems) item.writeObject(outSec);
 						outSec.flush();
 						
 						out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
@@ -286,7 +287,7 @@ class DatabaseManager {
 		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
 		
 		//Creating the conversation info list
-		ArrayList<SharedValues.ConversationInfo> conversationInfoList = new ArrayList<>();
+		ArrayList<Blocks.ConversationInfo> conversationInfoList = new ArrayList<>();
 		
 		//Iterating over their conversations
 		for(String conversationGUID : request.conversationsGUIDs) {
@@ -303,7 +304,7 @@ class DatabaseManager {
 				//Checking if there are no results
 				if(results.isEmpty()) {
 					//Adding an unavailable conversation info
-					conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID));
+					conversationInfoList.add(new Blocks.ConversationInfo(conversationGUID));
 					
 					//Skipping the remainder of the iteration
 					continue;
@@ -328,7 +329,7 @@ class DatabaseManager {
 				//Checking if there are no results
 				if(results.isEmpty()) {
 					//Adding an unavailable conversation info
-					conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID));
+					conversationInfoList.add(new Blocks.ConversationInfo(conversationGUID));
 					
 					//Skipping the remainder of the iteration
 					continue;
@@ -339,7 +340,7 @@ class DatabaseManager {
 			}
 			
 			//Adding the conversation info
-			conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers));
+			conversationInfoList.add(new Blocks.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers.toArray(new String[0])));
 		}
 		
 		//Checking if the connection is registered and is still open
@@ -349,7 +350,7 @@ class DatabaseManager {
 				ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
 				//Serializing the data
 				outSec.writeInt(conversationInfoList.size());
-				for(SharedValues.ConversationInfo item : conversationInfoList) outSec.writeObject(item);
+				for(Blocks.ConversationInfo item : conversationInfoList) item.writeObject(outSec);
 				outSec.flush();
 				
 				out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword())); //Encrypted data
@@ -357,7 +358,7 @@ class DatabaseManager {
 				
 				//Sending the conversation info
 				request.connection.sendDataSync(NetServerManager.nhtConversationUpdate, trgt.toByteArray());
-				//NetServerManager.sendPacket(request.connection, SharedValues.nhtConversationUpdate, bos.toByteArray());
+				//NetServerManager.sendPacket(request.connection, Blocks.nhtConversationUpdate, bos.toByteArray());
 			} catch(IOException | GeneralSecurityException exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
@@ -469,7 +470,7 @@ class DatabaseManager {
 				try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
 					ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
 					outSec.writeInt(result.conversationItems.size());
-					for(SharedValues.ConversationItem item : result.conversationItems) outSec.writeObject(item);
+					for(Blocks.ConversationItem item : result.conversationItems) item.writeObject(outSec);
 					outSec.flush();
 					
 					out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
@@ -492,7 +493,7 @@ class DatabaseManager {
 			DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
 			
 			//Fetching the conversation information
-			List<SharedValues.ConversationInfo> conversationInfoList = new ArrayList<>();
+			List<Blocks.ConversationInfo> conversationInfoList = new ArrayList<>();
 			
 			//Running the SQL
 			Result<org.jooq.Record3<String, String, String>> conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
@@ -522,7 +523,7 @@ class DatabaseManager {
 				}
 				
 				//Adding the conversation info
-				conversationInfoList.add(new SharedValues.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers));
+				conversationInfoList.add(new Blocks.ConversationInfo(conversationGUID, conversationService, conversationTitle, conversationMembers.toArray(new String[0])));
 			}
 			
 			//Finding the amount of message entries in the database (roughly, because not all entries are messages)
@@ -539,7 +540,7 @@ class DatabaseManager {
 				
 				//Writing the conversation list
 				outSec.writeInt(conversationInfoList.size());
-				for(SharedValues.ConversationInfo item : conversationInfoList) outSec.writeObject(item);
+				for(Blocks.ConversationInfo item : conversationInfoList) item.writeObject(outSec);
 				
 				//Writing the message count
 				outSec.writeInt(messagesCount);
@@ -560,7 +561,7 @@ class DatabaseManager {
 				int packetIndex = 1;
 				
 				@Override
-				void onChunkLoaded(List<SharedValues.ConversationItem> conversationItems, List<SharedValues.ModifierInfo> isolatedModifiers) {
+				void onChunkLoaded(List<Blocks.ConversationItem> conversationItems, List<Blocks.ModifierInfo> isolatedModifiers) {
 					//Checking if the connection is no longer open
 					if(!request.connection.isConnected()) {
 						//Cancelling the fetch and returning
@@ -576,7 +577,7 @@ class DatabaseManager {
 						
 						//Writing the messages list
 						outSec.writeInt(conversationItems.size());
-						for(SharedValues.ConversationItem item : conversationItems) outSec.writeObject(item);
+						for(Blocks.ConversationItem item : conversationItems) item.writeObject(outSec);
 						
 						outSec.flush();
 						
@@ -614,7 +615,7 @@ class DatabaseManager {
 	private abstract class DataFetchListener {
 		private boolean cancelRequested = false;
 		
-		abstract void onChunkLoaded(List<SharedValues.ConversationItem> conversationItems, List<SharedValues.ModifierInfo> isolatedModifiers);
+		abstract void onChunkLoaded(List<Blocks.ConversationItem> conversationItems, List<Blocks.ModifierInfo> isolatedModifiers);
 		abstract void onFinished();
 		
 		void cancel() {
@@ -663,8 +664,8 @@ class DatabaseManager {
 		Result<Record16<Long, String, Long, Integer, Integer, String, String, Integer, Boolean, String, Boolean, Boolean, Boolean, String, String, String>> generalMessageRecords = filter != null ? buildStep.where(filter.filter()).fetch() : buildStep.fetch(); */
 		
 		//Creating the result list
-		ArrayList<SharedValues.ConversationItem> conversationItems = new ArrayList<>();
-		ArrayList<SharedValues.ModifierInfo> isolatedModifiers = new ArrayList<>();
+		ArrayList<Blocks.ConversationItem> conversationItems = new ArrayList<>();
+		ArrayList<Blocks.ModifierInfo> isolatedModifiers = new ArrayList<>();
 		long latestMessageID = -1;
 		
 		//Checking if the data should be streamed
@@ -711,23 +712,23 @@ class DatabaseManager {
 		//if(conversationItems.isEmpty()) return null;
 		
 		//Adding applicable isolated modifiers to their messages
-		/* for(Iterator<SharedValues.ModifierInfo> iterator = isolatedModifiers.iterator(); iterator.hasNext();) {
+		/* for(Iterator<Blocks.ModifierInfo> iterator = isolatedModifiers.iterator(); iterator.hasNext();) {
 			//Getting the modifier
-			SharedValues.ModifierInfo modifier = iterator.next();
+			Blocks.ModifierInfo modifier = iterator.next();
 			
 			//Checking if the modifier is a sticker
-			if(modifier instanceof SharedValues.StickerModifierInfo || modifier instanceof SharedValues.TapbackModifierInfo) {
+			if(modifier instanceof Blocks.StickerModifierInfo || modifier instanceof Blocks.TapbackModifierInfo) {
 				//Iterating over all the items
-				for(SharedValues.ConversationItem allItems : conversationItems) {
+				for(Blocks.ConversationItem allItems : conversationItems) {
 					//Skipping the remainder of the iteration if the item doesn't match
-					if(!modifier.message.equals(allItems.guid) || !(allItems instanceof SharedValues.MessageInfo)) continue;
+					if(!modifier.message.equals(allItems.guid) || !(allItems instanceof Blocks.MessageInfo)) continue;
 					
 					//Getting the message info
-					SharedValues.MessageInfo matchingItem = (SharedValues.MessageInfo) allItems;
+					Blocks.MessageInfo matchingItem = (Blocks.MessageInfo) allItems;
 					
 					//Adding the modifier
-					if(modifier instanceof SharedValues.StickerModifierInfo) matchingItem.stickers.add((SharedValues.StickerModifierInfo) modifier);
-					else if(modifier instanceof SharedValues.TapbackModifierInfo) matchingItem.tapbacks.add((SharedValues.TapbackModifierInfo) modifier);
+					if(modifier instanceof Blocks.StickerModifierInfo) matchingItem.stickers.add((Blocks.StickerModifierInfo) modifier);
+					else if(modifier instanceof Blocks.TapbackModifierInfo) matchingItem.tapbacks.add((Blocks.TapbackModifierInfo) modifier);
 					
 					//Removing the item from the isolated modifier list
 					iterator.remove();
@@ -753,7 +754,7 @@ class DatabaseManager {
 	 * @param isolatedModifiers the list to add new loose modifiers to
 	 * @return the latest found message ID
 	 */
-	private long processFetchDataResult(DSLContext context, Result<?> generalMessageRecords, List<SharedValues.ConversationItem> conversationItems, List<SharedValues.ModifierInfo> isolatedModifiers) throws IOException, NoSuchAlgorithmException {
+	private long processFetchDataResult(DSLContext context, Result<?> generalMessageRecords, List<Blocks.ConversationItem> conversationItems, List<Blocks.ModifierInfo> isolatedModifiers) throws IOException, NoSuchAlgorithmException {
 		long latestMessageID = -1;
 		
 		//Iterating over the results
@@ -821,13 +822,13 @@ class DatabaseManager {
 							String fileGuid = fileRecord.getValue(0, DSL.field("attachment.guid", String.class));
 							
 							//Creating the modifier
-							SharedValues.StickerModifierInfo modifier = new SharedValues.StickerModifierInfo(associatedMessageGUID, associationIndex, fileGuid, sender, date, fileBytes);
+							Blocks.StickerModifierInfo modifier = new Blocks.StickerModifierInfo(associatedMessageGUID, associationIndex, fileGuid, sender, date, fileBytes);
 							
 							//Finding the associated message in memory
-							SharedValues.MessageInfo matchingItem = null;
-							for(SharedValues.ConversationItem allItems : conversationItems) {
-								if(!associatedMessageGUID.equals(allItems.guid) || !(allItems instanceof SharedValues.MessageInfo)) continue;
-								matchingItem = (SharedValues.MessageInfo) allItems;
+							Blocks.MessageInfo matchingItem = null;
+							for(Blocks.ConversationItem allItems : conversationItems) {
+								if(!associatedMessageGUID.equals(allItems.guid) || !(allItems instanceof Blocks.MessageInfo)) continue;
+								matchingItem = (Blocks.MessageInfo) allItems;
 								break;
 							}
 							//Adding the sticker to the message if it was found
@@ -841,14 +842,14 @@ class DatabaseManager {
 						//Otherwise checking if the association is a tapback response
 						else if(associationType < 4000) { //2000 - 2999 = tapback added / 3000 - 3999 = tapback removed
 							//Creating the modifier
-							SharedValues.TapbackModifierInfo modifier = new SharedValues.TapbackModifierInfo(associatedMessageGUID, associationIndex, sender, associationType);
+							Blocks.TapbackModifierInfo modifier = new Blocks.TapbackModifierInfo(associatedMessageGUID, associationIndex, sender, associationType);
 							
 							//Finding the associated message in memory
-							SharedValues.MessageInfo matchingItem = null;
+							Blocks.MessageInfo matchingItem = null;
 							if(associationType < 3000) { //If the message is an added tapback
-								for(SharedValues.ConversationItem allItems : conversationItems) {
-									if(!associatedMessageGUID.equals(allItems.guid) || !(allItems instanceof SharedValues.MessageInfo)) continue;
-									matchingItem = (SharedValues.MessageInfo) allItems;
+								for(Blocks.ConversationItem allItems : conversationItems) {
+									if(!associatedMessageGUID.equals(allItems.guid) || !(allItems instanceof Blocks.MessageInfo)) continue;
+									matchingItem = (Blocks.MessageInfo) allItems;
 									break;
 								}
 							}
@@ -890,14 +891,14 @@ class DatabaseManager {
 						.fetch();
 				
 				//Processing the attachments
-				ArrayList<SharedValues.AttachmentInfo> files = new ArrayList<>();
+				ArrayList<Blocks.AttachmentInfo> files = new ArrayList<>();
 				for(int f = 0; f < fileRecords.size(); f++) {
 					//Skipping the remainder of the iteration if the attachment is a sticker
 					if(dbSupportsAssociation && fileRecords.getValue(f, DSL.field("attachment.is_sticker", Boolean.class))) continue;
 					
 					//Adding the file
 					String fileName = fileRecords.getValue(f, DSL.field("attachment.filename", String.class));
-					files.add(new SharedValues.AttachmentInfo(fileRecords.getValue(f, DSL.field("attachment.guid", String.class)),
+					files.add(new Blocks.AttachmentInfo(fileRecords.getValue(f, DSL.field("attachment.guid", String.class)),
 							fileRecords.getValue(f, DSL.field("attachment.transfer_name", String.class)),
 							fileRecords.getValue(f, DSL.field("attachment.mime_type", String.class)),
 							//The checksum will be calculated if the message is outgoing
@@ -905,7 +906,7 @@ class DatabaseManager {
 				}
 				
 				//Adding the conversation item
-				conversationItems.add(new SharedValues.MessageInfo(guid, chatGUID, Main.getTimeHelper().toUnixTime(date), text, sender, files, new ArrayList<>(), new ArrayList<>(), sendStyle, stateCode, errorCode, Main.getTimeHelper().toUnixTime(dateRead)));
+				conversationItems.add(new Blocks.MessageInfo(guid, chatGUID, Main.getTimeHelper().toUnixTime(date), text, sender, files, new ArrayList<>(), new ArrayList<>(), sendStyle, stateCode, errorCode, Main.getTimeHelper().toUnixTime(dateRead)));
 			}
 			//Checking if the item is a group action
 			else if(itemType == 1) {
@@ -914,7 +915,7 @@ class DatabaseManager {
 				int groupActionType = generalMessageRecords.getValue(i, DSL.field("message.group_action_type", Integer.class));
 				
 				//Adding the conversation item
-				conversationItems.add(new SharedValues.GroupActionInfo(guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, other, groupActionType));
+				conversationItems.add(new Blocks.GroupActionInfo(guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, other, groupActionType));
 			}
 			//Otherwise checking if the item is a chat rename
 			else if(itemType == 2) {
@@ -922,7 +923,7 @@ class DatabaseManager {
 				String newChatName = generalMessageRecords.getValue(i, DSL.field("message.group_title", String.class));
 				
 				//Adding the conversation item
-				conversationItems.add(new SharedValues.ChatRenameActionInfo(guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, newChatName));
+				conversationItems.add(new Blocks.ChatRenameActionInfo(guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, newChatName));
 			}
 		}
 		
@@ -930,7 +931,7 @@ class DatabaseManager {
 		return latestMessageID;
 	}
 	
-	private void updateMessageStates(Connection connection, ArrayList<SharedValues.ModifierInfo> modifierList) {
+	private void updateMessageStates(Connection connection, ArrayList<Blocks.ModifierInfo> modifierList) {
 		//Creating the DSL context
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
@@ -997,7 +998,7 @@ class DatabaseManager {
 				//Main.getLogger().finest("New activity status for message " + results.getValue(i, DSL.field("message.text", String.class)) + ": " + cacheState + " -> " + resultState);
 				
 				//Adding the modifier to the list
-				modifierList.add(new SharedValues.ActivityStatusModifierInfo(resultGuid, resultState, Main.getTimeHelper().toUnixTime(results.getValue(i, DSL.field("message.date_read", Long.class)))));
+				modifierList.add(new Blocks.ActivityStatusModifierInfo(resultGuid, resultState, Main.getTimeHelper().toUnixTime(results.getValue(i, DSL.field("message.date_read", Long.class)))));
 			}
 		}
 		
@@ -1011,7 +1012,7 @@ class DatabaseManager {
 		try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
 			ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
 			outSec.writeInt(modifierList.size());
-			for(SharedValues.ModifierInfo item : modifierList) outSec.writeObject(item);
+			for(Blocks.ModifierInfo item : modifierList) item.writeObject(outSec);
 			outSec.flush();
 			
 			out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
@@ -1036,10 +1037,10 @@ class DatabaseManager {
 	
 	private static int determineMessageState(boolean isSent, boolean isDelivered, boolean isRead) {
 		//Determining the state code
-		int stateCode = SharedValues.MessageInfo.stateCodeIdle;
-		if(isSent) stateCode = SharedValues.MessageInfo.stateCodeSent;
-		if(isDelivered) stateCode = SharedValues.MessageInfo.stateCodeDelivered;
-		if(isRead) stateCode = SharedValues.MessageInfo.stateCodeRead;
+		int stateCode = Blocks.MessageInfo.stateCodeIdle;
+		if(isSent) stateCode = Blocks.MessageInfo.stateCodeSent;
+		if(isDelivered) stateCode = Blocks.MessageInfo.stateCodeDelivered;
+		if(isRead) stateCode = Blocks.MessageInfo.stateCodeRead;
 		
 		//Returning the state code
 		return stateCode;
@@ -1064,11 +1065,11 @@ class DatabaseManager {
 	}
 	
 	private class DataFetchResult {
-		final ArrayList<SharedValues.ConversationItem> conversationItems;
-		final ArrayList<SharedValues.ModifierInfo> isolatedModifiers;
+		final ArrayList<Blocks.ConversationItem> conversationItems;
+		final ArrayList<Blocks.ModifierInfo> isolatedModifiers;
 		final long latestMessageID;
 		
-		DataFetchResult(ArrayList<SharedValues.ConversationItem> conversationItems, ArrayList<SharedValues.ModifierInfo> isolatedModifiers, long latestMessageID) {
+		DataFetchResult(ArrayList<Blocks.ConversationItem> conversationItems, ArrayList<Blocks.ModifierInfo> isolatedModifiers, long latestMessageID) {
 			this.conversationItems = conversationItems;
 			this.isolatedModifiers = isolatedModifiers;
 			this.latestMessageID = latestMessageID;

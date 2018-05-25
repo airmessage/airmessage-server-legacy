@@ -13,10 +13,9 @@ import java.io.Serializable;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.spec.KeySpec;
-import java.util.ArrayList;
 
 public class SharedValues {
-	public static class ConversationInfo implements Serializable {
+	/* public static class ConversationInfo implements Serializable {
 		private static final long serialVersionUID = 100;
 		
 		public String guid;
@@ -30,6 +29,7 @@ public class SharedValues {
 			//Setting the values
 			this.guid = guid;
 			this.available = false;
+			this.service = null;
 			this.name = null;
 			this.members = null;
 		}
@@ -301,7 +301,7 @@ public class SharedValues {
 			stream.writeObject(sender);
 			stream.writeInt(code);
 		}
-	}
+	} */
 	
 	/* public static byte[] compress(byte[] data, int length) {
 		Deflater compressor = new Deflater();
