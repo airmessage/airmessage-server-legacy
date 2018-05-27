@@ -1,7 +1,17 @@
 package me.tagavari.airmessage.common;
 
+import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.security.spec.KeySpec;
 import java.util.List;
 
 public class Blocks {
@@ -360,6 +370,131 @@ public class Blocks {
 		@Override
 		int getItemType() {
 			return itemType;
+		}
+	}
+	
+	public static class EncryptableData implements Block {
+		//Creating the reference values
+		private static final int saltLen = 8; //8 bytes
+		private static final int ivLen = 12; //12 bytes (instead of 16 because of GCM)
+		private static final String keyFactoryAlgorithm = "PBKDF2WithHmacSHA256";
+		private static final String keyAlgorithm = "AES";
+		private static final String cipherTransformation = "AES/GCM/NoPadding";
+		private static final int keyIterationCount = 10000;
+		private static final int keyLength = 128; //128 bits
+		
+		//private static final long serialVersionUID = 0;
+		public byte[] salt;
+		public byte[] iv;
+		public byte[] data;
+		private transient boolean dataEncrypted;
+		
+		private EncryptableData() {
+		
+		}
+		
+		public EncryptableData(byte[] data) {
+			this.data = data;
+			this.salt = null;
+			this.iv = null;
+			dataEncrypted = false;
+		}
+		
+		public EncryptableData(byte[] salt, byte[] iv, byte[] data) {
+			this.salt = salt;
+			this.iv = iv;
+			this.data = data;
+			dataEncrypted = true;
+		}
+		
+		public EncryptableData encrypt(String password) throws ClassCastException, GeneralSecurityException {
+			//Creating a secure random
+			SecureRandom random = new SecureRandom();
+			
+			//Generating a salt
+			salt = new byte[saltLen];
+			random.nextBytes(salt);
+			
+			//Creating the key
+			SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(keyFactoryAlgorithm);
+			KeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, keyIterationCount, keyLength);
+			SecretKey secretKey = secretKeyFactory.generateSecret(keySpec);
+			SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getEncoded(), keyAlgorithm);
+			
+			//Generating the IV
+			iv = new byte[ivLen];
+			random.nextBytes(iv);
+			GCMParameterSpec gcmSpec = new GCMParameterSpec(keyLength, iv);
+			
+			Cipher cipher = Cipher.getInstance(cipherTransformation);
+			cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, gcmSpec);
+			
+			//Encrypting the data
+			data = cipher.doFinal(data);
+			dataEncrypted = true;
+			
+			//Returning the object
+			return this;
+		}
+		
+		public EncryptableData decrypt(String password) throws ClassCastException, GeneralSecurityException {
+			//Creating the key
+			SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(keyFactoryAlgorithm);
+			KeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, keyIterationCount, keyLength);
+			SecretKey secretKey = secretKeyFactory.generateSecret(keySpec);
+			SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getEncoded(), keyAlgorithm);
+			
+			//Creating the IV
+			GCMParameterSpec gcmSpec = new GCMParameterSpec(keyLength, iv);
+			
+			//Creating the cipher
+			Cipher cipher = Cipher.getInstance(cipherTransformation);
+			cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, gcmSpec);
+			
+			//Deciphering the data
+			data = cipher.doFinal(data);
+			dataEncrypted = false;
+			
+			//Invalidating the encryption information
+			salt = null;
+			iv = null;
+			
+			//Returning the object
+			return this;
+		}
+		
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
+			//Throwing an exception if the data isn't encrypted
+			if(!dataEncrypted) throw new RuntimeException("Data serialization attempt before encryption!");
+			
+			//Writing the data
+			stream.write(salt);
+			stream.write(iv);
+			stream.writeInt(data.length);
+			stream.write(data);
+		}
+		
+		public static EncryptableData readObject(ObjectInputStream stream) throws IOException {
+			//Creating the data
+			EncryptableData encryptableData = new EncryptableData();
+			
+			//Reading the data
+			encryptableData.salt = new byte[saltLen];
+			stream.readFully(encryptableData.salt);
+			
+			encryptableData.iv = new byte[ivLen];
+			stream.readFully(encryptableData.iv);
+			
+			encryptableData.data = new byte[stream.readInt()];
+			stream.readFully(encryptableData.data);
+			
+			//Returning the data
+			return encryptableData;
+		}
+		
+		public boolean isEncrypted() {
+			return dataEncrypted;
 		}
 	}
 }

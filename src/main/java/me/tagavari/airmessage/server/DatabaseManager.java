@@ -2,7 +2,6 @@ package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
 import me.tagavari.airmessage.common.Blocks;
-import me.tagavari.airmessage.common.SharedValues;
 import org.jooq.*;
 import org.jooq.impl.DSL;
 
@@ -201,7 +200,7 @@ class DatabaseManager {
 						for(Blocks.ConversationItem item : dataFetchResult.conversationItems) item.writeObject(outSec);
 						outSec.flush();
 						
-						out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
+						new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
 						out.flush();
 						
 						//Sending the data
@@ -353,7 +352,7 @@ class DatabaseManager {
 				for(Blocks.ConversationInfo item : conversationInfoList) item.writeObject(outSec);
 				outSec.flush();
 				
-				out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword())); //Encrypted data
+				new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
 				out.flush();
 				
 				//Sending the conversation info
@@ -429,7 +428,7 @@ class DatabaseManager {
 								outSec.write(compressedBuffer);
 								outSec.flush();
 								
-								out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
+								new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
 								out.flush();
 								
 								//Sending the data (synchronously, as otherwise this can cause a memory build-up)
@@ -473,7 +472,7 @@ class DatabaseManager {
 					for(Blocks.ConversationItem item : result.conversationItems) item.writeObject(outSec);
 					outSec.flush();
 					
-					out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
+					new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
 					out.flush();
 					
 					//Sending the data
@@ -548,7 +547,7 @@ class DatabaseManager {
 				outSec.flush();
 				
 				//Encrypting and writing the data
-				out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
+				new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out);
 				out.flush();
 				
 				//Sending the data
@@ -582,7 +581,7 @@ class DatabaseManager {
 						outSec.flush();
 						
 						//Encrypting and writing the data
-						out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
+						new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out);
 						out.flush();
 						
 						//Sending the data
@@ -1015,7 +1014,7 @@ class DatabaseManager {
 			for(Blocks.ModifierInfo item : modifierList) item.writeObject(outSec);
 			outSec.flush();
 			
-			out.writeObject(new SharedValues.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()));
+			new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
 			out.flush();
 			
 			//Sending the data
