@@ -2,7 +2,7 @@ package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
 import io.sentry.event.BreadcrumbBuilder;
-import me.tagavari.airmessage.common.SharedValues;
+import me.tagavari.airmessage.common.Blocks;
 import org.jooq.impl.DSL;
 
 import javax.net.ssl.SSLException;
@@ -23,7 +23,7 @@ import java.util.logging.Level;
 class NetServerManager {
 	//Creating the transmission header values
 	public static final int mmCommunicationsVersion = 4;
-	public static final int mmCommunicationsSubVersion = 1;
+	public static final int mmCommunicationsSubVersion = 2;
 	
 	//NHT = Net Header Type
 	public static final int nhtClose = -1;
@@ -34,6 +34,7 @@ class NetServerManager {
 	public static final int nhtMessageUpdate = 2;
 	public static final int nhtTimeRetrieval = 3;
 	public static final int nhtMassRetrieval = 4;
+	public static final int nhtMassRetrievalFinish = 10;
 	public static final int nhtConversationUpdate = 5;
 	public static final int nhtModifierUpdate = 6;
 	public static final int nhtAttachmentReq = 7;
@@ -379,7 +380,7 @@ class NetServerManager {
 						//Reading the chat GUID list
 						List<String> list;
 						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
 							dataSec.decrypt(PreferencesManager.getPrefPassword());
 							
 							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
@@ -387,7 +388,7 @@ class NetServerManager {
 								list = new ArrayList<>(count);
 								for(int i = 0; i < count; i++) list.add(inSec.readUTF());
 							}
-						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
+						} catch(IOException | RuntimeException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -408,13 +409,13 @@ class NetServerManager {
 							requestID = in.readShort();
 							chunkSize = in.readInt();
 							
-							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
 							dataSec.decrypt(PreferencesManager.getPrefPassword());
 							
 							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
 								fileGUID = inSec.readUTF();
 							}
-						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
+						} catch(IOException | RuntimeException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -437,14 +438,14 @@ class NetServerManager {
 						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
 							
-							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
 							dataSec.decrypt(PreferencesManager.getPrefPassword());
 							
 							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
 								chatGUID = inSec.readUTF();
 								message = inSec.readUTF();
 							}
-						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
+						} catch(IOException | RuntimeException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -468,7 +469,7 @@ class NetServerManager {
 						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 							requestID = in.readShort();
 							
-							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
 							dataSec.decrypt(PreferencesManager.getPrefPassword());
 							
 							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
@@ -477,7 +478,7 @@ class NetServerManager {
 								message = inSec.readUTF();
 								service = inSec.readUTF();
 							}
-						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
+						} catch(IOException | RuntimeException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -505,7 +506,7 @@ class NetServerManager {
 							requestIndex = in.readInt();
 							isLast = in.readBoolean();
 							
-							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
 							dataSec.decrypt(PreferencesManager.getPrefPassword());
 							
 							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
@@ -514,7 +515,7 @@ class NetServerManager {
 								inSec.readFully(compressedBytes);
 								if(requestIndex == 0) fileName = inSec.readUTF();
 							}
-						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
+						} catch(IOException | RuntimeException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -540,7 +541,7 @@ class NetServerManager {
 							requestIndex = in.readInt();
 							isLast = in.readBoolean();
 							
-							SharedValues.EncryptableData dataSec = (SharedValues.EncryptableData) in.readObject();
+							Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
 							dataSec.decrypt(PreferencesManager.getPrefPassword());
 							
 							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
@@ -553,7 +554,7 @@ class NetServerManager {
 									service = inSec.readUTF();
 								}
 							}
-						} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
+						} catch(IOException | RuntimeException | GeneralSecurityException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							break;
 						}
@@ -576,10 +577,10 @@ class NetServerManager {
 				//Reading the data
 				String transmissionWord;
 				try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-					SharedValues.EncryptableData pack = (SharedValues.EncryptableData) in.readObject();
-					pack.decrypt(PreferencesManager.getPrefPassword());
-					transmissionWord = new String(pack.data, stringCharset);
-				} catch(IOException | RuntimeException | ClassNotFoundException | GeneralSecurityException exception) {
+					Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
+					dataSec.decrypt(PreferencesManager.getPrefPassword());
+					transmissionWord = new String(dataSec.data, stringCharset);
+				} catch(IOException | RuntimeException | GeneralSecurityException exception) {
 					//Logging the exception
 					Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
 					
@@ -682,6 +683,8 @@ class NetServerManager {
 					pingResponseTimer.schedule(new TimerTask() {
 						@Override
 						public void run() {
+							Main.getLogger().log(Level.INFO, "Disconnecting inactive client (didn't respond to ping)");
+							
 							try {
 								closeConnection();
 								

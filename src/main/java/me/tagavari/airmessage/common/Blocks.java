@@ -9,33 +9,35 @@ import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.Serializable;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.spec.KeySpec;
-import java.util.ArrayList;
+import java.util.List;
 
-public class SharedValues {
-	public static class ConversationInfo implements Serializable {
-		private static final long serialVersionUID = 100;
-		
+public class Blocks {
+	public interface Block {
+		void writeObject(ObjectOutputStream stream) throws IOException;
+	}
+	
+	public static class ConversationInfo implements Block {
 		public String guid;
 		public boolean available;
 		public String service;
 		public String name;
-		public ArrayList<String> members;
+		public String[] members;
 		
 		//Conversation unavailable
 		public ConversationInfo(String guid) {
 			//Setting the values
 			this.guid = guid;
 			this.available = false;
+			this.service = null;
 			this.name = null;
 			this.members = null;
 		}
 		
 		//Conversation available
-		public ConversationInfo(String guid, String service, String name, ArrayList<String> members) {
+		public ConversationInfo(String guid, String service, String name, String[] members) {
 			//Setting the values
 			this.guid = guid;
 			this.available = true;
@@ -44,19 +46,22 @@ public class SharedValues {
 			this.members = members;
 		}
 		
-		private void writeObject(ObjectOutputStream stream) throws IOException {
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
 			//Writing the fields
 			stream.writeUTF(guid);
 			stream.writeBoolean(available);
-			stream.writeUTF(service);
-			stream.writeObject(name);
-			stream.writeObject(members);
+			if(available) {
+				stream.writeUTF(service);
+				stream.writeBoolean(name != null);
+				if(name != null) stream.writeUTF(name);
+				stream.writeInt(members.length);
+				for(String member : members) stream.writeUTF(member);
+			}
 		}
 	}
 	
-	public static abstract class ConversationItem implements Serializable, Cloneable {
-		private static final long serialVersionUID = 101;
-		
+	public static abstract class ConversationItem implements Block {
 		public String guid;
 		public String chatGuid;
 		public long date;
@@ -66,10 +71,21 @@ public class SharedValues {
 			this.chatGuid = chatGuid;
 			this.date = date;
 		}
+		
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
+			stream.writeInt(getItemType());
+			
+			stream.writeUTF(guid);
+			stream.writeUTF(chatGuid);
+			stream.writeLong(date);
+		}
+		
+		abstract int getItemType();
 	}
 	
 	public static class MessageInfo extends ConversationItem {
-		private static final long serialVersionUID = 102;
+		private static final int itemType = 0;
 		
 		public static final int stateCodeGhost = 0;
 		public static final int stateCodeIdle = 1;
@@ -79,15 +95,15 @@ public class SharedValues {
 		
 		public String text;
 		public String sender;
-		public ArrayList<AttachmentInfo> attachments;
-		public ArrayList<StickerModifierInfo> stickers;
-		public ArrayList<TapbackModifierInfo> tapbacks;
+		public List<AttachmentInfo> attachments;
+		public List<StickerModifierInfo> stickers;
+		public List<TapbackModifierInfo> tapbacks;
 		public String sendEffect;
 		public int stateCode;
 		public int errorCode;
 		public long dateRead;
 		
-		public MessageInfo(String guid, String chatGuid, long date, String text, String sender, ArrayList<AttachmentInfo> attachments, ArrayList<StickerModifierInfo> stickers, ArrayList<TapbackModifierInfo> tapbacks, String sendEffect, int stateCode, int errorCode, long dateRead) {
+		public MessageInfo(String guid, String chatGuid, long date, String text, String sender, List<AttachmentInfo> attachments, List<StickerModifierInfo> stickers, List<TapbackModifierInfo> tapbacks, String sendEffect, int stateCode, int errorCode, long dateRead) {
 			//Calling the super constructor
 			super(guid, chatGuid, date);
 			
@@ -103,49 +119,36 @@ public class SharedValues {
 			this.dateRead = dateRead;
 		}
 		
-		private void writeObject(ObjectOutputStream stream) throws IOException {
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
 			//Writing the fields
-			stream.writeUTF(guid);
-			stream.writeUTF(chatGuid);
-			stream.writeLong(date);
+			super.writeObject(stream);
 			
-			stream.writeObject(text);
-			stream.writeObject(sender);
-			stream.writeObject(attachments);
-			stream.writeObject(stickers);
-			stream.writeObject(tapbacks);
-			stream.writeObject(sendEffect);
+			stream.writeBoolean(text != null);
+			if(text != null) stream.writeUTF(text);
+			stream.writeBoolean(sender != null);
+			if(sender != null) stream.writeUTF(sender);
+			stream.writeInt(attachments.size());
+			for(AttachmentInfo item : attachments) item.writeObject(stream);
+			stream.writeInt(stickers.size());
+			for(StickerModifierInfo item : stickers) item.writeObject(stream);
+			stream.writeInt(tapbacks.size());
+			for(TapbackModifierInfo item : tapbacks) item.writeObject(stream);
+			stream.writeBoolean(sendEffect != null);
+			if(sendEffect != null) stream.writeUTF(sendEffect);
 			stream.writeInt(stateCode);
 			stream.writeInt(errorCode);
 			stream.writeLong(dateRead);
 		}
-	}
-	
-	public static class AttachmentInfo implements Serializable {
-		private static final long serialVersionUID = 103;
-		public String guid;
-		public String name;
-		public String type;
-		public byte[] checksum;
 		
-		public AttachmentInfo(String guid, String name, String type, byte[] checksum) {
-			//Setting the variables
-			this.guid = guid;
-			this.name = name;
-			this.type = type;
-			this.checksum = checksum;
-		}
-		
-		private void writeObject(ObjectOutputStream stream) throws IOException {
-			stream.writeUTF(guid);
-			stream.writeObject(name);
-			stream.writeObject(type);
-			stream.writeObject(checksum);
+		@Override
+		int getItemType() {
+			return itemType;
 		}
 	}
 	
 	public static class GroupActionInfo extends ConversationItem {
-		private static final long serialVersionUID = 104;
+		private static final int itemType = 1;
 		
 		public String agent;
 		public String other;
@@ -161,20 +164,26 @@ public class SharedValues {
 			this.groupActionType = groupActionType;
 		}
 		
-		private void writeObject(ObjectOutputStream stream) throws IOException {
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
 			//Writing the fields
-			stream.writeUTF(guid);
-			stream.writeUTF(chatGuid);
-			stream.writeLong(date);
+			super.writeObject(stream);
 			
-			stream.writeObject(agent);
-			stream.writeObject(other);
+			stream.writeBoolean(agent != null);
+			if(agent != null) stream.writeUTF(agent);
+			stream.writeBoolean(other != null);
+			if(other != null) stream.writeUTF(other);
 			stream.writeInt(groupActionType);
+		}
+		
+		@Override
+		int getItemType() {
+			return itemType;
 		}
 	}
 	
 	public static class ChatRenameActionInfo extends ConversationItem {
-		private static final long serialVersionUID = 105;
+		private static final int itemType = 2;
 		
 		public String agent;
 		public String newChatName;
@@ -188,29 +197,70 @@ public class SharedValues {
 			this.newChatName = newChatName;
 		}
 		
-		private void writeObject(ObjectOutputStream stream) throws IOException {
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
 			//Writing the fields
-			stream.writeUTF(guid);
-			stream.writeUTF(chatGuid);
-			stream.writeLong(date);
+			super.writeObject(stream);
 			
-			stream.writeObject(agent);
-			stream.writeObject(newChatName);
+			stream.writeBoolean(agent != null);
+			if(agent != null) stream.writeUTF(agent);
+			stream.writeBoolean(newChatName != null);
+			if(newChatName != null) stream.writeUTF(newChatName);
+		}
+		
+		@Override
+		int getItemType() {
+			return itemType;
 		}
 	}
 	
-	public static abstract class ModifierInfo implements Serializable {
-		private static final long serialVersionUID = 106;
+	public static class AttachmentInfo implements Block {
+		public String guid;
+		public String name;
+		public String type;
+		public byte[] checksum;
 		
+		public AttachmentInfo(String guid, String name, String type, byte[] checksum) {
+			//Setting the variables
+			this.guid = guid;
+			this.name = name;
+			this.type = type;
+			this.checksum = checksum;
+		}
+		
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
+			stream.writeUTF(guid);
+			stream.writeUTF(name);
+			stream.writeBoolean(type != null);
+			if(type != null) stream.writeUTF(type);
+			stream.writeBoolean(checksum != null);
+			if(checksum != null) {
+				stream.writeInt(checksum.length);
+				stream.write(checksum);
+			}
+		}
+	}
+	
+	public static abstract class ModifierInfo implements Block {
 		public String message;
 		
 		public ModifierInfo(String message) {
 			this.message = message;
 		}
+		
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
+			stream.writeInt(getItemType());
+			
+			stream.writeUTF(message);
+		}
+		
+		abstract int getItemType();
 	}
 	
 	public static class ActivityStatusModifierInfo extends ModifierInfo {
-		private static final long serialVersionUID = 107;
+		private static final int itemType = 0;
 		
 		public int state;
 		public long dateRead;
@@ -224,17 +274,22 @@ public class SharedValues {
 			this.dateRead = dateRead;
 		}
 		
-		private void writeObject(ObjectOutputStream stream) throws IOException {
+		public void writeObject(ObjectOutputStream stream) throws IOException {
 			//Writing the fields
-			stream.writeUTF(message);
+			super.writeObject(stream);
 			
 			stream.writeInt(state);
 			stream.writeLong(dateRead);
 		}
+		
+		@Override
+		int getItemType() {
+			return itemType;
+		}
 	}
 	
 	public static class StickerModifierInfo extends ModifierInfo {
-		private static final long serialVersionUID = 108;
+		private static final int itemType = 1;
 		
 		public int messageIndex;
 		public String fileGuid;
@@ -254,20 +309,28 @@ public class SharedValues {
 			this.image = image;
 		}
 		
-		private void writeObject(ObjectOutputStream stream) throws IOException {
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
 			//Writing the fields
-			stream.writeUTF(message);
+			super.writeObject(stream);
 			
 			stream.writeInt(messageIndex);
 			stream.writeUTF(fileGuid);
-			stream.writeObject(sender);
+			stream.writeBoolean(sender != null);
+			if(sender != null) stream.writeUTF(sender);
 			stream.writeLong(date);
-			stream.writeObject(image);
+			stream.writeInt(image.length);
+			stream.write(image);
+		}
+		
+		@Override
+		int getItemType() {
+			return itemType;
 		}
 	}
 	
 	public static class TapbackModifierInfo extends ModifierInfo {
-		private static final long serialVersionUID = 109;
+		private static final int itemType = 2;
 		
 		//Creating the reference values
 		public static final int tapbackBaseAdd = 2000;
@@ -293,40 +356,24 @@ public class SharedValues {
 			this.code = code;
 		}
 		
-		private void writeObject(ObjectOutputStream stream) throws IOException {
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
 			//Writing the fields
-			stream.writeUTF(message);
+			super.writeObject(stream);
 			
 			stream.writeInt(messageIndex);
-			stream.writeObject(sender);
+			stream.writeBoolean(sender != null);
+			if(sender != null) stream.writeUTF(sender);
 			stream.writeInt(code);
 		}
-	}
-	
-	/* public static byte[] compress(byte[] data, int length) {
-		Deflater compressor = new Deflater();
-		compressor.setInput(data, 0, length);
-		compressor.finish();
-		byte[] compressedData = new byte[length];
-		int compressedLen = compressor.deflate(compressedData);
-		compressor.end();
-		return Arrays.copyOf(compressedData, compressedLen);
-	}
-	
-	public static byte[] decompress(byte[] data) throws IOException {
-		Inflater inflater = new Inflater();
-		inflater.setInput(data);
-		ByteArrayOutputStream outputStream = new ByteArrayOutputStream(data.length);
-		byte[] buffer = new byte[1024];
-		while(!inflater.finished()) {
-			int count = inflater.inflate(buffer);
-			outputStream.write(buffer, 0, count);
+		
+		@Override
+		int getItemType() {
+			return itemType;
 		}
-		outputStream.close();
-		return outputStream.toByteArray();
-	} */
+	}
 	
-	public static class EncryptableData implements Serializable {
+	public static class EncryptableData implements Block {
 		//Creating the reference values
 		private static final int saltLen = 8; //8 bytes
 		private static final int ivLen = 12; //12 bytes (instead of 16 because of GCM)
@@ -337,14 +384,27 @@ public class SharedValues {
 		private static final int keyLength = 128; //128 bits
 		
 		//private static final long serialVersionUID = 0;
-		private byte[] salt;
-		private byte[] iv;
+		public byte[] salt;
+		public byte[] iv;
 		public byte[] data;
-		private transient boolean dataEncrypted = false;
+		private transient boolean dataEncrypted;
 		
+		private EncryptableData() {
+		
+		}
 		
 		public EncryptableData(byte[] data) {
 			this.data = data;
+			this.salt = null;
+			this.iv = null;
+			dataEncrypted = false;
+		}
+		
+		public EncryptableData(byte[] salt, byte[] iv, byte[] data) {
+			this.salt = salt;
+			this.iv = iv;
+			this.data = data;
+			dataEncrypted = true;
 		}
 		
 		public EncryptableData encrypt(String password) throws ClassCastException, GeneralSecurityException {
@@ -357,7 +417,7 @@ public class SharedValues {
 			
 			//Creating the key
 			SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(keyFactoryAlgorithm);
-			KeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, 10000, keyLength);
+			KeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, keyIterationCount, keyLength);
 			SecretKey secretKey = secretKeyFactory.generateSecret(keySpec);
 			SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getEncoded(), keyAlgorithm);
 			
@@ -395,11 +455,16 @@ public class SharedValues {
 			data = cipher.doFinal(data);
 			dataEncrypted = false;
 			
+			//Invalidating the encryption information
+			salt = null;
+			iv = null;
+			
 			//Returning the object
 			return this;
 		}
 		
-		private void writeObject(ObjectOutputStream stream) throws IOException {
+		@Override
+		public void writeObject(ObjectOutputStream stream) throws IOException {
 			//Throwing an exception if the data isn't encrypted
 			if(!dataEncrypted) throw new RuntimeException("Data serialization attempt before encryption!");
 			
@@ -410,16 +475,26 @@ public class SharedValues {
 			stream.write(data);
 		}
 		
-		private void readObject(ObjectInputStream stream) throws IOException {
+		public static EncryptableData readObject(ObjectInputStream stream) throws IOException {
+			//Creating the data
+			EncryptableData encryptableData = new EncryptableData();
+			
 			//Reading the data
-			salt = new byte[saltLen];
-			stream.readFully(salt);
+			encryptableData.salt = new byte[saltLen];
+			stream.readFully(encryptableData.salt);
 			
-			iv = new byte[ivLen];
-			stream.readFully(iv);
+			encryptableData.iv = new byte[ivLen];
+			stream.readFully(encryptableData.iv);
 			
-			data = new byte[stream.readInt()];
-			stream.readFully(data);
+			encryptableData.data = new byte[stream.readInt()];
+			stream.readFully(encryptableData.data);
+			
+			//Returning the data
+			return encryptableData;
+		}
+		
+		public boolean isEncrypted() {
+			return dataEncrypted;
 		}
 	}
 }

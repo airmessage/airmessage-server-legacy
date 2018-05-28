@@ -37,18 +37,18 @@ class AppleScriptManager {
 			/* "set oldDelimiters to AppleScript's text item delimiters",
 			"set AppleScript's text item delimiters to \"" + appleScriptDelimiter + "\"",
 			"set recipientList to every text item of \"%1$s\"",
-			"set AppleScript's text item delimiters to oldDelimiters", */
-			"set recipientList to {%1$s}",
+			"set AppleScript's text item delimiters to oldDelimiters",
+			"set recipientList to {%1$s}", */
 			
 			//Converting the recipients to iMessage buddies
-			"set buddyList to {}",
+			/* "set buddyList to {}",
 			"repeat with currentRecipient in recipientList",
 			"set currentBuddy to buddy currentRecipient of targetService",
 			"copy currentBuddy to the end of buddyList",
-			"end repeat",
+			"end repeat", */
 			
 			//Creating the chat
-			"set targetChat to make new text chat with properties {participants:buddyList}",
+			"set targetChat to make new text chat with properties {participants:{%1$s}}",
 			
 			//Sending the messages
 			"send \"%2$s\" to targetChat",
@@ -89,18 +89,18 @@ class AppleScriptManager {
 			/* "set oldDelimiters to AppleScript's text item delimiters",
 			"set AppleScript's text item delimiters to \"" + appleScriptDelimiter + "\"",
 			"set recipientList to every text item of \"%1$s\"",
-			"set AppleScript's text item delimiters to oldDelimiters", */
-			"set recipientList to {%1$s}",
+			"set AppleScript's text item delimiters to oldDelimiters",
+			"set recipientList to {%1$s}", */
 			
 			//Converting the recipients to iMessage buddies
-			"set buddyList to {}",
+			/* "set buddyList to {}",
 			"repeat with currentRecipient in recipientList",
 			"set currentBuddy to buddy currentRecipient of targetService",
 			"copy currentBuddy to the end of buddyList",
-			"end repeat",
+			"end repeat", */
 			
 			//Creating the chat
-			"set targetChat to make new text chat with properties {participants:buddyList}",
+			"set targetChat to make new text chat with properties {participants:{%1$s}}",
 			
 			//Sending the messages
 			"send message to targetChat",
@@ -151,11 +151,10 @@ class AppleScriptManager {
 		if(chatMembers.length == 0) return false;
 		
 		//Formatting the chat members
-		StringBuilder delimitedChatMembers = new StringBuilder('"' + escapeAppleScriptString(chatMembers[0]) + '"');
+		StringBuilder delimitedChatMembers = new StringBuilder("buddy \"" + escapeAppleScriptString(chatMembers[0]) + "\" of targetService");
 		
 		//Adding the remaining members
-		for(int i = 1; i < chatMembers.length; i++) delimitedChatMembers.append(',').append('"').append(escapeAppleScriptString(chatMembers[i])).append('"');
-		Main.getLogger().fine("Making new conversation with targets: " + delimitedChatMembers.toString());
+		for(int i = 1; i < chatMembers.length; i++) delimitedChatMembers.append(',').append("buddy \"").append(escapeAppleScriptString(chatMembers[i])).append("\" of targetService");
 		
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
@@ -231,11 +230,10 @@ class AppleScriptManager {
 		if(chatMembers.length == 0) return false;
 		
 		//Formatting the chat members
-		StringBuilder delimitedChatMembers = new StringBuilder(escapeAppleScriptString(chatMembers[0]));
+		StringBuilder delimitedChatMembers = new StringBuilder("buddy \"" + escapeAppleScriptString(chatMembers[0]) + "\" of targetService");
 		
 		//Adding the remaining members
-		for(int i = 1; i < chatMembers.length; i++) delimitedChatMembers.append(',').append('"').append(escapeAppleScriptString(chatMembers[i])).append('"');
-		Main.getLogger().fine("New conversation targets: " + delimitedChatMembers.toString());
+		for(int i = 1; i < chatMembers.length; i++) delimitedChatMembers.append(',').append("buddy \"").append(escapeAppleScriptString(chatMembers[i])).append("\" of targetService");
 		
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
