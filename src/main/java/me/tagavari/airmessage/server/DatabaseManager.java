@@ -386,11 +386,16 @@ class DatabaseManager {
 		else {
 			//Getting the file
 			String filePath = results.getValue(0, DSL.field("filename", String.class));
-			if(filePath.startsWith("~")) filePath = filePath.replaceFirst("~", System.getProperty("user.home"));
-			file = new File(filePath);
 			
-			//Setting the succeeded variable to false if the file doesn't exist
-			if(!file.exists()) succeeded = false;
+			//Failing the file check if the path is invalid
+			if(filePath == null) succeeded = false;
+			else {
+				if(filePath.startsWith("~")) filePath = filePath.replaceFirst("~", System.getProperty("user.home"));
+				file = new File(filePath);
+				
+				//Failing the file check if the file doesn't exist
+				if(!file.exists()) succeeded = false;
+			}
 		}
 		
 		//Checking if there have been no errors so far
