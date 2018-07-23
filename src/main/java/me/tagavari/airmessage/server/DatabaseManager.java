@@ -15,13 +15,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
@@ -48,7 +46,11 @@ class DatabaseManager {
 	RequestThread requestThread;
 	
 	//Creating the other values
-	private HashMap<String, MessageState> messageStates = new HashMap<>();
+	private final HashMap<String, MessageState> messageStates = new HashMap<>();
+	
+	private static final long creationTargetingAvailabilityUpdateInterval = 60 * 60 * 1000; //1 hour
+	private long lastCreationTargetingAvailabilityUpdate = Long.MIN_VALUE;
+	private final AtomicReference<HashMap<String, CreationTargetingChat>> creationTargetingAvailabilityList = new AtomicReference<>(new HashMap<>());
 	
 	static boolean start(long scanFrequency) {
 		//Checking if there is already an instance
@@ -132,6 +134,10 @@ class DatabaseManager {
 		return instance;
 	}
 	
+	HashMap<String, CreationTargetingChat> getCreationTargetingAvailabilityList() {
+		return creationTargetingAvailabilityList.get();
+	}
+	
 	//The thread that actively scans the database for new messages
 	class ScannerThread extends Thread {
 		//Creating the connection variables
@@ -159,7 +165,7 @@ class DatabaseManager {
 		@Override
 		public void run() {
 			//Creating the message array variable
-			DataFetchResult dataFetchResult = null;
+			DataFetchResult dataFetchResult;
 			
 			//Looping until the thread is interrupted
 			while(!isInterrupted()) {
@@ -186,6 +192,7 @@ class DatabaseManager {
 				} catch(IOException | NoSuchAlgorithmException | OutOfMemoryError | RuntimeException exception) {
 					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
+					dataFetchResult = null;
 				} catch(InterruptedException exception) {
 					//Returning
 					return;
@@ -213,6 +220,19 @@ class DatabaseManager {
 				
 				//Updating the message states
 				updateMessageStates(connection, dataFetchResult == null ? new ArrayList<>() : dataFetchResult.isolatedModifiers);
+				
+				{
+					//Checking if the targeting availability index needs to be updated
+					long currentTime = System.currentTimeMillis();
+					if(currentTime >= lastCreationTargetingAvailabilityUpdate + creationTargetingAvailabilityUpdateInterval) {
+						//Setting the last update time
+						lastCreationTargetingAvailabilityUpdate = currentTime;
+						
+						//Reindexing
+						indexTargetAvailability(connection);
+						Main.getLogger().finest("Updated creation target chat index");
+					}
+				}
 			}
 		}
 		
@@ -1030,6 +1050,33 @@ class DatabaseManager {
 		}
 	}
 	
+	private void indexTargetAvailability(Connection connection) {
+		//Creating the DSL context
+		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
+		
+		//Building the query
+		Result<Record3<String, String, String>> queryResult = context.select(DSL.field("chat.guid", String.class), DSL.field("chat.service_name", String.class), DSL.field("handle.id", String.class))
+				.from(DSL.table("chat"))
+				.join(DSL.table("chat_handle_join")).on(DSL.field("chat.ROWID").eq(DSL.field("chat_handle_join.chat_id")))
+				.join(DSL.table("handle")).on(DSL.field("chat_handle_join.handle_id").eq(DSL.field("handle.ROWID")))
+				.groupBy(DSL.field("chat.guid"))
+				.having(DSL.count(DSL.field("handle.id")).eq(1))
+				.fetch();
+		
+		//Creating the results
+		HashMap<String, CreationTargetingChat> resultList = new HashMap<>();
+		for(int i = 0; i < queryResult.size(); i++) {
+			String guid = queryResult.getValue(i, DSL.field("chat.guid", String.class));
+			String service = queryResult.getValue(i, DSL.field("chat.service_name", String.class));
+			String address = queryResult.getValue(i, DSL.field("handle.id", String.class));
+			
+			resultList.put(guid, new CreationTargetingChat(address, service));
+		}
+		
+		//Setting the list
+		creationTargetingAvailabilityList.set(resultList);
+	}
+	
 	private static class MessageState {
 		private int state;
 		private int depth = 0;
@@ -1061,7 +1108,7 @@ class DatabaseManager {
 			
 			//Reading the file
 			int bytesRead;
-			while ((bytesRead = inputStream.read(dataBytes)) != -1) messageDigest.update(dataBytes, 0, bytesRead);
+			while((bytesRead = inputStream.read(dataBytes)) != -1) messageDigest.update(dataBytes, 0, bytesRead);
 			
 			//Returning the file hash
 			return messageDigest.digest();
@@ -1127,6 +1174,24 @@ class DatabaseManager {
 			this.fileGuid = fileGuid;
 			this.requestID = requestID;
 			this.chunkSize = chunkSize;
+		}
+	}
+	
+	static class CreationTargetingChat {
+		private final String address;
+		private final String service;
+		
+		CreationTargetingChat(String address, String service) {
+			this.address = address;
+			this.service = service;
+		}
+		
+		String getAddress() {
+			return address;
+		}
+		
+		String getService() {
+			return service;
 		}
 	}
 }

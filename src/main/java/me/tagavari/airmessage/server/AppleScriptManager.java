@@ -120,11 +120,11 @@ class AppleScriptManager {
 			command.add(String.format(line, chatGUID, escapeAppleScriptString(message)));
 		}
 		
-		//Running the command
 		try {
+			//Running the command
 			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
 			
-			//Returning false if there was any error
+			//Reading from the error stream
 			BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 			boolean linesRead = false;
 			String lsString;
@@ -133,7 +133,18 @@ class AppleScriptManager {
 				linesRead = true;
 			}
 			
-			if(linesRead) return false;
+			//Checking if there were any lines read
+			if(linesRead) {
+				//Checking if the conversation has been indexed as a one-on-one chat
+				DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
+				if(targetChat != null) {
+					//Attempting to send the message as a new conversation
+					return sendNewMessage(new String[]{targetChat.getAddress()}, message, targetChat.getService());
+				}
+				
+				//Returning false
+				return false;
+			}
 		} catch(IOException exception) {
 			//Printing the stack trace
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
@@ -199,11 +210,11 @@ class AppleScriptManager {
 			command.add(String.format(line, chatGUID, escapeAppleScriptString(file.getAbsolutePath())));
 		}
 		
-		//Running the command
 		try {
+			//Running the command
 			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
 			
-			//Returning false if there was any error
+			//Reading from the error stream
 			BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 			boolean linesRead = false;
 			String lsString;
@@ -212,7 +223,18 @@ class AppleScriptManager {
 				linesRead = true;
 			}
 			
-			if(linesRead) return false;
+			//Checking if there were any lines read
+			if(linesRead) {
+				//Checking if the conversation has been indexed as a one-on-one chat
+				DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
+				if(targetChat != null) {
+					//Attempting to send the message as a new conversation
+					return sendNewFile(new String[]{targetChat.getAddress()}, file, targetChat.getService());
+				}
+				
+				//Returning false
+				return false;
+			}
 		} catch(IOException exception) {
 			//Printing the stack trace
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
