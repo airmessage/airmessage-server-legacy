@@ -49,7 +49,8 @@ class DatabaseManager {
 	private final HashMap<String, MessageState> messageStates = new HashMap<>();
 	
 	private static final long creationTargetingAvailabilityUpdateInterval = 60 * 60 * 1000; //1 hour
-	private long lastCreationTargetingAvailabilityUpdate = Long.MIN_VALUE;
+	private long lastCreationTargetingAvailabilityUpdate;
+	private boolean creationTargetingUpdateRequired = true;
 	private final AtomicReference<HashMap<String, CreationTargetingChat>> creationTargetingAvailabilityList = new AtomicReference<>(new HashMap<>());
 	
 	static boolean start(long scanFrequency) {
@@ -138,6 +139,10 @@ class DatabaseManager {
 		return creationTargetingAvailabilityList.get();
 	}
 	
+	void requestCreationTargetingAvailabilityUpdate() {
+		creationTargetingUpdateRequired = true;
+	}
+	
 	//The thread that actively scans the database for new messages
 	class ScannerThread extends Thread {
 		//Creating the connection variables
@@ -224,9 +229,10 @@ class DatabaseManager {
 				{
 					//Checking if the targeting availability index needs to be updated
 					long currentTime = System.currentTimeMillis();
-					if(currentTime >= lastCreationTargetingAvailabilityUpdate + creationTargetingAvailabilityUpdateInterval) {
+					if(creationTargetingUpdateRequired || currentTime >= lastCreationTargetingAvailabilityUpdate + creationTargetingAvailabilityUpdateInterval) {
 						//Setting the last update time
 						lastCreationTargetingAvailabilityUpdate = currentTime;
+						creationTargetingUpdateRequired = false;
 						
 						//Reindexing
 						indexTargetAvailability(connection);

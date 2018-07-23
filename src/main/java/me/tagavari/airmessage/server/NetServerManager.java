@@ -484,7 +484,7 @@ class NetServerManager {
 						}
 						
 						//Sending the message
-						boolean result = AppleScriptManager.sendNewMessage(chatMembers, message, service);
+						boolean result = AppleScriptManager.sendNewMessage(chatMembers, message, service, false);
 						
 						//Sending the response
 						sendMessageRequestResponse(this, requestID, result);

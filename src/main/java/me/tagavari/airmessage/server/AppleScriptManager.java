@@ -139,7 +139,7 @@ class AppleScriptManager {
 				DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
 				if(targetChat != null) {
 					//Attempting to send the message as a new conversation
-					return sendNewMessage(new String[]{targetChat.getAddress()}, message, targetChat.getService());
+					return sendNewMessage(new String[]{targetChat.getAddress()}, message, targetChat.getService(), true);
 				}
 				
 				//Returning false
@@ -157,7 +157,7 @@ class AppleScriptManager {
 		return true;
 	}
 	
-	static boolean sendNewMessage(String[] chatMembers, String message, String service) {
+	static boolean sendNewMessage(String[] chatMembers, String message, String service, boolean isFallback) {
 		//Returning false if there are no members
 		if(chatMembers.length == 0) return false;
 		
@@ -197,6 +197,9 @@ class AppleScriptManager {
 			return false;
 		}
 		
+		//Reindexing the creation targeting index
+		if(!isFallback) DatabaseManager.getInstance().requestCreationTargetingAvailabilityUpdate();
+		
 		//Returning true
 		return true;
 	}
@@ -229,7 +232,7 @@ class AppleScriptManager {
 				DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
 				if(targetChat != null) {
 					//Attempting to send the message as a new conversation
-					return sendNewFile(new String[]{targetChat.getAddress()}, file, targetChat.getService());
+					return sendNewFile(new String[]{targetChat.getAddress()}, file, targetChat.getService(), true);
 				}
 				
 				//Returning false
@@ -247,7 +250,7 @@ class AppleScriptManager {
 		return true;
 	}
 	
-	static boolean sendNewFile(String[] chatMembers, File file, String service) {
+	static boolean sendNewFile(String[] chatMembers, File file, String service, boolean isFallback) {
 		//Returning false if there are no members
 		if(chatMembers.length == 0) return false;
 		
@@ -286,6 +289,9 @@ class AppleScriptManager {
 			//Returning false
 			return false;
 		}
+		
+		//Reindexing the creation targeting index
+		if(!isFallback) DatabaseManager.getInstance().requestCreationTargetingAvailabilityUpdate();
 		
 		//Returning true
 		return true;
@@ -449,7 +455,7 @@ class AppleScriptManager {
 			fileUploadRequests.remove(this);
 			
 			//Sending the file
-			boolean result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service);
+			boolean result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service, false);
 			
 			//Sending the response
 			NetServerManager.sendMessageRequestResponse(connection, requestID, result);
