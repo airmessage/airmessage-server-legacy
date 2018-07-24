@@ -120,11 +120,11 @@ class AppleScriptManager {
 			command.add(String.format(line, chatGUID, escapeAppleScriptString(message)));
 		}
 		
-		//Running the command
 		try {
+			//Running the command
 			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
 			
-			//Returning false if there was any error
+			//Reading from the error stream
 			BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 			boolean linesRead = false;
 			String lsString;
@@ -133,7 +133,18 @@ class AppleScriptManager {
 				linesRead = true;
 			}
 			
-			if(linesRead) return false;
+			//Checking if there were any lines read
+			if(linesRead) {
+				//Checking if the conversation has been indexed as a one-on-one chat
+				DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
+				if(targetChat != null) {
+					//Attempting to send the message as a new conversation
+					return sendNewMessage(new String[]{targetChat.getAddress()}, message, targetChat.getService(), true);
+				}
+				
+				//Returning false
+				return false;
+			}
 		} catch(IOException exception) {
 			//Printing the stack trace
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
@@ -146,7 +157,7 @@ class AppleScriptManager {
 		return true;
 	}
 	
-	static boolean sendNewMessage(String[] chatMembers, String message, String service) {
+	static boolean sendNewMessage(String[] chatMembers, String message, String service, boolean isFallback) {
 		//Returning false if there are no members
 		if(chatMembers.length == 0) return false;
 		
@@ -186,6 +197,9 @@ class AppleScriptManager {
 			return false;
 		}
 		
+		//Reindexing the creation targeting index
+		if(!isFallback) DatabaseManager.getInstance().requestCreationTargetingAvailabilityUpdate();
+		
 		//Returning true
 		return true;
 	}
@@ -199,11 +213,11 @@ class AppleScriptManager {
 			command.add(String.format(line, chatGUID, escapeAppleScriptString(file.getAbsolutePath())));
 		}
 		
-		//Running the command
 		try {
+			//Running the command
 			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
 			
-			//Returning false if there was any error
+			//Reading from the error stream
 			BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 			boolean linesRead = false;
 			String lsString;
@@ -212,7 +226,18 @@ class AppleScriptManager {
 				linesRead = true;
 			}
 			
-			if(linesRead) return false;
+			//Checking if there were any lines read
+			if(linesRead) {
+				//Checking if the conversation has been indexed as a one-on-one chat
+				DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
+				if(targetChat != null) {
+					//Attempting to send the message as a new conversation
+					return sendNewFile(new String[]{targetChat.getAddress()}, file, targetChat.getService(), true);
+				}
+				
+				//Returning false
+				return false;
+			}
 		} catch(IOException exception) {
 			//Printing the stack trace
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
@@ -225,7 +250,7 @@ class AppleScriptManager {
 		return true;
 	}
 	
-	static boolean sendNewFile(String[] chatMembers, File file, String service) {
+	static boolean sendNewFile(String[] chatMembers, File file, String service, boolean isFallback) {
 		//Returning false if there are no members
 		if(chatMembers.length == 0) return false;
 		
@@ -264,6 +289,9 @@ class AppleScriptManager {
 			//Returning false
 			return false;
 		}
+		
+		//Reindexing the creation targeting index
+		if(!isFallback) DatabaseManager.getInstance().requestCreationTargetingAvailabilityUpdate();
 		
 		//Returning true
 		return true;
@@ -427,7 +455,7 @@ class AppleScriptManager {
 			fileUploadRequests.remove(this);
 			
 			//Sending the file
-			boolean result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service);
+			boolean result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service, false);
 			
 			//Sending the response
 			NetServerManager.sendMessageRequestResponse(connection, requestID, result);
