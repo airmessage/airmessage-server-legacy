@@ -838,10 +838,10 @@ class DatabaseManager {
 							//Skipping the remainder of the iteration if there are no records
 							if(fileRecord.isEmpty()) continue;
 							
-							//Getting the file
-							File file = new File(fileRecord.getValue(0, DSL.field("attachment.filename", String.class)).replaceFirst("~", System.getProperty("user.home")));
-							
-							//Skipping the remainder of the iteration if the file is invalid
+							//Getting the file (and skipping the remainder of the iteration if the file is invalid)
+							String fileName = fileRecord.getValue(0, DSL.field("attachment.filename", String.class));
+							if(fileName == null) continue;
+							File file = new File(fileName.replaceFirst("~", System.getProperty("user.home")));
 							if(!file.exists()) continue;
 							
 							//Reading the file with GZIP compression
