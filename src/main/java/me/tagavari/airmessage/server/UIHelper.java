@@ -28,7 +28,7 @@ public class UIHelper {
 		//Showing an alert dialog
 		Shell shell = new Shell();
 		MessageBox dialog = new MessageBox(shell, SWT.ICON_WARNING | SWT.YES | SWT.NO);
-		dialog.setMessage(I18N.i.warning_osUnsupported());
+		dialog.setMessage(Main.resources().getString("message.os_unsupported"));
 		int result = dialog.open();
 		if(!shell.isDisposed()) shell.dispose();
 		
@@ -40,7 +40,7 @@ public class UIHelper {
 		//Showing an alert dialog
 		Shell shell = new Shell();
 		MessageBox dialog = new MessageBox(shell, SWT.ICON_WARNING | SWT.ABORT | SWT.RETRY | SWT.IGNORE);
-		dialog.setMessage(I18N.i.warning_schemaUpgradeError());
+		dialog.setMessage(Main.resources().getString("message.schema_upgrade_error"));
 		int result = dialog.open();
 		if(!shell.isDisposed()) shell.dispose();
 		
@@ -83,18 +83,18 @@ public class UIHelper {
 		//Creating the UI components
 		{
 			Label titleLabel = new Label(shell, SWT.NONE);
-			titleLabel.setText(I18N.i.intro_title());
+			titleLabel.setText(Main.resources().getString("message.intro.title"));
 			titleLabel.setFont(getFont(titleLabel.getFont(), 20, SWT.BOLD));
 		}
 		
 		{
 			Label subtitleLabel = new Label(shell, SWT.NONE);
-			subtitleLabel.setText(I18N.i.intro_text());
+			subtitleLabel.setText(Main.resources().getString("message.intro.body"));
 		}
 		
 		{
 			Button prefsButton = new Button(shell, SWT.PUSH);
-			prefsButton.setText(I18N.i.button_openPrefs());
+			prefsButton.setText(Main.resources().getString("action.open_preferences"));
 			prefsButton.addListener(SWT.Selection, event -> {
 				shell.close();
 				PreferencesManager.openWindow();

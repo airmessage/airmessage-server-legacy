@@ -129,6 +129,7 @@ class AppleScriptManager {
 			boolean linesRead = false;
 			String lsString;
 			while ((lsString = errorReader.readLine()) != null) {
+				if(!isFatalResponse(lsString)) continue;
 				Main.getLogger().severe(lsString);
 				linesRead = true;
 			}
@@ -277,6 +278,7 @@ class AppleScriptManager {
 			boolean linesRead = false;
 			String lsString;
 			while ((lsString = errorReader.readLine()) != null) {
+				if(!isFatalResponse(lsString)) continue;
 				Main.getLogger().severe(lsString);
 				linesRead = true;
 			}
@@ -547,5 +549,9 @@ class AppleScriptManager {
 	
 	private static String escapeAppleScriptString(String string) {
 		return string.replace("\\", "\\\\").replace("\"", "\\\"");
+	}
+	
+	private static boolean isFatalResponse(String line) {
+		return line.startsWith("execution error");
 	}
 }

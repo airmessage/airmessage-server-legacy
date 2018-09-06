@@ -1,5 +1,6 @@
 package me.tagavari.airmessage.server;
 
+import io.rincl.Rincled;
 import io.sentry.Sentry;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
@@ -27,7 +28,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
-class UpdateManager {
+class UpdateManager implements Rincled {
 	//Creating the reference values
 	private static final URL updateURL = makeURL("https://airmessage.org/update/server/1/");
 	
@@ -149,7 +150,7 @@ class UpdateManager {
 		//Creating the shell
 		Shell shell = new Shell(UIHelper.getDisplay(), SWT.TITLE | SWT.CLOSE | SWT.MIN);
 		//Shell shell = new Shell(UIHelper.getDisplay());
-		shell.setText(I18N.i.title_update());
+		shell.setText(Main.resources().getString("label.update"));
 		shell.setSize(550, 300);
 		
 		//Configuring the layout
@@ -164,7 +165,7 @@ class UpdateManager {
 			shell.setLayout(shellGL);
 			
 			Label labelTitle = new Label(shell, SWT.WRAP);
-			labelTitle.setText(I18N.i.message_updateAvailable_title(Constants.APP_NAME));
+			labelTitle.setText(Main.resources().getString("label.update.available.title"));
 			labelTitle.setFont(UIHelper.getFont(labelTitle.getFont(), 14, SWT.BOLD));
 			GridData labelTitleGD = new GridData();
 			labelTitleGD.grabExcessHorizontalSpace = true;
@@ -172,14 +173,14 @@ class UpdateManager {
 			labelTitle.setLayoutData(labelTitleGD);
 			
 			Label labelDescription = new Label(shell, SWT.WRAP);
-			labelDescription.setText(I18N.i.message_updateAvailable_description(Constants.APP_NAME, newVer, Constants.SERVER_VERSION));
+			labelDescription.setText(Main.resources().getString("label.update.available.body", newVer, Constants.SERVER_VERSION));
 			GridData labelDescriptionGD = new GridData();
 			labelDescriptionGD.grabExcessHorizontalSpace = true;
 			labelDescriptionGD.horizontalAlignment = GridData.FILL;
 			labelDescription.setLayoutData(labelDescriptionGD);
 			
 			Label labelNotes = new Label(shell, SWT.WRAP);
-			labelNotes.setText(I18N.i.message_releaseNotes());
+			labelNotes.setText(Main.resources().getString("prefix.release_notes"));
 			labelNotes.setFont(UIHelper.getFont(labelNotes.getFont(), -1, SWT.BOLD));
 			GridData labelNotesGD = new GridData();
 			labelNotesGD.grabExcessHorizontalSpace = true;
@@ -218,7 +219,7 @@ class UpdateManager {
 			buttonContainer.setLayout(buttonContainerFL);
 			
 			Button acceptButton = new Button(buttonContainer, SWT.PUSH);
-			acceptButton.setText(I18N.i.button_installUpdate());
+			acceptButton.setText(Main.resources().getString("action.install_update"));
 			FormData acceptButtonFD = new FormData();
 			//if(acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) acceptButtonFD.width = UIHelper.minButtonWidth;
 			acceptButtonFD.right = new FormAttachment(100);
@@ -228,7 +229,7 @@ class UpdateManager {
 			shell.setDefaultButton(acceptButton);
 			
 			Button ignoreButton = new Button(buttonContainer, SWT.PUSH);
-			ignoreButton.setText(I18N.i.button_installUpdate_later());
+			ignoreButton.setText(Main.resources().getString("action.install_update.later"));
 			FormData ignoreButtonFD = new FormData();
 			//if(ignoreButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) ignoreButtonFD.width = UIHelper.minButtonWidth;
 			ignoreButtonFD.right = new FormAttachment(acceptButton);
@@ -259,7 +260,7 @@ class UpdateManager {
 		
 		//Creating the shell
 		manualUpdateShell = new Shell(SWT.TITLE);
-		manualUpdateShell.setText(I18N.i.title_updateCheck());
+		manualUpdateShell.setText(Main.resources().getString("label.update.check.title"));
 		manualUpdateShell.setMinimumSize(300, 0);
 		
 		GridLayout manualUpdateShellGL = new GridLayout();
@@ -270,7 +271,7 @@ class UpdateManager {
 		
 		//Adding the title
 		Label title = new Label(manualUpdateShell, SWT.NONE);
-		title.setText(I18N.i.message_checkingUpdates());
+		title.setText(Main.resources().getString("label.update.check.body"));
 		title.setFont(UIHelper.getFont(title.getFont(), -1, SWT.BOLD));
 		GridData titleGD = new GridData();
 		titleGD.horizontalAlignment = GridData.FILL;
@@ -321,7 +322,7 @@ class UpdateManager {
 		
 		//Adding the title
 		Label labelTitle = new Label(shell, SWT.WRAP);
-		labelTitle.setText(I18N.i.message_upToDate());
+		labelTitle.setText(Main.resources().getString("label.update.up_to_date.title"));
 		labelTitle.setFont(UIHelper.getFont(labelTitle.getFont(), 14, SWT.BOLD));
 		GridData labelTitleGD = new GridData();
 		labelTitleGD.grabExcessHorizontalSpace = true;
@@ -330,7 +331,7 @@ class UpdateManager {
 		
 		//Adding the description
 		Label labelDescription = new Label(shell, SWT.WRAP);
-		labelDescription.setText(I18N.i.message_upToDate_desc(Constants.SERVER_VERSION));
+		labelDescription.setText(Main.resources().getString("label.update.up_to_date.body", Constants.SERVER_VERSION));
 		GridData labelDescriptionGD = new GridData();
 		labelDescriptionGD.grabExcessHorizontalSpace = true;
 		labelDescriptionGD.horizontalAlignment = GridData.FILL;
@@ -338,7 +339,7 @@ class UpdateManager {
 		
 		//Adding the button
 		Button closeButton = new Button(shell, SWT.PUSH);
-		closeButton.setText(I18N.i.button_ok());
+		closeButton.setText(Main.resources().getString("action.ok"));
 		GridData closeButtonGD = new GridData();
 		closeButtonGD.horizontalAlignment = GridData.END;
 		closeButtonGD.widthHint = UIHelper.minButtonWidth;

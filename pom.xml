@@ -65,11 +65,11 @@
 			<version>3.11.3</version>
 		</dependency>
 
-		<!-- Cosmopolitan / Internationalization library -->
+		<!-- Rincl / Internationalization library -->
 		<dependency>
-			<groupId>com.github.rodionmoiseev.c10n</groupId>
-			<artifactId>c10n-core</artifactId>
-			<version>1.2</version>
+			<groupId>io.rincl</groupId>
+			<artifactId>rincl-resourcebundle</artifactId>
+			<version>0.7.1</version>
 		</dependency>
 
 		<!-- Standard Widget Toolkit / UI library -->
