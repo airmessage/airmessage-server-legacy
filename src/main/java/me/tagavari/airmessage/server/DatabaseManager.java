@@ -911,7 +911,7 @@ class DatabaseManager {
 				long dateRead = generalMessageRecords.getValue(i, DSL.field("message.date_read", Long.class));
 				
 				//Fetching the attachments
-				List<SelectField<?>> attachmentFields = new ArrayList<>(Arrays.asList(new SelectField<?>[] {DSL.field("attachment.guid", String.class), DSL.field("attachment.filename", String.class), DSL.field("attachment.transfer_name", String.class), DSL.field("attachment.mime_type", String.class)}));
+				List<SelectField<?>> attachmentFields = new ArrayList<>(Arrays.asList(new SelectField<?>[] {DSL.field("attachment.guid", String.class), DSL.field("attachment.filename", String.class), DSL.field("attachment.transfer_name", String.class), DSL.field("attachment.mime_type", String.class), DSL.field("attachment.total_bytes", Long.class)}));
 				if(dbSupportsAssociation) attachmentFields.add(DSL.field("attachment.is_sticker", Boolean.class));
 				
 				Result<?> fileRecords = context.select(attachmentFields)
@@ -931,12 +931,13 @@ class DatabaseManager {
 					files.add(new Blocks.AttachmentInfo(fileRecords.getValue(f, DSL.field("attachment.guid", String.class)),
 							fileRecords.getValue(f, DSL.field("attachment.transfer_name", String.class)),
 							fileRecords.getValue(f, DSL.field("attachment.mime_type", String.class)),
+							fileRecords.getValue(f, DSL.field("attachment.total_bytes", Long.class)),
 							//The checksum will be calculated if the message is outgoing
 							sender == null && fileName != null ? calculateChecksum(new File(fileName.replaceFirst("~", System.getProperty("user.home")))) : null));
 				}
 				
 				//Adding the conversation item
-				conversationItems.add(new Blocks.MessageInfo(guid, chatGUID, Main.getTimeHelper().toUnixTime(date), text, sender, files, new ArrayList<>(), new ArrayList<>(), sendStyle, stateCode, errorCode, Main.getTimeHelper().toUnixTime(dateRead)));
+				conversationItems.add(new Blocks.MessageInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), text, sender, files, new ArrayList<>(), new ArrayList<>(), sendStyle, stateCode, errorCode, Main.getTimeHelper().toUnixTime(dateRead)));
 			}
 			//Checking if the item is a group action
 			else if(itemType == 1) {
@@ -945,7 +946,7 @@ class DatabaseManager {
 				int groupActionType = generalMessageRecords.getValue(i, DSL.field("message.group_action_type", Integer.class));
 				
 				//Adding the conversation item
-				conversationItems.add(new Blocks.GroupActionInfo(guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, other, groupActionType));
+				conversationItems.add(new Blocks.GroupActionInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, other, groupActionType));
 			}
 			//Otherwise checking if the item is a chat rename
 			else if(itemType == 2) {
@@ -953,7 +954,7 @@ class DatabaseManager {
 				String newChatName = generalMessageRecords.getValue(i, DSL.field("message.group_title", String.class));
 				
 				//Adding the conversation item
-				conversationItems.add(new Blocks.ChatRenameActionInfo(guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, newChatName));
+				conversationItems.add(new Blocks.ChatRenameActionInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, newChatName));
 			}
 		}
 		
