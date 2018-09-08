@@ -98,12 +98,15 @@ class DatabaseManager {
 	}
 	
 	static void stop() {
-		//Getting the instance
-		if(DatabaseManager.instance == null) return;
+		//Validating the instance
+		if(instance == null) return;
 		
 		//Interrupting the thread
-		DatabaseManager.instance.requestThread.interrupt();
-		DatabaseManager.instance.scannerThread.interrupt();
+		instance.requestThread.interrupt();
+		instance.scannerThread.interrupt();
+		
+		//Invalidating the instance
+		instance = null;
 	}
 	
 	private DatabaseManager(Connection[] connections, long scanFrequency) {

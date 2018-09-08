@@ -175,6 +175,9 @@ class Main implements Rincled {
 	}
 	
 	static void restartServer() {
+		//Returning if the database manager isn't running
+		if(DatabaseManager.getInstance() == null) return;
+		
 		//Updating the server state
 		setServerState(serverStateStarting);
 		SystemTrayManager.updateStatusMessage();
