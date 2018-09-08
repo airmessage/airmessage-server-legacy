@@ -35,6 +35,7 @@ class UpdateManager implements Rincled {
 	//Creating the state values
 	private static final AtomicBoolean updateCheckInProgress = new AtomicBoolean(false);
 	private static Shell manualUpdateShell = null;
+	private static Shell updateResultShell = null;
 	
 	//Creating the timer values
 	private static final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
@@ -147,8 +148,11 @@ class UpdateManager implements Rincled {
 	}
 	
 	private static void openUpdateWindow(String newVer, String releaseNotes, String targetLink) {
+		//Closing the current update result shell
+		if(updateResultShell != null && !updateResultShell.isDisposed()) updateResultShell.close();
+		
 		//Creating the shell
-		Shell shell = new Shell(UIHelper.getDisplay(), SWT.TITLE | SWT.CLOSE | SWT.MIN);
+		Shell shell = updateResultShell = new Shell(UIHelper.getDisplay(), SWT.TITLE | SWT.CLOSE | SWT.MIN);
 		//Shell shell = new Shell(UIHelper.getDisplay());
 		shell.setText(Main.resources().getString("label.update"));
 		shell.setSize(550, 300);
@@ -310,8 +314,11 @@ class UpdateManager implements Rincled {
 	}
 	
 	private static void showUpToDateWindow() {
+		//Closing the current update result shell
+		if(updateResultShell != null && !updateResultShell.isDisposed()) updateResultShell.close();
+		
 		//Creating the shell
-		Shell shell = new Shell(SWT.TITLE);
+		Shell shell = updateResultShell = new Shell(SWT.TITLE);
 		shell.setMinimumSize(300, 0);
 		
 		GridLayout shellGL = new GridLayout();
