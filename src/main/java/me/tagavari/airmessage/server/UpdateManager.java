@@ -88,10 +88,10 @@ class UpdateManager implements Rincled {
 				languageRangeList.add(new Locale.LanguageRange(Locale.ENGLISH.toLanguageTag()));
 				
 				//Finding a target locale
-				Locale targetLocale = null;
-				List<Locale> filterResults = Locale.filter(languageRangeList, releaseNotes.keySet());
+				Locale targetLocale = Locale.lookup(languageRangeList, releaseNotes.keySet());
+				/*List<Locale> filterResults = Locale.filter(languageRangeList, releaseNotes.keySet());
 				if(!filterResults.isEmpty()) targetLocale = filterResults.get(0);
-				else targetLocale = Locale.lookup(languageRangeList, releaseNotes.keySet());
+				else targetLocale = Locale.lookup(languageRangeList, releaseNotes.keySet());*/
 				if(targetLocale == null) throw new JSONException("Empty release notes language");
 				
 				//Getting the release information
