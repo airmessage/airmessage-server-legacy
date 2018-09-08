@@ -1,7 +1,8 @@
 package me.tagavari.airmessage.server;
 
-import com.github.rodionmoiseev.c10n.C10N;
-import com.github.rodionmoiseev.c10n.annotations.DefaultC10NAnnotations;
+import io.rincl.Resources;
+import io.rincl.Rincl;
+import io.rincl.Rincled;
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
 
@@ -16,7 +17,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.logging.*;
 
-class Main {
+class Main implements Rincled {
 	//Creating the reference values
 	static final String PREFIX_DEBUG = "DEBUG LOG: ";
 	static final int serverStateStarting = 0;
@@ -76,9 +77,6 @@ class Main {
 			//Recording the system version
 			Sentry.getContext().addTag("system_version", System.getProperty("os.version"));
 		}
-		
-		//Configuring the internationalization engine
-		C10N.configure(new DefaultC10NAnnotations());
 		
 		//Returning if the system is not valid
 		if(!runSystemCheck()) return;
@@ -177,6 +175,9 @@ class Main {
 	}
 	
 	static void restartServer() {
+		//Returning if the database manager isn't running
+		if(DatabaseManager.getInstance() == null) return;
+		
 		//Updating the server state
 		setServerState(serverStateStarting);
 		SystemTrayManager.updateStatusMessage();
@@ -209,7 +210,7 @@ class Main {
 			String systemName = System.getProperty("os.name");
 			if(!systemName.toLowerCase().contains("mac")) {
 				//Showing a dialog
-				JOptionPane.showMessageDialog(null, I18N.i.warning_osIncompatible(systemName), null, JOptionPane.PLAIN_MESSAGE);
+				JOptionPane.showMessageDialog(null, resources().getString("message.os_incompatible"), null, JOptionPane.PLAIN_MESSAGE);
 				
 				//Returning false
 				return false;
@@ -269,5 +270,9 @@ class Main {
 	
 	static void setServerState(int value) {
 		serverState = value;
+	}
+	
+	static Resources resources() {
+		return Rincl.getResourceI18nConcern().getResources(Main.class);
 	}
 }

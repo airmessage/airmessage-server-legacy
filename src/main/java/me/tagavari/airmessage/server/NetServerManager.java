@@ -23,7 +23,7 @@ import java.util.logging.Level;
 class NetServerManager {
 	//Creating the transmission header values
 	public static final int mmCommunicationsVersion = 4;
-	public static final int mmCommunicationsSubVersion = 2;
+	public static final int mmCommunicationsSubVersion = 3;
 	
 	//NHT = Net Header Type
 	public static final int nhtClose = -1;
@@ -59,7 +59,7 @@ class NetServerManager {
 	static final int createServerResultOK = 0;
 	static final int createServerResultPort = 1;
 	static final int createServerResultInternal = 2;
-	static final int maxPacketAllocation = 50 * 1024 * 1024; //50 MB
+	private static final int maxPacketAllocation = 50 * 1024 * 1024; //50 MB
 	
 	//private static final long keepAliveMillis = 30 * 1000; //30 seconds
 	private static final long keepAliveMillis = 30 * 60 * 1000; //30 minutes

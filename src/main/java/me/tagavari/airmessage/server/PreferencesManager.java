@@ -465,7 +465,7 @@ public class PreferencesManager {
 	private static void openPrefsWindow() {
 		//Creating the shell
 		windowShell = new Shell(UIHelper.getDisplay(), SWT.TITLE);
-		windowShell.setText(I18N.i.title_preferences());
+		windowShell.setText(Main.resources().getString("label.preferences"));
 		
 		//Configuring the layouts
 		GridLayout shellGL = new GridLayout(1, false);
@@ -487,7 +487,7 @@ public class PreferencesManager {
 			Label portLabel = new Label(prefContainer, SWT.NONE);
 			pwTextPort = new Text(prefContainer, SWT.BORDER);
 			
-			portLabel.setText(I18N.i.pref_port());
+			portLabel.setText(Main.resources().getString("prefix.preference.port"));
 			portLabel.setLayoutData(new GridData(GridData.END, GridData.CENTER, false, false));
 			
 			pwTextPort.setTextLimit(5);
@@ -533,10 +533,10 @@ public class PreferencesManager {
 			Label securityLabel = new Label(prefContainer, SWT.NONE);
 			Button prefsButton = new Button(prefContainer, SWT.PUSH);
 			
-			securityLabel.setText(I18N.i.pref_security());
+			securityLabel.setText(Main.resources().getString("prefix.preference.security"));
 			securityLabel.setLayoutData(new GridData(GridData.END, GridData.CENTER, false, false));
 			
-			prefsButton.setText(I18N.i.button_editPassword());
+			prefsButton.setText(Main.resources().getString("action.edit_password"));
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			prefGB.horizontalIndent = -8;
 			prefsButton.setLayoutData(prefGB);
@@ -547,10 +547,10 @@ public class PreferencesManager {
 			Label updateLabel = new Label(prefContainer, SWT.NONE);
 			pwButtonAutoUpdate = new Button(prefContainer, SWT.CHECK);
 			
-			updateLabel.setText(I18N.i.pref_updates());
+			updateLabel.setText(Main.resources().getString("prefix.preference.updates"));
 			updateLabel.setLayoutData(new GridData(GridData.END, GridData.CENTER, false, false));
 			
-			pwButtonAutoUpdate.setText(I18N.i.pref_updates_auto());
+			pwButtonAutoUpdate.setText(Main.resources().getString("message.preference.autoupdate"));
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			pwButtonAutoUpdate.setLayoutData(prefGB);
 			pwButtonAutoUpdate.setSelection(prefAutoCheckUpdates);
@@ -562,7 +562,7 @@ public class PreferencesManager {
 			pwTextScanFrequency = new Text(dbScanComposite, SWT.BORDER);
 			Label dbScanDesc = new Label(dbScanComposite, SWT.NONE);
 			
-			dbScanLabel.setText(I18N.i.pref_scanning());
+			dbScanLabel.setText(Main.resources().getString("prefix.preference.scanning"));
 			GridData dbScanLabelGD = new GridData(GridData.END, GridData.BEGINNING, false, false);
 			dbScanLabelGD.verticalIndent = 4;
 			dbScanLabel.setLayoutData(dbScanLabelGD);
@@ -603,7 +603,7 @@ public class PreferencesManager {
 			
 			pwTextScanFrequency.setText(Float.toString(prefScanFrequency));
 			
-			dbScanDesc.setText(I18N.i.pref_scanning_desc());
+			dbScanDesc.setText(Main.resources().getString("message.preference.scanning.description"));
 			dbScanDesc.setFont(UIHelper.getFont(dbScanDesc.getFont(), 10, -1));
 		}
 		
@@ -626,7 +626,7 @@ public class PreferencesManager {
 			buttonContainer.setLayout(buttonContainerFL);
 			
 			Button acceptButton = new Button(buttonContainer, SWT.PUSH);
-			acceptButton.setText(I18N.i.button_ok());
+			acceptButton.setText(Main.resources().getString("action.ok"));
 			FormData acceptButtonFD = new FormData();
 			if(acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) acceptButtonFD.width = UIHelper.minButtonWidth;
 			acceptButtonFD.right = new FormAttachment(100);
@@ -639,7 +639,7 @@ public class PreferencesManager {
 			windowShell.setDefaultButton(acceptButton);
 			
 			Button discardButton = new Button(buttonContainer, SWT.PUSH);
-			discardButton.setText(I18N.i.button_cancel());
+			discardButton.setText(Main.resources().getString("action.cancel"));
 			FormData discardButtonFD = new FormData();
 			if(discardButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) discardButtonFD.width = UIHelper.minButtonWidth;
 			discardButtonFD.right = new FormAttachment(acceptButton);
@@ -689,7 +689,7 @@ public class PreferencesManager {
 		{
 			//Creating the list label
 			Label listLabel = new Label(shell, SWT.NONE);
-			listLabel.setText(I18N.i.pref_passwords());
+			listLabel.setText(Main.resources().getString("prefix.preference.password"));
 			
 			//Creating the text
 			passText = new Text(shell, SWT.BORDER);
@@ -716,7 +716,7 @@ public class PreferencesManager {
 			
 			//Adding the apply / discard buttons
 			Button acceptButton = new Button(buttonContainer, SWT.PUSH);
-			acceptButton.setText(I18N.i.button_ok());
+			acceptButton.setText(Main.resources().getString("action.ok"));
 			FormData acceptButtonFD = new FormData();
 			if(acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.smallMinButtonWidth) acceptButtonFD.width = UIHelper.smallMinButtonWidth;
 			acceptButtonFD.right = new FormAttachment(100);
@@ -733,7 +733,7 @@ public class PreferencesManager {
 			shell.setDefaultButton(acceptButton);
 			
 			Button discardButton = new Button(buttonContainer, SWT.PUSH);
-			discardButton.setText(I18N.i.button_cancel());
+			discardButton.setText(Main.resources().getString("action.cancel"));
 			FormData discardButtonFD = new FormData();
 			if(discardButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.smallMinButtonWidth) discardButtonFD.width = UIHelper.smallMinButtonWidth;
 			discardButtonFD.right = new FormAttachment(acceptButton);

@@ -34,12 +34,12 @@ public class SystemTrayManager {
 		
 		//Server status
 		miStatus = new MenuItem(menu, SWT.PUSH);
-		miStatus.setText(I18N.i.menu_starting());
+		miStatus.setText(Main.resources().getString("message.status.starting"));
 		miStatus.setEnabled(false);
 		
 		//Clients connected
 		miStatusSub = new MenuItem(menu, SWT.PUSH);
-		miStatusSub.setText(I18N.i.menu_clientsConnected(0));
+		miStatusSub.setText(Main.resources().getString("message.status.connected_count", 0));
 		miStatusSub.setEnabled(false);
 		miStatusSub.addListener(SWT.Selection, event -> Main.startServer());
 		
@@ -48,12 +48,12 @@ public class SystemTrayManager {
 		
 		//Preferences
 		MenuItem miPrefs = new MenuItem(menu, SWT.PUSH);
-		miPrefs.setText(I18N.i.menu_preferences());
+		miPrefs.setText(Main.resources().getString("action.preferences"));
 		miPrefs.addListener(SWT.Selection, event -> PreferencesManager.openWindow());
 		
 		//Check for updates
 		MenuItem miUpdate = new MenuItem(menu, SWT.PUSH);
-		miUpdate.setText(I18N.i.menu_checkForUpdates());
+		miUpdate.setText(Main.resources().getString("action.check_update"));
 		miUpdate.addListener(SWT.Selection, event -> UpdateManager.requestManualUpdateCheck());
 		
 		//Divider
@@ -61,8 +61,8 @@ public class SystemTrayManager {
 		
 		//Quit
 		MenuItem miQuit = new MenuItem(menu, SWT.PUSH);
-		miQuit.setText(I18N.i.button_quitAirMessage());
-		miQuit.addListener(SWT.Selection, event -> System.exit(0));;
+		miQuit.setText(Main.resources().getString("action.quit_app"));
+		miQuit.addListener(SWT.Selection, event -> System.exit(0));
 		
 		//Creating the tray item
 		TrayItem trayItem = new TrayItem(shell.getDisplay().getSystemTray(), SWT.NONE);
@@ -126,28 +126,28 @@ public class SystemTrayManager {
 		//Getting the message
 		switch(Main.getServerState()) {
 			case Main.serverStateStarting:
-				miStatus.setText(I18N.i.menu_starting());
-				miStatusSub.setText(I18N.i.menu_clientsConnected(0));
+				miStatus.setText(Main.resources().getString("message.status.starting"));
+				miStatusSub.setText(Main.resources().getString("message.status.connected_count", 0));
 				miStatusSub.setEnabled(false);
 				break;
 			case Main.serverStateRunning:
-				miStatus.setText(I18N.i.menu_running());
-				miStatusSub.setText(I18N.i.menu_clientsConnected(NetServerManager.getConnectionCount()));
+				miStatus.setText(Main.resources().getString("message.status.running"));
+				miStatusSub.setText(Main.resources().getString("message.status.connected_count", NetServerManager.getConnectionCount()));
 				miStatusSub.setEnabled(false);
 				break;
 			case Main.serverStateFailedDatabase:
-				miStatus.setText(I18N.i.menu_err_database());
-				miStatusSub.setText(I18N.i.button_retry());
+				miStatus.setText(Main.resources().getString("message.status.error.database"));
+				miStatusSub.setText(Main.resources().getString("action.retry"));
 				miStatusSub.setEnabled(true);
 				break;
 			case Main.serverStateFailedServerPort:
-				miStatus.setText(I18N.i.menu_err_server_port());
-				miStatusSub.setText(I18N.i.button_retry());
+				miStatus.setText(Main.resources().getString("message.status.error.port"));
+				miStatusSub.setText(Main.resources().getString("action.retry"));
 				miStatusSub.setEnabled(true);
 				break;
 			case Main.serverStateFailedServerInternal:
-				miStatus.setText(I18N.i.menu_err_server_internal());
-				miStatusSub.setText(I18N.i.button_retry());
+				miStatus.setText(Main.resources().getString("message.status.error.internal"));
+				miStatusSub.setText(Main.resources().getString("action.retry"));
 				miStatusSub.setEnabled(true);
 				break;
 		}
@@ -158,7 +158,7 @@ public class SystemTrayManager {
 		if(Main.getServerState() != Main.serverStateRunning) return;
 		
 		//Updating the message
-		miStatusSub.setText(I18N.i.menu_clientsConnected(NetServerManager.getConnectionCount()));
+		miStatusSub.setText(Main.resources().getString("message.status.connected_count", NetServerManager.getConnectionCount()));
 	}
 	
 	private static Image getTrayIcon() {
