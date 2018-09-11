@@ -977,7 +977,7 @@ class DatabaseManager {
 				.where(DSL.field("message.is_from_me").isTrue())
 				.groupBy(DSL.field("chat.ROWID")).fetch(); */
 		
-		Result<Record6<Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.field("message.date", Long.class).max(), DSL.field("message.guid", String.class), DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_delivered", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.date_read", Long.class))
+		Result<Record6<Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.max(DSL.field("message.ROWID", Long.class)), DSL.field("message.guid", String.class), DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_delivered", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.date_read", Long.class))
 				.from(DSL.table("message"))
 				.join(DSL.table("chat_message_join")).on(DSL.field("message.ROWID").eq(DSL.field("chat_message_join.message_id")))
 				.join(DSL.table("chat")).on(DSL.field("chat_message_join.chat_id").eq(DSL.field("chat.ROWID")))

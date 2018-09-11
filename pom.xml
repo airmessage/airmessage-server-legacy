@@ -55,14 +55,14 @@
 		<dependency>
 			<groupId>org.xerial</groupId>
 			<artifactId>sqlite-jdbc</artifactId>
-			<version>3.21.0.1</version>
+			<version>3.23.1</version>
 		</dependency>
 
 		<!-- jOOQ / Database library -->
 		<dependency>
 			<groupId>org.jooq</groupId>
 			<artifactId>jooq</artifactId>
-			<version>3.11.3</version>
+			<version>3.11.4</version>
 		</dependency>
 
 		<!-- Rincl / Internationalization library -->
@@ -115,7 +115,7 @@
 		<dependency>
 			<groupId>org.json</groupId>
 			<artifactId>json</artifactId>
-			<version>20180130</version>
+			<version>20180813</version>
 		</dependency>
 
 		<!-- Commonmark Java / Markdown parser -->
