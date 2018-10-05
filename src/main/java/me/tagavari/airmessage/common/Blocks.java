@@ -395,10 +395,6 @@ public class Blocks {
 		public byte[] data;
 		private transient boolean dataEncrypted;
 		
-		private EncryptableData() {
-		
-		}
-		
 		public EncryptableData(byte[] data) {
 			this.data = data;
 			this.salt = null;
@@ -414,6 +410,9 @@ public class Blocks {
 		}
 		
 		public EncryptableData encrypt(String password) throws ClassCastException, GeneralSecurityException {
+			//Returning if the data is already encrypted
+			if(dataEncrypted) return this;
+			
 			//Creating a secure random
 			SecureRandom random = new SecureRandom();
 			
@@ -444,6 +443,9 @@ public class Blocks {
 		}
 		
 		public EncryptableData decrypt(String password) throws ClassCastException, GeneralSecurityException {
+			//Returning if the data is not encrypted
+			if(!dataEncrypted) return this;
+			
 			//Creating the key
 			SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(keyFactoryAlgorithm);
 			KeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, keyIterationCount, keyLength);
@@ -482,21 +484,18 @@ public class Blocks {
 		}
 		
 		public static EncryptableData readObject(ObjectInputStream stream) throws IOException {
-			//Creating the data
-			EncryptableData encryptableData = new EncryptableData();
-			
 			//Reading the data
-			encryptableData.salt = new byte[saltLen];
-			stream.readFully(encryptableData.salt);
+			byte[] salt = new byte[saltLen];
+			stream.readFully(salt);
 			
-			encryptableData.iv = new byte[ivLen];
-			stream.readFully(encryptableData.iv);
+			byte[] iv = new byte[ivLen];
+			stream.readFully(iv);
 			
-			encryptableData.data = new byte[stream.readInt()];
-			stream.readFully(encryptableData.data);
+			byte[] data = new byte[stream.readInt()];
+			stream.readFully(data);
 			
 			//Returning the data
-			return encryptableData;
+			return new EncryptableData(salt, iv, data);
 		}
 		
 		public boolean isEncrypted() {
