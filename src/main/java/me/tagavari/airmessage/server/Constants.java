@@ -4,7 +4,11 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.net.*;
+import java.net.DatagramSocket;
+import java.net.NetworkInterface;
+import java.net.ServerSocket;
+import java.net.SocketException;
+import java.util.Enumeration;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.stream.Stream;
@@ -185,14 +189,38 @@ class Constants {
 		return builder.toString();
 	}
 	
-	static String getMACAddress() {
+	//Uses active network interface
+	/* static String getMACAddress() {
 		try {
 			byte[] mac = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getHardwareAddress();
 			if(mac == null) return null;
 			StringBuilder stringBuilder = new StringBuilder();
 			for(int i = 0; i < mac.length; i++) stringBuilder.append(String.format("%02X%s", mac[i], (i < mac.length - 1) ? "-" : ""));
 			return stringBuilder.toString();
-		} catch(UnknownHostException | SocketException exception) {
+		} catch(UnknownHostException | SocketException | NullPointerException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			return null;
+		}
+	} */
+	
+	//Uses first network interface
+	static String getMACAddress() {
+		try {
+			Enumeration<NetworkInterface> interfaceList = NetworkInterface.getNetworkInterfaces();
+			if(interfaceList == null) return null;
+			while(interfaceList.hasMoreElements()) {
+				NetworkInterface netInterface = interfaceList.nextElement();
+				if(netInterface == null) continue;
+				byte[] macAddress = netInterface.getHardwareAddress();
+				if(macAddress == null) continue;
+				
+				StringBuilder stringBuilder = new StringBuilder();
+				for(int i = 0; i < macAddress.length; i++) stringBuilder.append(String.format("%02X%s", macAddress[i], (i < macAddress.length - 1) ? "-" : ""));
+				return stringBuilder.toString();
+			}
+			
+			return null;
+		} catch(SocketException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			return null;
 		}
