@@ -62,7 +62,7 @@
 		<dependency>
 			<groupId>org.jooq</groupId>
 			<artifactId>jooq</artifactId>
-			<version>3.11.4</version>
+			<version>3.11.5</version>
 		</dependency>
 
 		<!-- Rincl / Internationalization library -->
@@ -76,7 +76,7 @@
 		<dependency>
 			<groupId>org.eclipse.platform</groupId>
 			<artifactId>org.eclipse.swt</artifactId>
-			<version>4.7.3a</version>
+			<version>4.7.9</version>
 		</dependency>
 
 		<!-- <dependency>
@@ -210,6 +210,31 @@
 
 	<build>
 		<plugins>
+			<!-- Maven install plugin (for local JAR files) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-install-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>install-external</id>
+                        <phase>clean</phase>
+                        <configuration>
+                            <file>${basedir}/lib/swt.jar</file>
+                            <repositoryLayout>default</repositoryLayout>
+                            <groupId>org.eclipse.platform</groupId>
+                            <artifactId>org.eclipse.swt</artifactId>
+                            <version>4.7.9</version>
+                            <packaging>jar</packaging>
+                            <generatePom>true</generatePom>
+                        </configuration>
+                        <goals>
+                            <goal>install-file</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+			
+            <!-- Maven assembly plugin -->
 			<plugin>
 				<artifactId>maven-assembly-plugin</artifactId>
 				<configuration>
