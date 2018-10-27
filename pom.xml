@@ -35,6 +35,11 @@
 			<id>jabylon</id>
 			<url>http://www.jabylon.org/maven/</url>
 		</repository>
+		
+		<repository>
+			<id>local</id>
+			<url>file://${basedir}/lib/</url>
+		</repository>
 
 		<!-- <repository>
 			<id>Sonatype-public</id>
@@ -66,11 +71,11 @@
 		</dependency>
 
 		<!-- Rincl / Internationalization library -->
-		<dependency>
+		<!-- <dependency>
 			<groupId>io.rincl</groupId>
 			<artifactId>rincl-resourcebundle</artifactId>
 			<version>0.7.1</version>
-		</dependency>
+		</dependency> -->
 
 		<!-- Standard Widget Toolkit / UI library -->
 		<dependency>
@@ -210,30 +215,6 @@
 
 	<build>
 		<plugins>
-			<!-- Maven install plugin (for local JAR files) -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-install-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>install-external</id>
-                        <phase>clean</phase>
-                        <configuration>
-                            <file>${basedir}/lib/swt.jar</file>
-                            <repositoryLayout>default</repositoryLayout>
-                            <groupId>org.eclipse.platform</groupId>
-                            <artifactId>org.eclipse.swt</artifactId>
-                            <version>4.7.9</version>
-                            <packaging>jar</packaging>
-                            <generatePom>true</generatePom>
-                        </configuration>
-                        <goals>
-                            <goal>install-file</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-			
             <!-- Maven assembly plugin -->
 			<plugin>
 				<artifactId>maven-assembly-plugin</artifactId>
@@ -246,6 +227,16 @@
 					<descriptorRefs>
 						<descriptorRef>jar-with-dependencies</descriptorRef>
 					</descriptorRefs>
+				</configuration>
+			</plugin>
+			
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.7.0</version>
+				<configuration>
+					<source>11</source>
+					<target>11</target>
 				</configuration>
 			</plugin>
 			

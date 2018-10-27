@@ -5,6 +5,7 @@ import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.widgets.*;
 
 import java.io.IOException;
+import java.text.MessageFormat;
 import java.util.concurrent.TimeUnit;
 
 public class SystemTrayManager {
@@ -39,7 +40,7 @@ public class SystemTrayManager {
 		
 		//Clients connected
 		miStatusSub = new MenuItem(menu, SWT.PUSH);
-		miStatusSub.setText(Main.resources().getString("message.status.connected_count", 0));
+		miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), 0));
 		miStatusSub.setEnabled(false);
 		miStatusSub.addListener(SWT.Selection, event -> Main.startServer());
 		
@@ -127,12 +128,12 @@ public class SystemTrayManager {
 		switch(Main.getServerState()) {
 			case Main.serverStateStarting:
 				miStatus.setText(Main.resources().getString("message.status.starting"));
-				miStatusSub.setText(Main.resources().getString("message.status.connected_count", 0));
+				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), 0));
 				miStatusSub.setEnabled(false);
 				break;
 			case Main.serverStateRunning:
 				miStatus.setText(Main.resources().getString("message.status.running"));
-				miStatusSub.setText(Main.resources().getString("message.status.connected_count", NetServerManager.getConnectionCount()));
+				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), NetServerManager.getConnectionCount()));
 				miStatusSub.setEnabled(false);
 				break;
 			case Main.serverStateFailedDatabase:
@@ -158,7 +159,7 @@ public class SystemTrayManager {
 		if(Main.getServerState() != Main.serverStateRunning) return;
 		
 		//Updating the message
-		miStatusSub.setText(Main.resources().getString("message.status.connected_count", NetServerManager.getConnectionCount()));
+		miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), NetServerManager.getConnectionCount()));
 	}
 	
 	private static Image getTrayIcon() {
