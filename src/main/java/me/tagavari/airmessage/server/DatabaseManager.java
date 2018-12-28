@@ -197,7 +197,7 @@ class DatabaseManager {
 					
 					//Updating the last check time
 					//lastCheckTime = System.currentTimeMillis();
-				} catch(IOException | NoSuchAlgorithmException | OutOfMemoryError | RuntimeException exception) {
+				} catch(IOException | NoSuchAlgorithmException | OutOfMemoryError | SQLException | RuntimeException exception) {
 					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
 					dataFetchResult = null;
@@ -227,7 +227,12 @@ class DatabaseManager {
 				}
 				
 				//Updating the message states
-				updateMessageStates(connection, dataFetchResult == null ? new ArrayList<>() : dataFetchResult.isolatedModifiers);
+				try {
+					updateMessageStates(connection, dataFetchResult == null ? new ArrayList<>() : dataFetchResult.isolatedModifiers);
+				} catch(SQLException exception) {
+					Sentry.capture(exception);
+					exception.printStackTrace();
+				}
 				
 				{
 					//Checking if the targeting availability index needs to be updated
@@ -238,7 +243,12 @@ class DatabaseManager {
 						creationTargetingUpdateRequired = false;
 						
 						//Reindexing
-						indexTargetAvailability(connection);
+						try {
+							indexTargetAvailability(connection);
+						} catch(SQLException exception) {
+							Sentry.capture(exception);
+							exception.printStackTrace();
+						}
 						Main.getLogger().finest("Updated creation target chat index");
 					}
 				}
@@ -514,13 +524,17 @@ class DatabaseManager {
 					//NetServerManager.sendPacket(request.connection, request.messageResponseType, bos.toByteArray());
 				}
 			}
-		} catch(IOException | GeneralSecurityException | OutOfMemoryError | RuntimeException exception) {
+		} catch(IOException | GeneralSecurityException | SQLException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 		}
 	}
 	
 	private void fulfillMassRetrievalRequest(Connection connection, MassRetrievalRequest request) {
+		//Converting the request times
+		long lTimeSinceMessages = Main.getTimeHelper().toDatabaseTime(request.timeSinceMessages);
+		long lTimeSinceAttachments = Main.getTimeHelper().toDatabaseTime(request.timeSinceAttachments);
+		
 		try {
 			//Creating the DSL context
 			DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
@@ -528,10 +542,21 @@ class DatabaseManager {
 			//Fetching the conversation information
 			List<Blocks.ConversationInfo> conversationInfoList = new ArrayList<>();
 			
-			//Running the SQL
-			Result<org.jooq.Record3<String, String, String>> conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
-					.from(DSL.table("chat"))
-					.fetch();
+			//Fetching the chat info
+			Result<org.jooq.Record3<String, String, String>> conversationResults;
+			if(request.useAdvanced && request.restrictMessages) {
+				conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
+											.from(DSL.table("chat"))
+											.join(DSL.table("chat_message_join")).on(DSL.field("chat.ROWID").eq(DSL.field("chat_message_join.chat_id")))
+											.join(DSL.table("message")).on(DSL.field("chat_message_join.message_id").eq(DSL.field("message.ROWID")))
+											.where(DSL.field("message.date").greaterOrEqual(lTimeSinceMessages))
+											.groupBy(DSL.field("chat.ROWID"))
+											.fetch();
+			} else {
+				conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
+											.from(DSL.table("chat"))
+											.fetch();
+			}
 			
 			//Iterating over the results
 			for(int i = 0; i < conversationResults.size(); i++) {
@@ -560,7 +585,9 @@ class DatabaseManager {
 			}
 			
 			//Finding the amount of message entries in the database (roughly, because not all entries are messages)
-			int messagesCount = create.fetch("SELECT Count(*) FROM message;").get(0).get(0, Integer.class);
+			int messagesCount;
+			if(request.useAdvanced && request.restrictMessages) messagesCount = create.selectCount().from(DSL.table("message")).where(DSL.field("date").greaterOrEqual(lTimeSinceMessages)).fetchOne(0, int.class);
+			else messagesCount = create.selectCount().from(DSL.table("message")).fetchOne(0, int.class);
 			
 			//Returning if the connection is no longer open
 			if(!request.connection.isConnected()) return;
@@ -568,6 +595,9 @@ class DatabaseManager {
 			//Serializing the data
 			try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
 				ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
+				//Writing the request ID
+				out.writeShort(request.requestID);
+				
 				//Writing the packet index
 				out.writeInt(0);
 				
@@ -589,7 +619,7 @@ class DatabaseManager {
 			}
 			
 			//Reading the message data
-			fetchData(connection, null, new DataFetchListener() {
+			fetchData(connection, request.useAdvanced && request.restrictMessages ? () -> DSL.field("message.date").greaterOrEqual(lTimeSinceMessages) : null, new DataFetchListener(request.downloadAttachments) {
 				//Creating the packet index value
 				int packetIndex = 1;
 				
@@ -605,6 +635,9 @@ class DatabaseManager {
 					//Serializing the data
 					try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
 						ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
+						//Writing the request ID
+						out.writeShort(request.requestID);
+						
 						//Writing the packet index
 						out.writeInt(packetIndex++);
 						
@@ -631,6 +664,11 @@ class DatabaseManager {
 				}
 				
 				@Override
+				void onAttachmentChunkLoaded(List<TransientAttachmentInfo> attachmentList) {
+					super.onAttachmentChunkLoaded(attachmentList);
+				}
+				
+				@Override
 				void onFinished() {
 					//Returning if the connection is no longer open
 					if(!request.connection.isConnected()) return;
@@ -639,16 +677,22 @@ class DatabaseManager {
 					request.connection.sendDataSync(NetServerManager.nhtMassRetrievalFinish, new byte[0]);
 				}
 			});
-		} catch(IOException | OutOfMemoryError | RuntimeException | GeneralSecurityException exception) {
+		} catch(IOException | OutOfMemoryError | RuntimeException | SQLException | GeneralSecurityException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
 		}
 	}
 	
 	private abstract class DataFetchListener {
+		final boolean acceptFileData;
 		private boolean cancelRequested = false;
-		
+
+		DataFetchListener(boolean acceptFileData) {
+			this.acceptFileData = acceptFileData;
+		}
+
 		abstract void onChunkLoaded(List<Blocks.ConversationItem> conversationItems, List<Blocks.ModifierInfo> isolatedModifiers);
+		void onAttachmentChunkLoaded(List<TransientAttachmentInfo> attachmentList) {}
 		abstract void onFinished();
 		
 		void cancel() {
@@ -656,7 +700,7 @@ class DatabaseManager {
 		}
 	}
 	
-	private DataFetchResult fetchData(Connection connection, RetrievalFilter filter, DataFetchListener streamingListener) throws IOException, NoSuchAlgorithmException {
+	private DataFetchResult fetchData(Connection connection, RetrievalFilter filter, DataFetchListener streamingListener) throws IOException, NoSuchAlgorithmException, SQLException {
 		//Creating the DSL context
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
@@ -699,12 +743,11 @@ class DatabaseManager {
 		//Creating the result list
 		ArrayList<Blocks.ConversationItem> conversationItems = new ArrayList<>();
 		ArrayList<Blocks.ModifierInfo> isolatedModifiers = new ArrayList<>();
-		long latestMessageID = -1;
 		
 		//Checking if the data should be streamed
 		if(streamingListener != null) {
 			//Completing the query
-			Cursor<?> cursor = filter != null ? buildStep.where(filter.filter()).fetchLazy() : buildStep.fetchLazy();
+			Cursor<?> cursor = filter == null ? buildStep.fetchLazy() : buildStep.where(filter.filter()).fetchLazy();
 			Result<?> records;
 			
 			while(cursor.hasNext()) {
@@ -716,11 +759,12 @@ class DatabaseManager {
 				records = cursor.fetchNext(20);
 				
 				//Processing the data
-				processFetchDataResult(context, records, conversationItems, isolatedModifiers);
+				List<TransientAttachmentInfo> attachmentFiles = streamingListener.acceptFileData ? new ArrayList<>() : null;
+				processFetchDataResult(context, records, conversationItems, isolatedModifiers, attachmentFiles);
 				
 				//Sending the data
 				streamingListener.onChunkLoaded(conversationItems, isolatedModifiers);
-				
+				if(streamingListener.acceptFileData) streamingListener.onAttachmentChunkLoaded(attachmentFiles);
 				//Breaking from the loop if a cancel has been requested
 				if(streamingListener.cancelRequested) break;
 			}
@@ -739,7 +783,7 @@ class DatabaseManager {
 		Result<?> records = filter != null ? buildStep.where(filter.filter()).fetch() : buildStep.fetch();
 		
 		//Processing the data
-		latestMessageID = processFetchDataResult(context, records, conversationItems, isolatedModifiers);
+		long latestMessageID = processFetchDataResult(context, records, conversationItems, isolatedModifiers, null);
 		
 		//Returning null if the item list is empty
 		//if(conversationItems.isEmpty()) return null;
@@ -785,9 +829,10 @@ class DatabaseManager {
 	 * @param generalMessageRecords the cursor to pull data from
 	 * @param conversationItems the list to add new conversation items to
 	 * @param isolatedModifiers the list to add new loose modifiers to
+	 * @param attachmentFiles the list to add found attachment files to (null if no attachment files wanted)
 	 * @return the latest found message ID
 	 */
-	private long processFetchDataResult(DSLContext context, Result<?> generalMessageRecords, List<Blocks.ConversationItem> conversationItems, List<Blocks.ModifierInfo> isolatedModifiers) throws IOException, NoSuchAlgorithmException {
+	private long processFetchDataResult(DSLContext context, Result<?> generalMessageRecords, List<Blocks.ConversationItem> conversationItems, List<Blocks.ModifierInfo> isolatedModifiers, List<TransientAttachmentInfo> attachmentFiles) throws IOException, NoSuchAlgorithmException {
 		long latestMessageID = -1;
 		
 		//Iterating over the results
@@ -914,7 +959,7 @@ class DatabaseManager {
 				long dateRead = generalMessageRecords.getValue(i, DSL.field("message.date_read", Long.class));
 				
 				//Fetching the attachments
-				List<SelectField<?>> attachmentFields = new ArrayList<>(Arrays.asList(new SelectField<?>[] {DSL.field("attachment.guid", String.class), DSL.field("attachment.filename", String.class), DSL.field("attachment.transfer_name", String.class), DSL.field("attachment.mime_type", String.class), DSL.field("attachment.total_bytes", Long.class)}));
+				List<SelectField<?>> attachmentFields = new ArrayList<>(Arrays.asList(new SelectField<?>[]{DSL.field("attachment.guid", String.class), DSL.field("attachment.filename", String.class), DSL.field("attachment.transfer_name", String.class), DSL.field("attachment.mime_type", String.class), DSL.field("attachment.total_bytes", Long.class)}));
 				if(dbSupportsAssociation) attachmentFields.add(DSL.field("attachment.is_sticker", Boolean.class));
 				
 				Result<?> fileRecords = context.select(attachmentFields)
@@ -930,13 +975,19 @@ class DatabaseManager {
 					if(dbSupportsAssociation && fileRecords.getValue(f, DSL.field("attachment.is_sticker", Boolean.class))) continue;
 					
 					//Adding the file
+					String fileGUID = fileRecords.getValue(f, DSL.field("attachment.guid", String.class));
+					String fileType = fileRecords.getValue(f, DSL.field("attachment.mime_type", String.class));
 					String fileName = fileRecords.getValue(f, DSL.field("attachment.filename", String.class));
-					files.add(new Blocks.AttachmentInfo(fileRecords.getValue(f, DSL.field("attachment.guid", String.class)),
+					File file = fileName == null ? null : new File(fileName.replaceFirst("~", System.getProperty("user.home")));
+					
+					files.add(new Blocks.AttachmentInfo(fileGUID,
 							fileRecords.getValue(f, DSL.field("attachment.transfer_name", String.class)),
-							fileRecords.getValue(f, DSL.field("attachment.mime_type", String.class)),
+							fileType,
 							fileRecords.getValue(f, DSL.field("attachment.total_bytes", Long.class)),
 							//The checksum will be calculated if the message is outgoing
-							sender == null && fileName != null ? calculateChecksum(new File(fileName.replaceFirst("~", System.getProperty("user.home")))) : null));
+							sender == null && file != null ? calculateChecksum(file) : null));
+					
+					if(attachmentFiles != null && file != null) attachmentFiles.add(new TransientAttachmentInfo(fileGUID, date, file, fileType));
 				}
 				
 				//Adding the conversation item
@@ -965,7 +1016,7 @@ class DatabaseManager {
 		return latestMessageID;
 	}
 	
-	private void updateMessageStates(Connection connection, ArrayList<Blocks.ModifierInfo> modifierList) {
+	private void updateMessageStates(Connection connection, ArrayList<Blocks.ModifierInfo> modifierList) throws SQLException {
 		//Creating the DSL context
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
@@ -1060,7 +1111,7 @@ class DatabaseManager {
 		}
 	}
 	
-	private void indexTargetAvailability(Connection connection) {
+	private void indexTargetAvailability(Connection connection) throws SQLException {
 		//Creating the DSL context
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
@@ -1167,9 +1218,33 @@ class DatabaseManager {
 	
 	static class MassRetrievalRequest {
 		final NetServerManager.SocketManager connection;
+		final short requestID;
+		final boolean useAdvanced;
+		final boolean restrictMessages;
+		final long timeSinceMessages;
+		final boolean downloadAttachments;
+		final boolean restrictAttachments;
+		final long timeSinceAttachments;
+		final boolean restrictAttachmentsSizes;
+		final long attachmentSizeLimit;
+		String[] attachmentFilterWhitelist;
+		String[] attachmentFilterBlacklist;
+		boolean attachmentFilterDLOutside;
 		
-		MassRetrievalRequest(NetServerManager.SocketManager connection) {
+		MassRetrievalRequest(NetServerManager.SocketManager connection, short requestID, boolean useAdvanced, boolean restrictMessages, long timeSinceMessages, boolean downloadAttachments, boolean restrictAttachments, long timeSinceAttachments, boolean restrictAttachmentsSizes, long attachmentSizeLimit, String[] attachmentFilterWhitelist, String[] attachmentFilterBlacklist, boolean attachmentFilterDLOutside) {
 			this.connection = connection;
+			this.requestID = requestID;
+			this.useAdvanced = useAdvanced;
+			this.restrictMessages = restrictMessages;
+			this.timeSinceMessages = timeSinceMessages;
+			this.downloadAttachments = downloadAttachments;
+			this.restrictAttachments = restrictAttachments;
+			this.timeSinceAttachments = timeSinceAttachments;
+			this.restrictAttachmentsSizes = restrictAttachmentsSizes;
+			this.attachmentSizeLimit = attachmentSizeLimit;
+			this.attachmentFilterWhitelist = attachmentFilterWhitelist;
+			this.attachmentFilterBlacklist = attachmentFilterBlacklist;
+			this.attachmentFilterDLOutside = attachmentFilterDLOutside;
 		}
 	}
 	
@@ -1202,6 +1277,20 @@ class DatabaseManager {
 		
 		String getService() {
 			return service;
+		}
+	}
+	
+	private static class TransientAttachmentInfo {
+		final String guid;
+		final long messageDate;
+		final File file;
+		final String fileType;
+		
+		TransientAttachmentInfo(String guid, long messageDate, File file, String fileType) {
+			this.guid = guid;
+			this.messageDate = messageDate;
+			this.file = file;
+			this.fileType = fileType;
 		}
 	}
 }
