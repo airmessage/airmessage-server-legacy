@@ -263,4 +263,17 @@ class Constants {
 			return out.toByteArray();
 		}
 	}
+	
+	static <T> boolean arrayContains(T[] array, T value) {
+		for(T item : array) if(item.equals(value)) return true;
+		return false;
+	}
+	
+	static boolean compareMimeTypes(String one, String two) {
+		if(one.equals("*/*") || two.equals("*/*")) return true;
+		String[] oneComponents = one.split("/");
+		String[] twoComponents = two.split("/");
+		if(oneComponents[1].equals("*") || twoComponents[1].equals("*")) return oneComponents[0].equals(twoComponents[0]);
+		return one.equals(two);
+	}
 }

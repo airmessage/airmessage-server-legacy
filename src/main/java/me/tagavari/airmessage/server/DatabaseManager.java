@@ -230,8 +230,8 @@ class DatabaseManager {
 				try {
 					updateMessageStates(connection, dataFetchResult == null ? new ArrayList<>() : dataFetchResult.isolatedModifiers);
 				} catch(SQLException exception) {
+					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 					Sentry.capture(exception);
-					exception.printStackTrace();
 				}
 				
 				{
@@ -246,8 +246,8 @@ class DatabaseManager {
 						try {
 							indexTargetAvailability(connection);
 						} catch(SQLException exception) {
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							Sentry.capture(exception);
-							exception.printStackTrace();
 						}
 						Main.getLogger().finest("Updated creation target chat index");
 					}
@@ -297,7 +297,7 @@ class DatabaseManager {
 				}
 			} catch(InterruptedException exception) {
 				//Logging the message
-				exception.printStackTrace();
+				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
 				
 				return;
 			}
@@ -475,7 +475,7 @@ class DatabaseManager {
 								new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
 								out.flush();
 								
-								//Sending the data (synchronously, as otherwise this can cause a memory build-up)
+								//Sending the data
 								request.connection.sendDataSync(NetServerManager.nhtAttachmentReq, bos.toByteArray());
 								//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
 							}
@@ -665,7 +665,71 @@ class DatabaseManager {
 				
 				@Override
 				void onAttachmentChunkLoaded(List<TransientAttachmentInfo> attachmentList) {
-					super.onAttachmentChunkLoaded(attachmentList);
+					for(TransientAttachmentInfo attachment : attachmentList) {
+						//Filtering out attachments
+						if(request.restrictAttachments && attachment.messageDate < request.timeSinceAttachments) return; //Attachment date
+						if(request.restrictAttachmentsSizes && attachment.fileSize > request.attachmentSizeLimit) return; //Attachment size
+						if(!compareMIMEArray(request.attachmentFilterWhitelist, attachment.fileType) && (compareMIMEArray(request.attachmentFilterBlacklist, attachment.fileType) || !request.attachmentFilterDLOutside)) return; //Attachment type
+						System.out.println("Uploading attachment: " + attachment.fileName);
+						
+						//Streaming the file
+						byte[] buffer = new byte[1024 * 1024]; //1 MiB
+						byte[] compressedBuffer;
+						int bytesRead;
+						boolean moreDataRead;
+						int requestIndex = 0;
+						
+						try(FileInputStream inputStream = new FileInputStream(attachment.file)) {
+							//Attempting to read the data
+							if((bytesRead = inputStream.read(buffer)) != -1) {
+								do {
+									//Compressing the buffer
+									compressedBuffer = Constants.compressGZIP(buffer, bytesRead);
+									
+									//Reading the next chunk
+									moreDataRead = (bytesRead = inputStream.read(buffer)) != -1;
+									
+									//Checking if the connection is ready
+									if(request.connection.isClientRegistered() && request.connection.isConnected()) {
+										//Preparing to serialize the data
+										try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos);
+											ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
+											out.writeShort(request.requestID); //Request ID
+											out.writeInt(requestIndex); //Request index
+											if(requestIndex == 0) out.writeUTF(attachment.fileName); //File name
+											out.writeBoolean(!moreDataRead); //Is last
+											
+											outSec.writeUTF(attachment.guid); //File GUID
+											outSec.writeInt(compressedBuffer.length); //Compressed chunk data
+											outSec.write(compressedBuffer);
+											outSec.flush();
+											
+											new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
+											out.flush();
+											
+											//Sending the data
+											request.connection.sendDataSync(NetServerManager.nhtMassRetrievalFile, bos.toByteArray());
+											//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
+										}
+									} else {
+										Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
+										break;
+									}
+									
+									//Adding to the request index
+									requestIndex++;
+								} while(moreDataRead);
+							}
+						} catch(IOException | GeneralSecurityException exception) {
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+							Sentry.capture(exception);
+						}
+					}
+				}
+				
+				private boolean compareMIMEArray(String[] array, String target) {
+					for(String item : array) if(Constants.compareMimeTypes(item, target)) return true;
+					return false;
 				}
 				
 				@Override
@@ -977,17 +1041,19 @@ class DatabaseManager {
 					//Adding the file
 					String fileGUID = fileRecords.getValue(f, DSL.field("attachment.guid", String.class));
 					String fileType = fileRecords.getValue(f, DSL.field("attachment.mime_type", String.class));
-					String fileName = fileRecords.getValue(f, DSL.field("attachment.filename", String.class));
-					File file = fileName == null ? null : new File(fileName.replaceFirst("~", System.getProperty("user.home")));
+					String fileName = fileRecords.getValue(f, DSL.field("attachment.transfer_name", String.class));
+					String filePath = fileRecords.getValue(f, DSL.field("attachment.filename", String.class));
+					File file = filePath == null ? null : new File(filePath.replaceFirst("~", System.getProperty("user.home")));
+					long fileSize = fileRecords.getValue(f, DSL.field("attachment.total_bytes", Long.class));
 					
 					files.add(new Blocks.AttachmentInfo(fileGUID,
-							fileRecords.getValue(f, DSL.field("attachment.transfer_name", String.class)),
+							fileName,
 							fileType,
-							fileRecords.getValue(f, DSL.field("attachment.total_bytes", Long.class)),
+							fileSize,
 							//The checksum will be calculated if the message is outgoing
 							sender == null && file != null ? calculateChecksum(file) : null));
 					
-					if(attachmentFiles != null && file != null) attachmentFiles.add(new TransientAttachmentInfo(fileGUID, date, file, fileType));
+					if(attachmentFiles != null && file != null) attachmentFiles.add(new TransientAttachmentInfo(fileGUID, date, file, fileName, fileType, fileSize));
 				}
 				
 				//Adding the conversation item
@@ -1284,13 +1350,17 @@ class DatabaseManager {
 		final String guid;
 		final long messageDate;
 		final File file;
+		final String fileName;
 		final String fileType;
+		final long fileSize;
 		
-		TransientAttachmentInfo(String guid, long messageDate, File file, String fileType) {
+		TransientAttachmentInfo(String guid, long messageDate, File file, String fileName, String fileType, long fileSize) {
 			this.guid = guid;
 			this.messageDate = messageDate;
 			this.file = file;
+			this.fileName = fileName;
 			this.fileType = fileType;
+			this.fileSize = fileSize;
 		}
 	}
 }
