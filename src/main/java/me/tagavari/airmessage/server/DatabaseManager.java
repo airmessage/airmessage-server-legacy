@@ -667,10 +667,10 @@ class DatabaseManager {
 				void onAttachmentChunkLoaded(List<TransientAttachmentInfo> attachmentList) {
 					for(TransientAttachmentInfo attachment : attachmentList) {
 						//Filtering out attachments
+						if(!attachment.file.exists() || attachment.fileType == null) return; //Invalid attachments
 						if(request.restrictAttachments && attachment.messageDate < request.timeSinceAttachments) return; //Attachment date
 						if(request.restrictAttachmentsSizes && attachment.fileSize > request.attachmentSizeLimit) return; //Attachment size
 						if(!compareMIMEArray(request.attachmentFilterWhitelist, attachment.fileType) && (compareMIMEArray(request.attachmentFilterBlacklist, attachment.fileType) || !request.attachmentFilterDLOutside)) return; //Attachment type
-						System.out.println("Uploading attachment: " + attachment.fileName);
 						
 						//Streaming the file
 						byte[] buffer = new byte[1024 * 1024]; //1 MiB
@@ -1024,19 +1024,19 @@ class DatabaseManager {
 				
 				//Fetching the attachments
 				List<SelectField<?>> attachmentFields = new ArrayList<>(Arrays.asList(new SelectField<?>[]{DSL.field("attachment.guid", String.class), DSL.field("attachment.filename", String.class), DSL.field("attachment.transfer_name", String.class), DSL.field("attachment.mime_type", String.class), DSL.field("attachment.total_bytes", Long.class)}));
-				if(dbSupportsAssociation) attachmentFields.add(DSL.field("attachment.is_sticker", Boolean.class));
+				//if(dbSupportsAssociation) attachmentFields.add(DSL.field("attachment.is_sticker", Boolean.class));
 				
 				Result<?> fileRecords = context.select(attachmentFields)
 						.from(DSL.table("message_attachment_join"))
 						.join(DSL.table("attachment")).on(DSL.field("message_attachment_join.attachment_id").eq(DSL.field("attachment.ROWID")))
-						.where(DSL.field("message_attachment_join.message_id").eq(rowID))
+						.where(DSL.field("attachment.hide_attachment").isFalse()).and(DSL.field("message_attachment_join.message_id").eq(rowID))
 						.fetch();
 				
 				//Processing the attachments
 				ArrayList<Blocks.AttachmentInfo> files = new ArrayList<>();
 				for(int f = 0; f < fileRecords.size(); f++) {
 					//Skipping the remainder of the iteration if the attachment is a sticker
-					if(dbSupportsAssociation && fileRecords.getValue(f, DSL.field("attachment.is_sticker", Boolean.class))) continue;
+					//if(dbSupportsAssociation && fileRecords.getValue(f, DSL.field("attachment.is_sticker", Boolean.class))) continue;
 					
 					//Adding the file
 					String fileGUID = fileRecords.getValue(f, DSL.field("attachment.guid", String.class));
