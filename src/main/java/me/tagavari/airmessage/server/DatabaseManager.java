@@ -668,7 +668,7 @@ class DatabaseManager {
 					for(TransientAttachmentInfo attachment : attachmentList) {
 						//Filtering out attachments
 						if(!attachment.file.exists() || attachment.fileType == null) return; //Invalid attachments
-						if(request.restrictAttachments && attachment.messageDate < request.timeSinceAttachments) return; //Attachment date
+						if(request.restrictAttachments && attachment.messageDate < lTimeSinceAttachments) return; //Attachment date
 						if(request.restrictAttachmentsSizes && attachment.fileSize > request.attachmentSizeLimit) return; //Attachment size
 						if(!compareMIMEArray(request.attachmentFilterWhitelist, attachment.fileType) && (compareMIMEArray(request.attachmentFilterBlacklist, attachment.fileType) || !request.attachmentFilterDLOutside)) return; //Attachment type
 						
