@@ -1,6 +1,5 @@
 package me.tagavari.airmessage.server;
 
-import io.rincl.Rincled;
 import io.sentry.Sentry;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
@@ -19,6 +18,7 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.text.MessageFormat;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
-class UpdateManager implements Rincled {
+class UpdateManager {
 	//Creating the reference values
 	private static final URL updateURL = makeURL("https://airmessage.org/update/server/1/");
 	
@@ -177,7 +177,7 @@ class UpdateManager implements Rincled {
 			labelTitle.setLayoutData(labelTitleGD);
 			
 			Label labelDescription = new Label(shell, SWT.WRAP);
-			labelDescription.setText(Main.resources().getString("label.update.available.body", newVer, Constants.SERVER_VERSION));
+			labelDescription.setText(MessageFormat.format(Main.resources().getString("label.update.available.body"), newVer, Constants.SERVER_VERSION));
 			GridData labelDescriptionGD = new GridData();
 			labelDescriptionGD.grabExcessHorizontalSpace = true;
 			labelDescriptionGD.horizontalAlignment = GridData.FILL;
@@ -338,7 +338,7 @@ class UpdateManager implements Rincled {
 		
 		//Adding the description
 		Label labelDescription = new Label(shell, SWT.WRAP);
-		labelDescription.setText(Main.resources().getString("label.update.up_to_date.body", Constants.SERVER_VERSION));
+		labelDescription.setText(MessageFormat.format(Main.resources().getString("label.update.up_to_date.body"), Constants.SERVER_VERSION));
 		GridData labelDescriptionGD = new GridData();
 		labelDescriptionGD.grabExcessHorizontalSpace = true;
 		labelDescriptionGD.horizontalAlignment = GridData.FILL;

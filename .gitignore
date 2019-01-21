@@ -11,6 +11,7 @@ target/
 # User-specific configurations
 .idea/.name
 .idea/artifacts
+.idea/codeStyles/
 .idea/codeStyleSettings.xml
 .idea/compiler.xml
 .idea/copyright/profiles_settings.xml

@@ -21,7 +21,8 @@ public class UIHelper {
 	private static Display display;
 	
 	static void initialize() {
-		display = new Display();
+		display = Display.getCurrent();
+		if(display == null) display = Display.getDefault(); //The display may be null if outside the UI thread
 	}
 	
 	static boolean displayVersionWarning() {

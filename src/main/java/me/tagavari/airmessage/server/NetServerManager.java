@@ -23,7 +23,7 @@ import java.util.logging.Level;
 class NetServerManager {
 	//Creating the transmission header values
 	public static final int mmCommunicationsVersion = 4;
-	public static final int mmCommunicationsSubVersion = 3;
+	public static final int mmCommunicationsSubVersion = 4;
 	
 	//NHT = Net Header Type
 	public static final int nhtClose = -1;
@@ -35,6 +35,7 @@ class NetServerManager {
 	public static final int nhtTimeRetrieval = 3;
 	public static final int nhtMassRetrieval = 4;
 	public static final int nhtMassRetrievalFinish = 10;
+	public static final int nhtMassRetrievalFile = 11;
 	public static final int nhtConversationUpdate = 5;
 	public static final int nhtModifierUpdate = 6;
 	public static final int nhtAttachmentReq = 7;
@@ -371,8 +372,43 @@ class NetServerManager {
 						break;
 					}
 					case nhtMassRetrieval: {
+						//Getting the request information
+						short requestID;
+						boolean useAdvanced;
+						boolean restrictMessages = false;
+						long timeSinceMessages = -1;
+						boolean downloadAttachments = false;
+						boolean restrictAttachments = false;
+						long timeSinceAttachments = -1;
+						boolean restrictAttachmentSize = false;
+						long attachmentSizeLimit = -1;
+						String[] attachmentFilterWhitelist = null;
+						String[] attachmentFilterBlacklist = null;
+						boolean attachmentFilterDLOther = false;
+
+						//Reading the request data
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
+							requestID = in.readShort();
+							if(useAdvanced = in.readBoolean()) {
+								if(restrictMessages = in.readBoolean()) timeSinceMessages = in.readLong();
+								if(downloadAttachments = in.readBoolean()) {
+									if(restrictAttachments = in.readBoolean()) timeSinceAttachments = in.readLong();
+									if(restrictAttachmentSize = in.readBoolean()) attachmentSizeLimit = in.readLong();
+									
+									attachmentFilterWhitelist = new String[in.readInt()];
+									for(int i = 0; i < attachmentFilterWhitelist.length; i++) attachmentFilterWhitelist[i] = in.readUTF();
+									attachmentFilterBlacklist = new String[in.readInt()];
+									for(int i = 0; i < attachmentFilterBlacklist.length; i++) attachmentFilterBlacklist[i] = in.readUTF();
+									attachmentFilterDLOther = in.readBoolean();
+								}
+							}
+						} catch(IOException | RuntimeException exception) {
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+							break;
+						}
+						
 						//Creating a new request and queuing it
-						DatabaseManager.getInstance().addClientRequest(new DatabaseManager.MassRetrievalRequest(this));
+						DatabaseManager.getInstance().addClientRequest(new DatabaseManager.MassRetrievalRequest(this, requestID, useAdvanced, restrictMessages, timeSinceMessages, downloadAttachments, restrictAttachments, timeSinceAttachments, restrictAttachmentSize, attachmentSizeLimit, attachmentFilterWhitelist, attachmentFilterBlacklist, attachmentFilterDLOther));
 						
 						break;
 					}

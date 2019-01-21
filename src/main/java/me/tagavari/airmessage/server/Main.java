@@ -1,8 +1,5 @@
 package me.tagavari.airmessage.server;
 
-import io.rincl.Resources;
-import io.rincl.Rincl;
-import io.rincl.Rincled;
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
 
@@ -15,9 +12,10 @@ import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.ResourceBundle;
 import java.util.logging.*;
 
-class Main implements Rincled {
+class Main {
 	//Creating the reference values
 	static final String PREFIX_DEBUG = "DEBUG LOG: ";
 	static final int serverStateStarting = 0;
@@ -29,7 +27,7 @@ class Main implements Rincled {
 	private static final File logFile = new File(Constants.applicationSupportDir, "logs/latest.log");
 	
 	//Creating the variables
-	private static boolean debugMode = false;
+	private static boolean debugMode = true;
 	private static TimeHelper timeHelper;
 	private static Logger logger;
 	
@@ -272,7 +270,7 @@ class Main implements Rincled {
 		serverState = value;
 	}
 	
-	static Resources resources() {
-		return Rincl.getResourceI18nConcern().getResources(Main.class);
+	static ResourceBundle resources() {
+		return ResourceBundle.getBundle("me.tagavari.airmessage.server.Translations");
 	}
 }

@@ -4,7 +4,11 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.net.*;
+import java.net.DatagramSocket;
+import java.net.NetworkInterface;
+import java.net.ServerSocket;
+import java.net.SocketException;
+import java.util.Enumeration;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.stream.Stream;
@@ -15,8 +19,8 @@ class Constants {
 	static final String SENTRY_DSN = "https://4240bd1f5e2f4ecfac822f78dda19fce:00d4dcd23b244f46a4489b5b80811d39@sentry.io/301837";
 	
 	//Creating the version values
-	static final String SERVER_VERSION = "0.2.8";
-	static final int SERVER_VERSION_CODE = 9;
+	static final String SERVER_VERSION = "0.3";
+	static final int SERVER_VERSION_CODE = 10;
 	
 	//Creating the file values
 	static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
@@ -185,14 +189,38 @@ class Constants {
 		return builder.toString();
 	}
 	
-	static String getMACAddress() {
+	//Uses active network interface
+	/* static String getMACAddress() {
 		try {
 			byte[] mac = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getHardwareAddress();
 			if(mac == null) return null;
 			StringBuilder stringBuilder = new StringBuilder();
 			for(int i = 0; i < mac.length; i++) stringBuilder.append(String.format("%02X%s", mac[i], (i < mac.length - 1) ? "-" : ""));
 			return stringBuilder.toString();
-		} catch(UnknownHostException | SocketException exception) {
+		} catch(UnknownHostException | SocketException | NullPointerException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			return null;
+		}
+	} */
+	
+	//Uses first network interface
+	static String getMACAddress() {
+		try {
+			Enumeration<NetworkInterface> interfaceList = NetworkInterface.getNetworkInterfaces();
+			if(interfaceList == null) return null;
+			while(interfaceList.hasMoreElements()) {
+				NetworkInterface netInterface = interfaceList.nextElement();
+				if(netInterface == null) continue;
+				byte[] macAddress = netInterface.getHardwareAddress();
+				if(macAddress == null) continue;
+				
+				StringBuilder stringBuilder = new StringBuilder();
+				for(int i = 0; i < macAddress.length; i++) stringBuilder.append(String.format("%02X%s", macAddress[i], (i < macAddress.length - 1) ? "-" : ""));
+				return stringBuilder.toString();
+			}
+			
+			return null;
+		} catch(SocketException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			return null;
 		}
@@ -234,5 +262,18 @@ class Constants {
 			in.close();
 			return out.toByteArray();
 		}
+	}
+	
+	static <T> boolean arrayContains(T[] array, T value) {
+		for(T item : array) if(item.equals(value)) return true;
+		return false;
+	}
+	
+	static boolean compareMimeTypes(String one, String two) {
+		if(one.equals("*/*") || two.equals("*/*")) return true;
+		String[] oneComponents = one.split("/");
+		String[] twoComponents = two.split("/");
+		if(oneComponents[1].equals("*") || twoComponents[1].equals("*")) return oneComponents[0].equals(twoComponents[0]);
+		return one.equals(two);
 	}
 }
