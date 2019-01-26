@@ -13,7 +13,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
@@ -38,8 +37,9 @@ class DatabaseManager {
 	private static DatabaseManager instance;
 	
 	//Creating the schema support values
-	private boolean dbSupportsSendStyle = false;
-	private boolean dbSupportsAssociation = false;
+	private boolean dbSupportsSendStyle;
+	private boolean dbSupportsAssociation;
+	private boolean dbSupportsHiddenAttachments;
 	
 	//Creating the thread values
 	ScannerThread scannerThread;
@@ -110,8 +110,12 @@ class DatabaseManager {
 	}
 	
 	private DatabaseManager(Connection[] connections, long scanFrequency) {
-		//Reading the schema
+		//Setting up the capability values
+		dbSupportsSendStyle = dbSupportsAssociation = dbSupportsHiddenAttachments = Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSSierraVersion) >= 0;
+		
+		/* //Reading the schema
 		Connection connection = connections[0];
+		
 		try {
 			//Checking if the DB supports send styles
 			ResultSet resultSet = connection.getMetaData().getColumns(null, null, "message", "expressive_send_style_id");
@@ -125,7 +129,7 @@ class DatabaseManager {
 		} catch(SQLException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
-		}
+		} */
 		
 		//Creating the threads
 		scannerThread = new ScannerThread(connections[0], scanFrequency);
@@ -1026,10 +1030,12 @@ class DatabaseManager {
 				List<SelectField<?>> attachmentFields = new ArrayList<>(Arrays.asList(new SelectField<?>[]{DSL.field("attachment.guid", String.class), DSL.field("attachment.filename", String.class), DSL.field("attachment.transfer_name", String.class), DSL.field("attachment.mime_type", String.class), DSL.field("attachment.total_bytes", Long.class)}));
 				//if(dbSupportsAssociation) attachmentFields.add(DSL.field("attachment.is_sticker", Boolean.class));
 				
+				Condition filter = DSL.field("message_attachment_join.message_id").eq(rowID);
+				if(dbSupportsHiddenAttachments) filter = filter.and(DSL.field("attachment.hide_attachment").isFalse());
 				Result<?> fileRecords = context.select(attachmentFields)
 						.from(DSL.table("message_attachment_join"))
 						.join(DSL.table("attachment")).on(DSL.field("message_attachment_join.attachment_id").eq(DSL.field("attachment.ROWID")))
-						.where(DSL.field("attachment.hide_attachment").isFalse()).and(DSL.field("message_attachment_join.message_id").eq(rowID))
+						.where(filter)
 						.fetch();
 				
 				//Processing the attachments
