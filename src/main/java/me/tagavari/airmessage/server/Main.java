@@ -27,7 +27,7 @@ class Main {
 	private static final File logFile = new File(Constants.applicationSupportDir, "logs/latest.log");
 	
 	//Creating the variables
-	private static boolean debugMode = true;
+	private static boolean debugMode = false;
 	private static TimeHelper timeHelper;
 	private static Logger logger;
 	
