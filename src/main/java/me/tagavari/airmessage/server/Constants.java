@@ -28,8 +28,10 @@ class Constants {
 	
 	//Creating the macOS version values
 	static final int[] macOSYosemiteVersion = {10, 10};
+	static final int[] macOSElCapitanVersion = {10, 11};
 	static final int[] macOSSierraVersion = {10, 12};
 	static final int[] macOSHighSierraVersion = {10, 13};
+	static final int[] macOSMojaveVersion = {10, 14};
 	
 	//Creating the regex values
 	static final String reExInteger = "^\\d+$";

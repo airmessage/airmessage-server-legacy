@@ -5,8 +5,7 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.graphics.*;
-import org.eclipse.swt.layout.GridData;
-import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.layout.*;
 import org.eclipse.swt.widgets.*;
 
 import java.util.logging.Level;
@@ -55,6 +54,14 @@ public class UIHelper {
 			case SWT.IGNORE:
 				return 2;
 		}
+	}
+	
+	static void displayAutomationWarning() {
+		AppleScriptManager.showAutomationWarning();
+	}
+	
+	static void displayDiskAccessWarning() {
+		AppleScriptManager.showDiskAccessWarning();
 	}
 	
 	static void openIntroWindow() {
@@ -132,6 +139,78 @@ public class UIHelper {
 		dialog.setMessage(message);
 		dialog.open();
 		if(!shell.isDisposed()) shell.dispose();
+	}
+	
+	static void displayConfirmationDialog(String message, String positiveLabel, String negativeLabel, Runnable onConfirm) {
+		//Creating the shell
+		Shell shell = new Shell();
+		
+		//Configuring the layout
+		GridLayout shellGL = new GridLayout(1, false);
+		shellGL.marginWidth = shellGL.marginHeight = UIHelper.windowMargin;
+		shell.setLayout(shellGL);
+		
+		//Creating the label
+		Label messageLabel = new Label(shell, SWT.NONE);
+		messageLabel.setText(message);
+		
+		{
+			//Creating the button composite
+			Composite buttonContainer = new Composite(shell, SWT.NONE);
+			FormLayout buttonCompositeFL = new FormLayout();
+			buttonCompositeFL.marginWidth = buttonCompositeFL.marginHeight = 0;
+			buttonContainer.setLayout(buttonCompositeFL);
+			GridData buttonCompositeGD = new GridData();
+			buttonCompositeGD.horizontalAlignment = GridData.FILL;
+			buttonCompositeGD.grabExcessHorizontalSpace = true;
+			buttonContainer.setLayoutData(buttonCompositeGD);
+			
+			//Adding the apply / discard buttons
+			Button positiveButton = new Button(buttonContainer, SWT.PUSH);
+			positiveButton.setText(positiveLabel);
+			FormData acceptButtonFD = new FormData();
+			if(positiveButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.smallMinButtonWidth) acceptButtonFD.width = UIHelper.smallMinButtonWidth;
+			acceptButtonFD.right = new FormAttachment(100);
+			acceptButtonFD.top = new FormAttachment(50, -positiveButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
+			positiveButton.setLayoutData(acceptButtonFD);
+			positiveButton.addListener(SWT.Selection, event -> {
+				//Calling the function
+				onConfirm.run();
+				
+				//Closing the shell
+				shell.close();
+			});
+			shell.setDefaultButton(positiveButton);
+			
+			Button negativeButton = new Button(buttonContainer, SWT.PUSH);
+			negativeButton.setText(negativeLabel);
+			FormData discardButtonFD = new FormData();
+			if(negativeButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.smallMinButtonWidth) discardButtonFD.width = UIHelper.smallMinButtonWidth;
+			discardButtonFD.right = new FormAttachment(positiveButton);
+			discardButtonFD.top = new FormAttachment(positiveButton, 0, SWT.CENTER);
+			negativeButton.setLayoutData(discardButtonFD);
+			negativeButton.addListener(SWT.Selection, event -> shell.close());
+		}
+		
+		//Adding a listener to the shell
+		/* shell.addListener(SWT.Close, closeEvent -> {
+		
+		}); */
+		
+		//Packing the shell
+		shell.pack();
+		if(shell.getSize().x > 500) shell.setSize(500, shell.getSize().y);
+		
+		//Getting the bounds
+		Rectangle screenBounds = UIHelper.getDisplay().getPrimaryMonitor().getBounds();
+		Rectangle windowBounds = shell.getBounds();
+		
+		//Centering the window
+		shell.setLocation(screenBounds.x + (screenBounds.width - windowBounds.width) / 2, screenBounds.y + (screenBounds.height - windowBounds.height) / 2);
+		
+		//Opening the shell
+		shell.open();
+		shell.forceActive();
 	}
 	
 	static void startEventLoop() {
