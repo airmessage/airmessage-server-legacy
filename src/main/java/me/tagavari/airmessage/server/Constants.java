@@ -19,8 +19,8 @@ class Constants {
 	static final String SENTRY_DSN = "https://4240bd1f5e2f4ecfac822f78dda19fce:00d4dcd23b244f46a4489b5b80811d39@sentry.io/301837";
 	
 	//Creating the version values
-	static final String SERVER_VERSION = "0.3.1";
-	static final int SERVER_VERSION_CODE = 11;
+	static final String SERVER_VERSION = "0.3.1b";
+	static final int SERVER_VERSION_CODE = 13;
 	
 	//Creating the file values
 	static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
@@ -28,8 +28,10 @@ class Constants {
 	
 	//Creating the macOS version values
 	static final int[] macOSYosemiteVersion = {10, 10};
+	static final int[] macOSElCapitanVersion = {10, 11};
 	static final int[] macOSSierraVersion = {10, 12};
 	static final int[] macOSHighSierraVersion = {10, 13};
+	static final int[] macOSMojaveVersion = {10, 14};
 	
 	//Creating the regex values
 	static final String reExInteger = "^\\d+$";

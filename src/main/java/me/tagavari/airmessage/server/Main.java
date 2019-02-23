@@ -4,10 +4,7 @@ import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
 
 import javax.swing.*;
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
+import java.io.*;
 import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -90,6 +87,7 @@ class Main {
 		
 		//Opening the intro window
 		if(PreferencesManager.checkFirstRun()) UIHelper.openIntroWindow();
+		else runPermissionCheck(); //The permission check will be run when the user closes the window
 		
 		//Setting up the system tray
 		SystemTrayManager.setupSystemTray();
@@ -151,7 +149,7 @@ class Main {
 			}
 		}
 		
-		//Starting the web socket manager
+		//Starting the server manager
 		{
 			int result = NetServerManager.createServer(PreferencesManager.getPrefServerPort(), false);
 			if(result != NetServerManager.createServerResultOK) {
@@ -180,7 +178,7 @@ class Main {
 		setServerState(serverStateStarting);
 		SystemTrayManager.updateStatusMessage();
 		
-		//Starting the web socket manager
+		//Starting the server manager
 		int result = NetServerManager.createServer(PreferencesManager.getPrefServerPort(), true);
 		if(result != NetServerManager.createServerResultOK) {
 			//Updating the server state
@@ -223,6 +221,15 @@ class Main {
 		
 		//Returning true
 		return true;
+	}
+	
+	static void runPermissionCheck() {
+		//Checking AppleScript automation permissions
+		if(!AppleScriptManager.testAutomation()) UIHelper.displayAutomationWarning();
+		
+		//Checking disk access permissions
+		File messagesDir = new File(System.getProperty("user.home"), "Library/Messages/chat.db");
+		if(!messagesDir.canRead()) UIHelper.displayDiskAccessWarning();
 	}
 	
 	private static void processArgs(String[] args) {

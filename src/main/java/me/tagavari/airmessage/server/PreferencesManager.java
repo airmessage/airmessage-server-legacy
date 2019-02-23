@@ -45,6 +45,7 @@ public class PreferencesManager {
 	private static final String textEncoding = "UTF-8";
 	
 	//Creating the preference values
+	private static boolean isFirstRun = true;
 	private static int prefServerPort = defaultPort;
 	private static boolean prefAutoCheckUpdates = defaultAutoCheckUpdates;
 	private static float prefScanFrequency = defaultScanFrequency;
@@ -311,6 +312,7 @@ public class PreferencesManager {
 				} catch(ParserConfigurationException | IOException | SAXException exception) {
 					//Logging the error
 					Main.getLogger().log(Level.SEVERE, "Couldn't create document builder / " + exception.getMessage(), exception);
+					Sentry.capture(exception);
 					
 					//Returning false
 					return false;
@@ -421,8 +423,8 @@ public class PreferencesManager {
 			//Logging the error
 			Main.getLogger().log(Level.SEVERE, "Couldn't create document builder", exception);
 			
-			//Returning false
-			return false;
+			//Returning
+			return true;
 		}
 		
 		boolean firstRun;
@@ -437,23 +439,47 @@ public class PreferencesManager {
 			else firstRun = true;
 		}
 		
-		if(firstRun) {
-			//Adding the XML element
-			Node rootElement = document.getElementsByTagName(domTagRoot).item(0);
-			Element element = document.createElement(domTagFirstRun);
-			element.setTextContent(Boolean.toString(false));
-			rootElement.appendChild(element);
+		//Setting and returning the value
+		isFirstRun = firstRun;
+		return firstRun;
+	}
+	
+	static boolean clearFirstRun() {
+		if(!isFirstRun) throw new IllegalStateException();
+		
+		//Loading the document
+		Document document;
+		try {
+			document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(prefFile);
+		} catch(ParserConfigurationException | IOException | SAXException exception) {
+			//Logging the error
+			Main.getLogger().log(Level.SEVERE, "Couldn't create document builder / " + exception.getMessage(), exception);
+			Sentry.capture(exception);
 			
-			try {
-				//Writing the XML document
-				TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(prefFile));
-			} catch(TransformerException exception) {
-				Main.getLogger().log(Level.SEVERE, "Couldn't create document builder / " + exception.getMessage(), exception);
-			}
+			//Returning false
+			return false;
 		}
 		
-		//Returning the value
-		return firstRun;
+		//Adding the XML element
+		Node rootElement = document.getElementsByTagName(domTagRoot).item(0);
+		Element element = document.createElement(domTagFirstRun);
+		element.setTextContent(Boolean.toString(false));
+		rootElement.appendChild(element);
+		
+		try {
+			//Writing the XML document
+			TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(prefFile));
+		} catch(TransformerException exception) {
+			//Logging the error
+			Main.getLogger().log(Level.SEVERE, "Couldn't write XML document / " + exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			//Returning false
+			return false;
+		}
+		
+		//Returning true
+		return true;
 	}
 	
 	static void openWindow() {
@@ -657,8 +683,16 @@ public class PreferencesManager {
 		Rectangle windowBounds = windowShell.getBounds();
 		windowShell.setLocation(screenBounds.x + (screenBounds.width - windowBounds.width) / 2, screenBounds.y + (screenBounds.height - windowBounds.height) / 2);
 		
-		//Invalidating the reference when the shell is closed
-		windowShell.addListener(SWT.Close, event -> windowShell = null);
+		windowShell.addListener(SWT.Close, event -> {
+			//Invalidating the reference
+			windowShell = null;
+			
+			//Updating the first run state
+			if(isFirstRun) {
+				clearFirstRun();
+				if(Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSMojaveVersion) >= 0) Main.runPermissionCheck();
+			}
+		});
 		
 		//Opening the shell
 		windowShell.open();

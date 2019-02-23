@@ -110,6 +110,31 @@ class AppleScriptManager {
 			
 			"end tell"
 	};
+	private static final String[] ASAutomationTest = {
+			"tell application \"Messages\"",
+			"get first text chat",
+			"end tell"
+	};
+	private static final String[] ASShowAutomationWarning = { //ARGS: Message / Positive button / Negative button
+			"display dialog \"%1$s\" buttons {\"%2$s\", \"%3$s\"} cancel button \"%2$s\" default button \"%3$s\" with icon caution",
+			
+			"if button returned of result = \"%3$s\" then",
+			"tell application \"System Preferences\"",
+			"activate",
+			"reveal anchor \"Privacy\" of pane id \"com.apple.preference.security\"",
+			"end tell",
+			"end if"
+	};
+	private static final String[] ASShowDiskAccessWarning = { //ARGS: Message / Positive button / Negative button
+			"display dialog \"%1$s\" buttons {\"%2$s\", \"%3$s\"} cancel button \"%2$s\" default button \"%3$s\" with icon caution",
+			
+			"if button returned of result = \"%3$s\" then",
+			"tell application \"System Preferences\"",
+			"activate",
+			"reveal anchor \"Privacy_AllFiles\" of pane id \"com.apple.preference.security\"",
+			"end tell",
+			"end if"
+	};
 	
 	static boolean sendExistingMessage(String chatGUID, String message) {
 		//Building the command
@@ -297,6 +322,50 @@ class AppleScriptManager {
 		
 		//Returning true
 		return true;
+	}
+	
+	static boolean testAutomation() {
+		//Building the command
+		ArrayList<String> command = new ArrayList<>();
+		command.add("osascript");
+		for(String line : ASAutomationTest) {
+			command.add("-e");
+			command.add(line);
+		}
+		
+		//Running the command
+		try {
+			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
+			
+			//Returning false if there was any error
+			BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+			boolean linesRead = false;
+			String lsString;
+			while ((lsString = errorReader.readLine()) != null) {
+				if(!lsString.endsWith("(-1749)")) continue; //Error code for access denied. Sometimes, the executed command may return an error anyways if there are no messages.
+				Main.getLogger().severe(lsString);
+				linesRead = true;
+			}
+			
+			if(linesRead) return false;
+		} catch(IOException exception) {
+			//Printing the stack trace
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			
+			//Returning false
+			return false;
+		}
+		
+		//Returning true
+		return true;
+	}
+	
+	static void showAutomationWarning() {
+		runBasicAS(ASShowAutomationWarning, Main.resources().getString("message.automation_error"), Main.resources().getString("action.ignore"), Main.resources().getString("action.system_preferences"));
+	}
+	
+	static void showDiskAccessWarning() {
+		runBasicAS(ASShowDiskAccessWarning, Main.resources().getString("message.diskaccess_error"), Main.resources().getString("action.ignore"), Main.resources().getString("action.system_preferences"));
 	}
 	
 	private static final List<FileUploadRequest> fileUploadRequests = Collections.synchronizedList(new ArrayList<>());
@@ -549,6 +618,23 @@ class AppleScriptManager {
 	
 	private static String escapeAppleScriptString(String string) {
 		return string.replace("\\", "\\\\").replace("\"", "\\\"");
+	}
+	
+	private static void runBasicAS(String[] commandLines, String... arguments) {
+		//Building the command
+		ArrayList<String> command = new ArrayList<>();
+		command.add("osascript");
+		for(String line : commandLines) {
+			command.add("-e");
+			command.add(String.format(line, arguments));
+		}
+		
+		try {
+			Runtime.getRuntime().exec(command.toArray(new String[0]));
+		} catch (IOException exception) {
+			//Printing the stack trace
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+		}
 	}
 	
 	/* private static boolean isFatalResponse(String line) {

@@ -5,8 +5,7 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.graphics.*;
-import org.eclipse.swt.layout.GridData;
-import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.layout.*;
 import org.eclipse.swt.widgets.*;
 
 import java.util.logging.Level;
@@ -55,6 +54,14 @@ public class UIHelper {
 			case SWT.IGNORE:
 				return 2;
 		}
+	}
+	
+	static void displayAutomationWarning() {
+		AppleScriptManager.showAutomationWarning();
+	}
+	
+	static void displayDiskAccessWarning() {
+		AppleScriptManager.showDiskAccessWarning();
 	}
 	
 	static void openIntroWindow() {
@@ -133,7 +140,7 @@ public class UIHelper {
 		dialog.open();
 		if(!shell.isDisposed()) shell.dispose();
 	}
-	
+
 	static void startEventLoop() {
 		try {
 			while(!display.isDisposed()) if(!display.readAndDispatch()) display.sleep();

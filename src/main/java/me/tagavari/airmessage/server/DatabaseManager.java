@@ -548,7 +548,7 @@ class DatabaseManager {
 			
 			//Fetching the chat info
 			Result<org.jooq.Record3<String, String, String>> conversationResults;
-			if(request.useAdvanced && request.restrictMessages) {
+			if(request.restrictMessages) {
 				conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
 											.from(DSL.table("chat"))
 											.join(DSL.table("chat_message_join")).on(DSL.field("chat.ROWID").eq(DSL.field("chat_message_join.chat_id")))
@@ -590,7 +590,7 @@ class DatabaseManager {
 			
 			//Finding the amount of message entries in the database (roughly, because not all entries are messages)
 			int messagesCount;
-			if(request.useAdvanced && request.restrictMessages) messagesCount = create.selectCount().from(DSL.table("message")).where(DSL.field("date").greaterOrEqual(lTimeSinceMessages)).fetchOne(0, int.class);
+			if(request.restrictMessages) messagesCount = create.selectCount().from(DSL.table("message")).where(DSL.field("date").greaterOrEqual(lTimeSinceMessages)).fetchOne(0, int.class);
 			else messagesCount = create.selectCount().from(DSL.table("message")).fetchOne(0, int.class);
 			
 			//Returning if the connection is no longer open
@@ -623,7 +623,7 @@ class DatabaseManager {
 			}
 			
 			//Reading the message data
-			fetchData(connection, request.useAdvanced && request.restrictMessages ? () -> DSL.field("message.date").greaterOrEqual(lTimeSinceMessages) : null, new DataFetchListener(request.downloadAttachments) {
+			fetchData(connection, request.restrictMessages ? () -> DSL.field("message.date").greaterOrEqual(lTimeSinceMessages) : null, new DataFetchListener(request.downloadAttachments) {
 				//Creating the packet index value
 				int packetIndex = 1;
 				
@@ -1291,7 +1291,6 @@ class DatabaseManager {
 	static class MassRetrievalRequest {
 		final NetServerManager.SocketManager connection;
 		final short requestID;
-		final boolean useAdvanced;
 		final boolean restrictMessages;
 		final long timeSinceMessages;
 		final boolean downloadAttachments;
@@ -1303,10 +1302,9 @@ class DatabaseManager {
 		String[] attachmentFilterBlacklist;
 		boolean attachmentFilterDLOutside;
 		
-		MassRetrievalRequest(NetServerManager.SocketManager connection, short requestID, boolean useAdvanced, boolean restrictMessages, long timeSinceMessages, boolean downloadAttachments, boolean restrictAttachments, long timeSinceAttachments, boolean restrictAttachmentsSizes, long attachmentSizeLimit, String[] attachmentFilterWhitelist, String[] attachmentFilterBlacklist, boolean attachmentFilterDLOutside) {
+		MassRetrievalRequest(NetServerManager.SocketManager connection, short requestID, boolean restrictMessages, long timeSinceMessages, boolean downloadAttachments, boolean restrictAttachments, long timeSinceAttachments, boolean restrictAttachmentsSizes, long attachmentSizeLimit, String[] attachmentFilterWhitelist, String[] attachmentFilterBlacklist, boolean attachmentFilterDLOutside) {
 			this.connection = connection;
 			this.requestID = requestID;
-			this.useAdvanced = useAdvanced;
 			this.restrictMessages = restrictMessages;
 			this.timeSinceMessages = timeSinceMessages;
 			this.downloadAttachments = downloadAttachments;
