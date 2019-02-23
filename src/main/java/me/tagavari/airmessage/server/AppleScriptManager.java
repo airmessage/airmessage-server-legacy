@@ -342,6 +342,7 @@ class AppleScriptManager {
 			boolean linesRead = false;
 			String lsString;
 			while ((lsString = errorReader.readLine()) != null) {
+				if(!lsString.endsWith("(-1749)")) continue; //Error code for access denied. Sometimes, the executed command may return an error anyways if there are no messages.
 				Main.getLogger().severe(lsString);
 				linesRead = true;
 			}
