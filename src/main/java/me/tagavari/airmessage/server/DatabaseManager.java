@@ -238,7 +238,8 @@ class DatabaseManager {
 					Sentry.capture(exception);
 				}
 				
-				{
+				//TODO cleanup disabled code here
+				/* {
 					//Checking if the targeting availability index needs to be updated
 					long currentTime = System.currentTimeMillis();
 					if(creationTargetingUpdateRequired || currentTime >= lastCreationTargetingAvailabilityUpdate + creationTargetingAvailabilityUpdateInterval) {
@@ -255,7 +256,7 @@ class DatabaseManager {
 						}
 						Main.getLogger().finest("Updated creation target chat index");
 					}
-				}
+				} */
 			}
 		}
 		
@@ -1052,6 +1053,13 @@ class DatabaseManager {
 					File file = filePath == null ? null : new File(filePath.replaceFirst("~", System.getProperty("user.home")));
 					long fileSize = fileRecords.getValue(f, DSL.field("attachment.total_bytes", Long.class));
 					
+					//Updating the file name
+					if(fileName == null) {
+						if(filePath == null) continue; //Ignoring invalid files
+						fileName = new File(filePath).getName(); //Determining the file name from its path
+					}
+					
+					//Adding the file
 					files.add(new Blocks.AttachmentInfo(fileGUID,
 							fileName,
 							fileType,
@@ -1232,11 +1240,11 @@ class DatabaseManager {
 	
 	private static byte[] calculateChecksum(File file) throws IOException, NoSuchAlgorithmException {
 		//Returning null if the file isn't ready
-		if(!file.exists() || !file.isFile()) return null;
+		if(!file.exists() || !file.isFile() || !file.canRead()) return null;
 		
 		//Preparing to read the file
 		MessageDigest messageDigest = MessageDigest.getInstance(NetServerManager.hashAlgorithm);
-		try (FileInputStream inputStream = new FileInputStream(file)) {
+		try(FileInputStream inputStream = new FileInputStream(file)) {
 			byte[] dataBytes = new byte[1024];
 			
 			//Reading the file

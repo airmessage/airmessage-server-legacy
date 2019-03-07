@@ -10,7 +10,7 @@ import org.eclipse.swt.widgets.*;
 
 import java.util.logging.Level;
 
-public class UIHelper {
+class UIHelper {
 	//Creating the reference values
 	static final int windowMargin = 5;
 	static final int sheetMargin = 20;

@@ -227,9 +227,11 @@ class Main {
 		//Checking AppleScript automation permissions
 		if(!AppleScriptManager.testAutomation()) UIHelper.displayAutomationWarning();
 		
-		//Checking disk access permissions
-		File messagesDir = new File(System.getProperty("user.home"), "Library/Messages/chat.db");
-		if(!messagesDir.canRead()) UIHelper.displayDiskAccessWarning();
+		//Checking disk access permissions (full disk access only applies on macOS 10.14 Mojave or above)
+		if(Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSMojaveVersion) >= 0) {
+			File messagesDir = new File(System.getProperty("user.home"), "Library/Messages/chat.db");
+			if(!messagesDir.canRead()) UIHelper.displayDiskAccessWarning();
+		}
 	}
 	
 	private static void processArgs(String[] args) {

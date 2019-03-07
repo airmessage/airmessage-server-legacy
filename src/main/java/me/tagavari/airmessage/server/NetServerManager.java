@@ -21,40 +21,48 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
 class NetServerManager {
-	//Creating the transmission header values
-	public static final int mmCommunicationsVersion = 4;
-	public static final int mmCommunicationsSubVersion = 5;
+	//Transmission header values
+	private static final int mmCommunicationsVersion = 4;
+	private static final int mmCommunicationsSubVersion = 6;
 	
-	//NHT = Net Header Type
-	public static final int nhtClose = -1;
-	public static final int nhtPing = -2;
-	public static final int nhtPong = -3;
-	public static final int nhtInformation = 0;
-	public static final int nhtAuthentication = 1;
-	public static final int nhtMessageUpdate = 2;
-	public static final int nhtTimeRetrieval = 3;
-	public static final int nhtMassRetrieval = 4;
-	public static final int nhtMassRetrievalFinish = 10;
-	public static final int nhtMassRetrievalFile = 11;
-	public static final int nhtConversationUpdate = 5;
-	public static final int nhtModifierUpdate = 6;
-	public static final int nhtAttachmentReq = 7;
-	public static final int nhtAttachmentReqConfirm = 8;
-	public static final int nhtAttachmentReqFail = 9;
+	//NHT - Net header type
+	static final int nhtClose = -1;
+	static final int nhtPing = -2;
+	static final int nhtPong = -3;
+	static final int nhtInformation = 0;
+	static final int nhtAuthentication = 1;
+	static final int nhtMessageUpdate = 2;
+	static final int nhtTimeRetrieval = 3;
+	static final int nhtMassRetrieval = 4;
+	static final int nhtMassRetrievalFinish = 10;
+	static final int nhtMassRetrievalFile = 11;
+	static final int nhtConversationUpdate = 5;
+	static final int nhtModifierUpdate = 6;
+	static final int nhtAttachmentReq = 7;
+	static final int nhtAttachmentReqConfirm = 8;
+	static final int nhtAttachmentReqFail = 9;
 	
-	public static final int nhtSendResult = 100;
-	public static final int nhtSendTextExisting = 101;
-	public static final int nhtSendTextNew = 102;
-	public static final int nhtSendFileExisting = 103;
-	public static final int nhtSendFileNew = 104;
+	static final int nhtSendResult = 100;
+	static final int nhtSendTextExisting = 101;
+	static final int nhtSendTextNew = 102;
+	static final int nhtSendFileExisting = 103;
+	static final int nhtSendFileNew = 104;
 	
-	public static final int nhtAuthenticationOK = 0;
-	public static final int nhtAuthenticationUnauthorized = 1;
-	public static final int nhtAuthenticationBadRequest = 2;
+	static final String stringCharset = "UTF-8";
+	static final String hashAlgorithm = "MD5";
+	static final String transmissionCheck = "4yAIlVK0Ce_Y7nv6at_hvgsFtaMq!lZYKipV40Fp5E%VSsLSML";
 	
-	public static final String stringCharset = "UTF-8";
-	public static final String hashAlgorithm = "MD5";
-	public static final String transmissionCheck = "4yAIlVK0Ce_Y7nv6at_hvgsFtaMq!lZYKipV40Fp5E%VSsLSML";
+	//NST - Net subtype
+	static final int nstAuthenticationOK = 0;
+	static final int nstAuthenticationUnauthorized = 1;
+	static final int nstAuthenticationBadRequest = 2;
+	
+	static final byte nstSendResultOK = 0;
+	static final byte nstSendResultScriptError = 1; //Some unknown AppleScript error
+	static final byte nstSendResultBadRequest = 2; //Invalid data received
+	static final byte nstSendResultUnauthorized = 3; //System rejected request to send message
+	static final byte nstSendResultNoConversation = 4; //A valid conversation wasn't found
+	static final byte nstSendResultRequestTimeout = 5; //File data blocks stopped being received
 	
 	//Creating the other reference values
 	static final int createServerResultOK = 0;
@@ -129,6 +137,7 @@ class NetServerManager {
 	 * @param target The target to send the packet to, null to send to all
 	 * @param type The type of message sent in the header
 	 * @param content The content to send
+	 * @param isSensitive Whether or not the content can be sent to unvalidated clients
 	 */
 	static void sendPacket(SocketManager target, int type, byte[] content, boolean isSensitive) {
 		//Returning if the connection is not ready for a transfer
@@ -138,12 +147,30 @@ class NetServerManager {
 		writerThread.sendPacket(new WriterThread.PacketStruct(target, type, content, isSensitive));
 	}
 	
-	static void sendMessageRequestResponse(SocketManager target, short requestID, boolean result) {
+	static void sendMessageRequestResponse(SocketManager target, short requestID, byte result, String details) {
 		//Returning if the connection is not open
 		if(!target.isConnected()) return;
 		
-		//Sending the response
-		sendPacket(target, nhtSendResult, ByteBuffer.allocate(Short.SIZE / 8 + 1).putShort(requestID).put((byte) (result ? 1 : 0)).array(), false);
+		//Serializing the data
+		try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
+			ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
+			out.writeShort(requestID); //Request ID
+			
+			outSec.writeByte(result); //Result code
+			outSec.writeBoolean(details != null); //Details message
+			if(details != null) outSec.writeUTF(details);
+			outSec.flush();
+			
+			new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
+			
+			out.flush();
+			
+			//Sending the data
+			sendPacket(target, nhtSendResult, trgt.toByteArray(), true);
+		} catch(IOException | GeneralSecurityException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			Sentry.capture(exception);
+		}
 	}
 	
 	static int getConnectionCount() {
@@ -213,10 +240,11 @@ class NetServerManager {
 			try {
 				while(!isInterrupted()) {
 					PacketStruct packet = uploadQueue.take();
-					if(packet.target == null) for(SocketManager target : new ArrayList<>(connectionList)) {
-						if(!packet.isSensitive || target.isClientRegistered()) target.sendDataSync(packet.type, packet.content);
-					}
-					else {
+					if(packet.target == null) {
+						for(SocketManager target : new ArrayList<>(connectionList)) {
+							if(!packet.isSensitive || target.isClientRegistered()) target.sendDataSync(packet.type, packet.content);
+						}
+					} else {
 						if(!packet.isSensitive || packet.target.isClientRegistered()) packet.target.sendDataSync(packet.type, packet.content);
 					}
 					if(packet.sentRunnable != null) packet.sentRunnable.run();
@@ -317,7 +345,11 @@ class NetServerManager {
 				return true;
 			} catch(SocketException | SSLException exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-				if(isConnected() && Constants.checkDisconnected(exception)) closeConnection();
+				if (isConnected() && Constants.checkDisconnected(exception)) closeConnection();
+				
+				return false;
+			} catch(NullPointerException exception) {
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				
 				return false;
 			} catch(IOException exception) {
@@ -484,10 +516,10 @@ class NetServerManager {
 						}
 						
 						//Sending the message
-						boolean result = AppleScriptManager.sendExistingMessage(chatGUID, message);
+						Constants.Tuple<Byte, String> result = AppleScriptManager.sendExistingMessage(chatGUID, message);
 						
 						//Sending the response
-						sendMessageRequestResponse(this, requestID, result);
+						sendMessageRequestResponse(this, requestID, result.item1, result.item2);
 						
 						break;
 					}
@@ -517,10 +549,10 @@ class NetServerManager {
 						}
 						
 						//Sending the message
-						boolean result = AppleScriptManager.sendNewMessage(chatMembers, message, service, false);
+						Constants.Tuple<Byte, String> result = AppleScriptManager.sendNewMessage(chatMembers, message, service);
 						
 						//Sending the response
-						sendMessageRequestResponse(this, requestID, result);
+						sendMessageRequestResponse(this, requestID, result.item1, result.item2);
 						
 						break;
 					}
@@ -618,7 +650,7 @@ class NetServerManager {
 					Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
 					
 					//Sending a message and closing the connection
-					int responseCode = exception instanceof GeneralSecurityException ? nhtAuthenticationUnauthorized : nhtAuthenticationBadRequest;
+					int responseCode = exception instanceof GeneralSecurityException ? nstAuthenticationUnauthorized : nstAuthenticationBadRequest;
 					writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(responseCode).array(), false, this::initiateClose));
 					
 					return;
@@ -630,10 +662,10 @@ class NetServerManager {
 					clientRegistered = true;
 					
 					//Sending a message
-					writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(nhtAuthenticationOK).array(), false));
+					writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(nstAuthenticationOK).array(), false));
 				} else {
 					//Sending a message and closing the connection
-					writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(nhtAuthenticationUnauthorized).array(), false, this::initiateClose));
+					writerThread.sendPacket(new WriterThread.PacketStruct(this, nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(nstAuthenticationUnauthorized).array(), false, this::initiateClose));
 				}
 			}
 		}
