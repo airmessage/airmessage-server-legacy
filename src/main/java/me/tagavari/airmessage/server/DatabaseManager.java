@@ -424,21 +424,32 @@ class DatabaseManager {
 		//Creating the result variables
 		File file = null;
 		boolean succeeded = true;
+		byte errorCode = -1;
 		
 		//Setting the succeeded variable to false if there are no results
-		if(results.isEmpty()) succeeded = false;
-		else {
+		if(results.isEmpty()) {
+			succeeded = false;
+			errorCode = NetServerManager.nstAttachmentReqNotFound;
+		} else {
 			//Getting the file
 			String filePath = results.getValue(0, DSL.field("filename", String.class));
 			
 			//Failing the file check if the path is invalid
-			if(filePath == null) succeeded = false;
-			else {
+			if(filePath == null) {
+				succeeded = false;
+				errorCode = NetServerManager.nstAttachmentReqNotSaved;
+			} else {
 				if(filePath.startsWith("~")) filePath = filePath.replaceFirst("~", System.getProperty("user.home"));
 				file = new File(filePath);
 				
 				//Failing the file check if the file doesn't exist
-				if(!file.exists()) succeeded = false;
+				if(!file.exists()) {
+					succeeded = false;
+					errorCode = NetServerManager.nstAttachmentReqNotSaved;
+				} else if(!file.canRead()) {
+					succeeded = false;
+					errorCode = NetServerManager.nstAttachmentReqUnreadable;
+				}
 			}
 		}
 		
@@ -493,19 +504,33 @@ class DatabaseManager {
 						requestIndex++;
 					} while(moreDataRead);
 				} else {
-					//Setting the succeeded variable to false
+					//Updating the state
 					succeeded = false;
+					errorCode = NetServerManager.nstAttachmentReqIO;
 				}
-			} catch(IOException | GeneralSecurityException exception) {
+			} catch(IOException exception) {
+				//Logging the error
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+				//Sentry.capture(exception);
+				
+				//Updating the state
+				succeeded = false;
+				errorCode = NetServerManager.nstAttachmentReqIO;
+			} catch (GeneralSecurityException exception) {
+				//Logging the error
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
+				
+				//Updating the state
+				succeeded = false;
+				errorCode = NetServerManager.nstAttachmentReqIO;
 			}
 		}
 		
 		//Checking if the attempt was a failure
 		if(!succeeded) {
 			//Sending a reply
-			if(request.connection.isConnected()) request.connection.sendDataSync(NetServerManager.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8).putShort(request.requestID).array());
+			if(request.connection.isConnected()) request.connection.sendDataSync(NetServerManager.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8 + 1).putShort(request.requestID).put(errorCode).array());
 		}
 	}
 	

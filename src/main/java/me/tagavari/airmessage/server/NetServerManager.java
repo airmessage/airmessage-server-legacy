@@ -64,6 +64,11 @@ class NetServerManager {
 	static final byte nstSendResultNoConversation = 4; //A valid conversation wasn't found
 	static final byte nstSendResultRequestTimeout = 5; //File data blocks stopped being received
 	
+	static final byte nstAttachmentReqNotFound = 0; //File GUID not found
+	static final byte nstAttachmentReqNotSaved = 1; //File (on disk) not found
+	static final byte nstAttachmentReqUnreadable = 2; //No access to file
+	static final byte nstAttachmentReqIO = 3; //IO error
+	
 	//Creating the other reference values
 	static final int createServerResultOK = 0;
 	static final int createServerResultPort = 1;
