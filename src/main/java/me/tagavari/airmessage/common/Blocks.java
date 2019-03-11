@@ -95,9 +95,10 @@ public class Blocks {
 		public static final int stateCodeDelivered = 2;
 		public static final int stateCodeRead = 3;
 		
-		public static final int errorCodeUnknown = 0; //Unknown error code
-		public static final int errorCodeNetwork = 1; //Network error
-		public static final int errorCodeUnregistered = 2; //Not registered with iMessage
+		public static final int errorCodeOK = 0;
+		public static final int errorCodeUnknown = 1; //Unknown error code
+		public static final int errorCodeNetwork = 2; //Network error
+		public static final int errorCodeUnregistered = 3; //Not registered with iMessage
 		
 		public String text;
 		public String sender;

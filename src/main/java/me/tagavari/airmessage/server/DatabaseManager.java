@@ -1115,6 +1115,14 @@ class DatabaseManager {
 				//Adding the conversation item
 				conversationItems.add(new Blocks.ChatRenameActionInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, newChatName));
 			}
+			//Otherwise checking if the item is a chat leave
+			else if(itemType == 3) {
+				//Getting the detail parameters
+				int groupActionType = Blocks.GroupActionInfo.subtypeLeave;
+				
+				//Adding the conversation item
+				conversationItems.add(new Blocks.GroupActionInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, sender, groupActionType));
+			}
 		}
 		
 		//Returning the latest message ID
@@ -1265,6 +1273,8 @@ class DatabaseManager {
 	
 	private static int convertDBErrorCode(int code) {
 		switch(code) {
+			case 0:
+				return Blocks.MessageInfo.errorCodeOK;
 			case 3:
 				return Blocks.MessageInfo.errorCodeNetwork;
 			case 22:
@@ -1276,12 +1286,12 @@ class DatabaseManager {
 	
 	private static int convertDBGroupSubtype(int code) {
 		switch(code) {
+			default:
+				return Blocks.GroupActionInfo.subtypeUnknown;
 			case 0:
 				return Blocks.GroupActionInfo.subtypeJoin;
 			case 1:
 				return Blocks.GroupActionInfo.subtypeLeave;
-			default:
-				return Blocks.GroupActionInfo.subtypeUnknown;
 		}
 	}
 	

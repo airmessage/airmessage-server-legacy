@@ -49,10 +49,6 @@ class NetServerManager {
 	static final int nhtSendFileExisting = 103;
 	static final int nhtSendFileNew = 104;
 	
-	static final int nstMessageErrorUnknown = 0; //Unknown error code
-	static final int nstMessageErrorNetwork = 1; //Network error
-	static final int nstMessageErrorUnregistered = 2; //Not registered with iMessage
-	
 	static final String stringCharset = "UTF-8";
 	static final String hashAlgorithm = "MD5";
 	static final String transmissionCheck = "4yAIlVK0Ce_Y7nv6at_hvgsFtaMq!lZYKipV40Fp5E%VSsLSML";
