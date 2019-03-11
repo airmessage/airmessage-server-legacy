@@ -9,6 +9,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 class AppleScriptManager {
 	//Creating the AppleScript commands
@@ -113,11 +115,11 @@ class AppleScriptManager {
 	private static final String[] ASCreateChat = { //ARGS: Recipients / Service
 			"tell application \"Messages\"",
 			
-			//Getting the iMessage service
-			"if \"%3$s\" is \"iMessage\" then",
+			//Getting the service
+			"if \"%2$s\" is \"iMessage\" then",
 			"set targetService to 1st service whose service type = iMessage",
 			"else",
-			"set targetService to service \"%3$s\"",
+			"set targetService to service \"%2$s\"",
 			"end if",
 			
 			//Creating the chat
@@ -154,7 +156,99 @@ class AppleScriptManager {
 			"end if"
 	};
 	
-	static Constants.Tuple<Byte, String> sendExistingMessage(String chatGUID, String message) {
+	//private static final Pattern createChatResultPattern = Pattern.compile("\\Atext chat id \"(\\S+)\" of application \"Messages\"\\Z"); //text chat id "iMessage;+;chat175084451468489158" of application "Messages" <- ONLY FROM SCRIPTER OUTPUT
+	private static final Pattern createChatResultPattern = Pattern.compile("\\Atext chat id (\\S+)\\Z"); //text chat id iMessage;+;chat428490767995230252 <- ACTUAL OUTPUT
+	
+	//Returns: result code, chat GUID (if successful) OR error message (if unsuccessful)
+	static Constants.Tuple<Integer, String> createChat(String[] chatMembers, String service) {
+		//Returning false if there are no members
+		if(chatMembers.length == 0) {
+			Exception exception = new IllegalArgumentException("Bad request: no target members provided (send new file)");
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			return new Constants.Tuple<>(NetServerManager.nstCreateChatBadRequest, Constants.exceptionToString(exception));
+		}
+		
+		//Formatting the chat members
+		StringBuilder delimitedChatMembers = new StringBuilder("buddy \"" + escapeAppleScriptString(chatMembers[0]) + "\" of targetService");
+		
+		//Adding the remaining members
+		for(int i = 1; i < chatMembers.length; i++) delimitedChatMembers.append(',').append("buddy \"").append(escapeAppleScriptString(chatMembers[i])).append("\" of targetService");
+		
+		//Building the command
+		ArrayList<String> command = new ArrayList<>();
+		command.add("osascript");
+		for(String line : ASCreateChat) {
+			command.add("-e");
+			command.add(String.format(line, delimitedChatMembers.toString(), escapeAppleScriptString(service)));
+		}
+		
+		//Running the command
+		try {
+			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
+			
+			//Recording any errors
+			{
+				BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+				List<String> lineList = new ArrayList<>(1);
+				String lsString;
+				while((lsString = errorReader.readLine()) != null) {
+					Main.getLogger().severe(lsString);
+					lineList.add(lsString);
+				}
+				
+				//Identifying the error
+				if(!lineList.isEmpty()) {
+					String errorDesc = String.join("\n", lineList);
+					
+					if(lineList.size() == 1) {
+						String errorLine = lineList.get(0);
+						if(errorLine.endsWith("(" + Constants.asErrorCodeMessagesUnauthorized + ")")) {
+							return new Constants.Tuple<>(NetServerManager.nstCreateChatUnauthorized, errorDesc);
+						}
+					}
+					
+					return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, errorDesc);
+				}
+			}
+			
+			{
+				//Reading the message
+				BufferedReader messageReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+				List<String> lineList = new ArrayList<>(1);
+				String lsString;
+				while((lsString = messageReader.readLine()) != null) {
+					//Main.getLogger().info(lsString);
+					lineList.add(lsString);
+				}
+				
+				if(lineList.isEmpty()) {
+					Main.getLogger().log(Level.WARNING, "Failed to create new chat: received no output from chat creation script");
+					return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, "Received no output from chat creation script");
+				}
+				
+				//OUTPUT FORMAT: text chat id iMessage;+;chat428490767995230252
+				
+				String outputLine = lineList.get(0);
+				Matcher matcher = createChatResultPattern.matcher(outputLine);
+				boolean result = matcher.find();
+				if(!result) {
+					Main.getLogger().log(Level.WARNING, "Failed to create new chat: couldn't match regex to \"" + outputLine + "\"");
+					return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, "Couldn't match regex to \"" + outputLine + "\"");
+				}
+				String chatGUID = matcher.group(1);
+				
+				return new Constants.Tuple<>(NetServerManager.nstCreateChatOK, chatGUID);
+			}
+		} catch(IOException exception) {
+			//Printing the stack trace
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			
+			//Returning the error
+			return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, Constants.exceptionToString(exception));
+		}
+	}
+	
+	static Constants.Tuple<Integer, String> sendExistingMessage(String chatGUID, String message) {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
@@ -167,7 +261,7 @@ class AppleScriptManager {
 		return runCommandProcessResult(command.toArray(new String[0]));
 	}
 	
-	static Constants.Tuple<Byte, String> sendNewMessage(String[] chatMembers, String message, String service) {
+	static Constants.Tuple<Integer, String> sendNewMessage(String[] chatMembers, String message, String service) {
 		//Returning false if there are no members
 		if(chatMembers.length == 0) return new Constants.Tuple<>(NetServerManager.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: no target members provided (send new file)")));
 		
@@ -189,7 +283,7 @@ class AppleScriptManager {
 		return runCommandProcessResult(command.toArray(new String[0]));
 	}
 	
-	static Constants.Tuple<Byte, String> sendExistingFile(String chatGUID, File file) {
+	static Constants.Tuple<Integer, String> sendExistingFile(String chatGUID, File file) {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
@@ -202,7 +296,7 @@ class AppleScriptManager {
 		return runCommandProcessResult(command.toArray(new String[0]));
 	}
 	
-	static Constants.Tuple<Byte, String> sendNewFile(String[] chatMembers, File file, String service) {
+	static Constants.Tuple<Integer, String> sendNewFile(String[] chatMembers, File file, String service) {
 		//Returning false if there are no members
 		if(chatMembers.length == 0) return new Constants.Tuple<>(NetServerManager.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: no target members provided (send new file)")));
 		
@@ -224,7 +318,7 @@ class AppleScriptManager {
 		return runCommandProcessResult(command.toArray(new String[0]));
 	}
 	
-	private static Constants.Tuple<Byte, String> runCommandProcessResult(String[] command) {
+	private static Constants.Tuple<Integer, String> runCommandProcessResult(String[] command) {
 		//Running the command
 		try {
 			Process process = Runtime.getRuntime().exec(command);
@@ -457,7 +551,7 @@ class AppleScriptManager {
 			else timeoutTimer = null;
 		}
 		
-		private void failRequest(byte result, String details) {
+		private void failRequest(int result, String details) {
 			//Removing the request from the list
 			fileUploadRequests.remove(this);
 			
@@ -476,7 +570,7 @@ class AppleScriptManager {
 			fileUploadRequests.remove(this);
 			
 			//Sending the file
-			Constants.Tuple<Byte, String> result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service);
+			Constants.Tuple<Integer, String> result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service);
 			
 			//Sending the response
 			NetServerManager.sendMessageRequestResponse(connection, requestID, result.item1, result.item2);

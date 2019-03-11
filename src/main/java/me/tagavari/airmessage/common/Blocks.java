@@ -90,11 +90,14 @@ public class Blocks {
 	public static class MessageInfo extends ConversationItem {
 		private static final int itemType = 0;
 		
-		public static final int stateCodeGhost = 0;
-		public static final int stateCodeIdle = 1;
-		public static final int stateCodeSent = 2;
-		public static final int stateCodeDelivered = 3;
-		public static final int stateCodeRead = 4;
+		public static final int stateCodeIdle = 0;
+		public static final int stateCodeSent = 1;
+		public static final int stateCodeDelivered = 2;
+		public static final int stateCodeRead = 3;
+		
+		public static final int errorCodeUnknown = 0; //Unknown error code
+		public static final int errorCodeNetwork = 1; //Network error
+		public static final int errorCodeUnregistered = 2; //Not registered with iMessage
 		
 		public String text;
 		public String sender;
@@ -152,6 +155,10 @@ public class Blocks {
 	
 	public static class GroupActionInfo extends ConversationItem {
 		private static final int itemType = 1;
+		
+		public static final int subtypeUnknown = 0;
+		public static final int subtypeJoin = 1;
+		public static final int subtypeLeave = 2;
 		
 		public String agent;
 		public String other;

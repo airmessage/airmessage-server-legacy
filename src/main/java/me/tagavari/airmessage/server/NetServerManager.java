@@ -41,12 +41,17 @@ class NetServerManager {
 	static final int nhtAttachmentReq = 7;
 	static final int nhtAttachmentReqConfirm = 8;
 	static final int nhtAttachmentReqFail = 9;
+	static final int nhtCreateChat = 12;
 	
 	static final int nhtSendResult = 100;
 	static final int nhtSendTextExisting = 101;
 	static final int nhtSendTextNew = 102;
 	static final int nhtSendFileExisting = 103;
 	static final int nhtSendFileNew = 104;
+	
+	static final int nstMessageErrorUnknown = 0; //Unknown error code
+	static final int nstMessageErrorNetwork = 1; //Network error
+	static final int nstMessageErrorUnregistered = 2; //Not registered with iMessage
 	
 	static final String stringCharset = "UTF-8";
 	static final String hashAlgorithm = "MD5";
@@ -57,17 +62,22 @@ class NetServerManager {
 	static final int nstAuthenticationUnauthorized = 1;
 	static final int nstAuthenticationBadRequest = 2;
 	
-	static final byte nstSendResultOK = 0;
-	static final byte nstSendResultScriptError = 1; //Some unknown AppleScript error
-	static final byte nstSendResultBadRequest = 2; //Invalid data received
-	static final byte nstSendResultUnauthorized = 3; //System rejected request to send message
-	static final byte nstSendResultNoConversation = 4; //A valid conversation wasn't found
-	static final byte nstSendResultRequestTimeout = 5; //File data blocks stopped being received
+	static final int nstSendResultOK = 0;
+	static final int nstSendResultScriptError = 1; //Some unknown AppleScript error
+	static final int nstSendResultBadRequest = 2; //Invalid data received
+	static final int nstSendResultUnauthorized = 3; //System rejected request to send message
+	static final int nstSendResultNoConversation = 4; //A valid conversation wasn't found
+	static final int nstSendResultRequestTimeout = 5; //File data blocks stopped being received
 	
-	static final byte nstAttachmentReqNotFound = 0; //File GUID not found
-	static final byte nstAttachmentReqNotSaved = 1; //File (on disk) not found
-	static final byte nstAttachmentReqUnreadable = 2; //No access to file
-	static final byte nstAttachmentReqIO = 3; //IO error
+	static final int nstAttachmentReqNotFound = 1; //File GUID not found
+	static final int nstAttachmentReqNotSaved = 2; //File (on disk) not found
+	static final int nstAttachmentReqUnreadable = 3; //No access to file
+	static final int nstAttachmentReqIO = 4; //IO error
+	
+	static final int nstCreateChatOK = 0;
+	static final int nstCreateChatScriptError = 1; //Some unknown AppleScript error
+	static final int nstCreateChatBadRequest = 2; //Invalid data received
+	static final int nstCreateChatUnauthorized = 3; //System rejected request to send message
 	
 	//Creating the other reference values
 	static final int createServerResultOK = 0;
@@ -152,7 +162,7 @@ class NetServerManager {
 		writerThread.sendPacket(new WriterThread.PacketStruct(target, type, content, isSensitive));
 	}
 	
-	static void sendMessageRequestResponse(SocketManager target, short requestID, byte result, String details) {
+	static void sendMessageRequestResponse(SocketManager target, short requestID, int result, String details) {
 		//Returning if the connection is not open
 		if(!target.isConnected()) return;
 		
@@ -161,7 +171,7 @@ class NetServerManager {
 			ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
 			out.writeShort(requestID); //Request ID
 			
-			outSec.writeByte(result); //Result code
+			outSec.writeInt(result); //Result code
 			outSec.writeBoolean(details != null); //Details message
 			if(details != null) outSec.writeUTF(details);
 			outSec.flush();
@@ -498,6 +508,59 @@ class NetServerManager {
 						
 						break;
 					}
+					case nhtCreateChat: {
+						//Getting the request information
+						short requestID;
+						
+						String[] chatMembers;
+						String service;
+						
+						try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
+							requestID = in.readShort();
+							
+							Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
+							dataSec.decrypt(PreferencesManager.getPrefPassword());
+							
+							try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
+								chatMembers = new String[inSec.readInt()];
+								for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = inSec.readUTF();
+								service = inSec.readUTF();
+							}
+						} catch(IOException | RuntimeException | GeneralSecurityException exception) {
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+							break;
+						}
+						
+						//Sending the message
+						Constants.Tuple<Integer, String> result = AppleScriptManager.createChat(chatMembers, service);
+						
+						//Serializing the data
+						try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
+							ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
+							out.writeShort(requestID); //Request ID
+							
+							outSec.writeInt(result.item1); //Result code
+							if(result.item1 != nstCreateChatOK) {
+								outSec.writeBoolean(result.item2 != null); //Details message
+								if(result.item2 != null) outSec.writeUTF(result.item2);
+							} else {
+								outSec.writeUTF(result.item2);
+							}
+							outSec.flush();
+							
+							new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
+							
+							out.flush();
+							
+							//Sending the data
+							sendPacket(this, nhtCreateChat, trgt.toByteArray(), true);
+						} catch(IOException | GeneralSecurityException exception) {
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+							Sentry.capture(exception);
+						}
+						
+						break;
+					}
 					case nhtSendTextExisting: {
 						//Getting the request information
 						short requestID;
@@ -521,7 +584,7 @@ class NetServerManager {
 						}
 						
 						//Sending the message
-						Constants.Tuple<Byte, String> result = AppleScriptManager.sendExistingMessage(chatGUID, message);
+						Constants.Tuple<Integer, String> result = AppleScriptManager.sendExistingMessage(chatGUID, message);
 						
 						//Sending the response
 						sendMessageRequestResponse(this, requestID, result.item1, result.item2);
@@ -554,7 +617,7 @@ class NetServerManager {
 						}
 						
 						//Sending the message
-						Constants.Tuple<Byte, String> result = AppleScriptManager.sendNewMessage(chatMembers, message, service);
+						Constants.Tuple<Integer, String> result = AppleScriptManager.sendNewMessage(chatMembers, message, service);
 						
 						//Sending the response
 						sendMessageRequestResponse(this, requestID, result.item1, result.item2);

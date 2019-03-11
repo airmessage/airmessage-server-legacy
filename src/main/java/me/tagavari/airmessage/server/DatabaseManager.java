@@ -424,7 +424,7 @@ class DatabaseManager {
 		//Creating the result variables
 		File file = null;
 		boolean succeeded = true;
-		byte errorCode = -1;
+		int errorCode = -1;
 		
 		//Setting the succeeded variable to false if there are no results
 		if(results.isEmpty()) {
@@ -530,7 +530,7 @@ class DatabaseManager {
 		//Checking if the attempt was a failure
 		if(!succeeded) {
 			//Sending a reply
-			if(request.connection.isConnected()) request.connection.sendDataSync(NetServerManager.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8 + 1).putShort(request.requestID).put(errorCode).array());
+			if(request.connection.isConnected()) request.connection.sendDataSync(NetServerManager.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8 + 1).putShort(request.requestID).putInt(errorCode).array());
 		}
 	}
 	
@@ -1049,7 +1049,7 @@ class DatabaseManager {
 				int stateCode = determineMessageState(generalMessageRecords.getValue(i, DSL.field("message.is_sent", Boolean.class)),
 						generalMessageRecords.getValue(i, DSL.field("message.is_delivered", Boolean.class)),
 						generalMessageRecords.getValue(i, DSL.field("message.is_read", Boolean.class)));
-				int errorCode = generalMessageRecords.getValue(i, DSL.field("message.error", Integer.class));
+				int errorCode = convertDBErrorCode(generalMessageRecords.getValue(i, DSL.field("message.error", Integer.class)));
 				long dateRead = generalMessageRecords.getValue(i, DSL.field("message.date_read", Long.class));
 				
 				//Fetching the attachments
@@ -1098,11 +1098,11 @@ class DatabaseManager {
 				//Adding the conversation item
 				conversationItems.add(new Blocks.MessageInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), text, sender, files, new ArrayList<>(), new ArrayList<>(), sendStyle, stateCode, errorCode, Main.getTimeHelper().toUnixTime(dateRead)));
 			}
-			//Checking if the item is a group action
+			//Otherwise checking if the item is a group action
 			else if(itemType == 1) {
 				//Getting the detail parameters
 				String other = generalMessageRecords.getValue(i, DSL.field("other_handle.id", String.class));
-				int groupActionType = generalMessageRecords.getValue(i, DSL.field("message.group_action_type", Integer.class));
+				int groupActionType = convertDBGroupSubtype(generalMessageRecords.getValue(i, DSL.field("message.group_action_type", Integer.class)));
 				
 				//Adding the conversation item
 				conversationItems.add(new Blocks.GroupActionInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, other, groupActionType));
@@ -1261,6 +1261,28 @@ class DatabaseManager {
 		
 		//Returning the state code
 		return stateCode;
+	}
+	
+	private static int convertDBErrorCode(int code) {
+		switch(code) {
+			case 3:
+				return Blocks.MessageInfo.errorCodeNetwork;
+			case 22:
+				return Blocks.MessageInfo.errorCodeUnregistered;
+			default:
+				return Blocks.MessageInfo.errorCodeUnknown;
+		}
+	}
+	
+	private static int convertDBGroupSubtype(int code) {
+		switch(code) {
+			case 0:
+				return Blocks.GroupActionInfo.subtypeJoin;
+			case 1:
+				return Blocks.GroupActionInfo.subtypeLeave;
+			default:
+				return Blocks.GroupActionInfo.subtypeUnknown;
+		}
 	}
 	
 	private static byte[] calculateChecksum(File file) throws IOException, NoSuchAlgorithmException {
