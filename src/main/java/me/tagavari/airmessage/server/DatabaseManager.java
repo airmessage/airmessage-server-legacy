@@ -238,7 +238,8 @@ class DatabaseManager {
 					Sentry.capture(exception);
 				}
 				
-				{
+				//TODO cleanup disabled code here
+				/* {
 					//Checking if the targeting availability index needs to be updated
 					long currentTime = System.currentTimeMillis();
 					if(creationTargetingUpdateRequired || currentTime >= lastCreationTargetingAvailabilityUpdate + creationTargetingAvailabilityUpdateInterval) {
@@ -255,7 +256,7 @@ class DatabaseManager {
 						}
 						Main.getLogger().finest("Updated creation target chat index");
 					}
-				}
+				} */
 			}
 		}
 		
@@ -423,21 +424,32 @@ class DatabaseManager {
 		//Creating the result variables
 		File file = null;
 		boolean succeeded = true;
+		int errorCode = -1;
 		
 		//Setting the succeeded variable to false if there are no results
-		if(results.isEmpty()) succeeded = false;
-		else {
+		if(results.isEmpty()) {
+			succeeded = false;
+			errorCode = NetServerManager.nstAttachmentReqNotFound;
+		} else {
 			//Getting the file
 			String filePath = results.getValue(0, DSL.field("filename", String.class));
 			
 			//Failing the file check if the path is invalid
-			if(filePath == null) succeeded = false;
-			else {
+			if(filePath == null) {
+				succeeded = false;
+				errorCode = NetServerManager.nstAttachmentReqNotSaved;
+			} else {
 				if(filePath.startsWith("~")) filePath = filePath.replaceFirst("~", System.getProperty("user.home"));
 				file = new File(filePath);
 				
 				//Failing the file check if the file doesn't exist
-				if(!file.exists()) succeeded = false;
+				if(!file.exists()) {
+					succeeded = false;
+					errorCode = NetServerManager.nstAttachmentReqNotSaved;
+				} else if(!file.canRead()) {
+					succeeded = false;
+					errorCode = NetServerManager.nstAttachmentReqUnreadable;
+				}
 			}
 		}
 		
@@ -492,19 +504,33 @@ class DatabaseManager {
 						requestIndex++;
 					} while(moreDataRead);
 				} else {
-					//Setting the succeeded variable to false
+					//Updating the state
 					succeeded = false;
+					errorCode = NetServerManager.nstAttachmentReqIO;
 				}
-			} catch(IOException | GeneralSecurityException exception) {
+			} catch(IOException exception) {
+				//Logging the error
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+				//Sentry.capture(exception);
+				
+				//Updating the state
+				succeeded = false;
+				errorCode = NetServerManager.nstAttachmentReqIO;
+			} catch (GeneralSecurityException exception) {
+				//Logging the error
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
+				
+				//Updating the state
+				succeeded = false;
+				errorCode = NetServerManager.nstAttachmentReqIO;
 			}
 		}
 		
 		//Checking if the attempt was a failure
 		if(!succeeded) {
 			//Sending a reply
-			if(request.connection.isConnected()) request.connection.sendDataSync(NetServerManager.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8).putShort(request.requestID).array());
+			if(request.connection.isConnected()) request.connection.sendDataSync(NetServerManager.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8 + 1).putShort(request.requestID).putInt(errorCode).array());
 		}
 	}
 	
@@ -1023,7 +1049,7 @@ class DatabaseManager {
 				int stateCode = determineMessageState(generalMessageRecords.getValue(i, DSL.field("message.is_sent", Boolean.class)),
 						generalMessageRecords.getValue(i, DSL.field("message.is_delivered", Boolean.class)),
 						generalMessageRecords.getValue(i, DSL.field("message.is_read", Boolean.class)));
-				int errorCode = generalMessageRecords.getValue(i, DSL.field("message.error", Integer.class));
+				int errorCode = convertDBErrorCode(generalMessageRecords.getValue(i, DSL.field("message.error", Integer.class)));
 				long dateRead = generalMessageRecords.getValue(i, DSL.field("message.date_read", Long.class));
 				
 				//Fetching the attachments
@@ -1052,6 +1078,13 @@ class DatabaseManager {
 					File file = filePath == null ? null : new File(filePath.replaceFirst("~", System.getProperty("user.home")));
 					long fileSize = fileRecords.getValue(f, DSL.field("attachment.total_bytes", Long.class));
 					
+					//Updating the file name
+					if(fileName == null) {
+						if(filePath == null) continue; //Ignoring invalid files
+						fileName = new File(filePath).getName(); //Determining the file name from its path
+					}
+					
+					//Adding the file
 					files.add(new Blocks.AttachmentInfo(fileGUID,
 							fileName,
 							fileType,
@@ -1065,11 +1098,11 @@ class DatabaseManager {
 				//Adding the conversation item
 				conversationItems.add(new Blocks.MessageInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), text, sender, files, new ArrayList<>(), new ArrayList<>(), sendStyle, stateCode, errorCode, Main.getTimeHelper().toUnixTime(dateRead)));
 			}
-			//Checking if the item is a group action
+			//Otherwise checking if the item is a group action
 			else if(itemType == 1) {
 				//Getting the detail parameters
 				String other = generalMessageRecords.getValue(i, DSL.field("other_handle.id", String.class));
-				int groupActionType = generalMessageRecords.getValue(i, DSL.field("message.group_action_type", Integer.class));
+				int groupActionType = convertDBGroupSubtype(generalMessageRecords.getValue(i, DSL.field("message.group_action_type", Integer.class)));
 				
 				//Adding the conversation item
 				conversationItems.add(new Blocks.GroupActionInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, other, groupActionType));
@@ -1081,6 +1114,14 @@ class DatabaseManager {
 				
 				//Adding the conversation item
 				conversationItems.add(new Blocks.ChatRenameActionInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, newChatName));
+			}
+			//Otherwise checking if the item is a chat leave
+			else if(itemType == 3) {
+				//Getting the detail parameters
+				int groupActionType = Blocks.GroupActionInfo.subtypeLeave;
+				
+				//Adding the conversation item
+				conversationItems.add(new Blocks.GroupActionInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, sender, groupActionType));
 			}
 		}
 		
@@ -1230,13 +1271,37 @@ class DatabaseManager {
 		return stateCode;
 	}
 	
+	private static int convertDBErrorCode(int code) {
+		switch(code) {
+			case 0:
+				return Blocks.MessageInfo.errorCodeOK;
+			case 3:
+				return Blocks.MessageInfo.errorCodeNetwork;
+			case 22:
+				return Blocks.MessageInfo.errorCodeUnregistered;
+			default:
+				return Blocks.MessageInfo.errorCodeUnknown;
+		}
+	}
+	
+	private static int convertDBGroupSubtype(int code) {
+		switch(code) {
+			default:
+				return Blocks.GroupActionInfo.subtypeUnknown;
+			case 0:
+				return Blocks.GroupActionInfo.subtypeJoin;
+			case 1:
+				return Blocks.GroupActionInfo.subtypeLeave;
+		}
+	}
+	
 	private static byte[] calculateChecksum(File file) throws IOException, NoSuchAlgorithmException {
 		//Returning null if the file isn't ready
-		if(!file.exists() || !file.isFile()) return null;
+		if(!file.exists() || !file.isFile() || !file.canRead()) return null;
 		
 		//Preparing to read the file
 		MessageDigest messageDigest = MessageDigest.getInstance(NetServerManager.hashAlgorithm);
-		try (FileInputStream inputStream = new FileInputStream(file)) {
+		try(FileInputStream inputStream = new FileInputStream(file)) {
 			byte[] dataBytes = new byte[1024];
 			
 			//Reading the file

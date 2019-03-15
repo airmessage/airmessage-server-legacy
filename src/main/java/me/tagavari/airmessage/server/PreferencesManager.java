@@ -314,6 +314,8 @@ public class PreferencesManager {
 					Main.getLogger().log(Level.SEVERE, "Couldn't create document builder / " + exception.getMessage(), exception);
 					Sentry.capture(exception);
 					
+					//TODO notify the user
+					
 					//Returning false
 					return false;
 				}
@@ -690,7 +692,7 @@ public class PreferencesManager {
 			//Updating the first run state
 			if(isFirstRun) {
 				clearFirstRun();
-				if(Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSMojaveVersion) >= 0) Main.runPermissionCheck();
+				Main.runPermissionCheck();
 			}
 		});
 		

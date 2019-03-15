@@ -1,9 +1,6 @@
 package me.tagavari.airmessage.server;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.net.DatagramSocket;
 import java.net.NetworkInterface;
 import java.net.ServerSocket;
@@ -19,8 +16,8 @@ class Constants {
 	static final String SENTRY_DSN = "https://4240bd1f5e2f4ecfac822f78dda19fce:00d4dcd23b244f46a4489b5b80811d39@sentry.io/301837";
 	
 	//Creating the version values
-	static final String SERVER_VERSION = "0.3.1b";
-	static final int SERVER_VERSION_CODE = 13;
+	static final String SERVER_VERSION = "0.3.2";
+	static final int SERVER_VERSION_CODE = 14;
 	
 	//Creating the file values
 	static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
@@ -32,6 +29,10 @@ class Constants {
 	static final int[] macOSSierraVersion = {10, 12};
 	static final int[] macOSHighSierraVersion = {10, 13};
 	static final int[] macOSMojaveVersion = {10, 14};
+	
+	//Creating the AppleScript error values
+	static final int asErrorCodeMessagesUnauthorized = -1743;
+	static final int asErrorCodeMessagesNoChat = -1728;
 	
 	//Creating the regex values
 	static final String reExInteger = "^\\d+$";
@@ -161,13 +162,13 @@ class Constants {
 	 *
 	 * @param port the port to check for availability
 	 */
-	public static boolean checkPortAvailability(int port) {
+	static boolean checkPortAvailability(int port) {
 		//Returning if the port is out of range
 		if(port < minPort || port > maxPort) throw new IllegalArgumentException("Invalid start port: " + port);
 		
 		//Attempting to bind the port
-		try (ServerSocket serverSocket = new ServerSocket(port);
-			DatagramSocket datagramSocket = new DatagramSocket(port)){
+		try(ServerSocket serverSocket = new ServerSocket(port);
+			DatagramSocket datagramSocket = new DatagramSocket(port)) {
 			serverSocket.setReuseAddress(true);
 			datagramSocket.setReuseAddress(true);
 			
@@ -175,12 +176,12 @@ class Constants {
 			return true;
 		} catch(IOException exception) {
 			//An exception was thrown, port couldn't be bound
+			Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
 		}
 		
 		//Returning false
 		return false;
 	}
-	
 	
 	private static final String ALPHA_NUMERIC_STRING = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 	public static String randomAlphaNumericString(int length) {
@@ -278,5 +279,22 @@ class Constants {
 		String[] twoComponents = two.split("/");
 		if(oneComponents[1].equals("*") || twoComponents[1].equals("*")) return oneComponents[0].equals(twoComponents[0]);
 		return one.equals(two);
+	}
+	
+	static String exceptionToString(Throwable exception) {
+		StringWriter sw = new StringWriter();
+		PrintWriter pw = new PrintWriter(sw);
+		exception.printStackTrace(pw);
+		return exception.getMessage() + ":\n" + sw.toString();
+	}
+	
+	static class Tuple<A, B> {
+		final A item1;
+		final B item2;
+		
+		Tuple(A item1, B item2) {
+			this.item1 = item1;
+			this.item2 = item2;
+		}
 	}
 }

@@ -9,6 +9,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 class AppleScriptManager {
 	//Creating the AppleScript commands
@@ -110,6 +112,24 @@ class AppleScriptManager {
 			
 			"end tell"
 	};
+	private static final String[] ASCreateChat = { //ARGS: Recipients / Service
+			"tell application \"Messages\"",
+			
+			//Getting the service
+			"if \"%2$s\" is \"iMessage\" then",
+			"set targetService to 1st service whose service type = iMessage",
+			"else",
+			"set targetService to service \"%2$s\"",
+			"end if",
+			
+			//Creating the chat
+			"set targetChat to make new text chat with properties {participants:{%1$s}}",
+			
+			//Getting the chat info
+			"get targetChat",
+			
+			"end tell"
+	};
 	private static final String[] ASAutomationTest = {
 			"tell application \"Messages\"",
 			"get first text chat",
@@ -136,7 +156,99 @@ class AppleScriptManager {
 			"end if"
 	};
 	
-	static boolean sendExistingMessage(String chatGUID, String message) {
+	//private static final Pattern createChatResultPattern = Pattern.compile("\\Atext chat id \"(\\S+)\" of application \"Messages\"\\Z"); //text chat id "iMessage;+;chat175084451468489158" of application "Messages" <- ONLY FROM SCRIPTER OUTPUT
+	private static final Pattern createChatResultPattern = Pattern.compile("\\Atext chat id (\\S+)\\Z"); //text chat id iMessage;+;chat428490767995230252 <- ACTUAL OUTPUT
+	
+	//Returns: result code, chat GUID (if successful) OR error message (if unsuccessful)
+	static Constants.Tuple<Integer, String> createChat(String[] chatMembers, String service) {
+		//Returning false if there are no members
+		if(chatMembers.length == 0) {
+			Exception exception = new IllegalArgumentException("Bad request: no target members provided (send new file)");
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			return new Constants.Tuple<>(NetServerManager.nstCreateChatBadRequest, Constants.exceptionToString(exception));
+		}
+		
+		//Formatting the chat members
+		StringBuilder delimitedChatMembers = new StringBuilder("buddy \"" + escapeAppleScriptString(chatMembers[0]) + "\" of targetService");
+		
+		//Adding the remaining members
+		for(int i = 1; i < chatMembers.length; i++) delimitedChatMembers.append(',').append("buddy \"").append(escapeAppleScriptString(chatMembers[i])).append("\" of targetService");
+		
+		//Building the command
+		ArrayList<String> command = new ArrayList<>();
+		command.add("osascript");
+		for(String line : ASCreateChat) {
+			command.add("-e");
+			command.add(String.format(line, delimitedChatMembers.toString(), escapeAppleScriptString(service)));
+		}
+		
+		//Running the command
+		try {
+			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
+			
+			//Recording any errors
+			{
+				BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+				List<String> lineList = new ArrayList<>(1);
+				String lsString;
+				while((lsString = errorReader.readLine()) != null) {
+					Main.getLogger().severe(lsString);
+					lineList.add(lsString);
+				}
+				
+				//Identifying the error
+				if(!lineList.isEmpty()) {
+					String errorDesc = String.join("\n", lineList);
+					
+					if(lineList.size() == 1) {
+						String errorLine = lineList.get(0);
+						if(errorLine.endsWith("(" + Constants.asErrorCodeMessagesUnauthorized + ")")) {
+							return new Constants.Tuple<>(NetServerManager.nstCreateChatUnauthorized, errorDesc);
+						}
+					}
+					
+					return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, errorDesc);
+				}
+			}
+			
+			{
+				//Reading the message
+				BufferedReader messageReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+				List<String> lineList = new ArrayList<>(1);
+				String lsString;
+				while((lsString = messageReader.readLine()) != null) {
+					//Main.getLogger().info(lsString);
+					lineList.add(lsString);
+				}
+				
+				if(lineList.isEmpty()) {
+					Main.getLogger().log(Level.WARNING, "Failed to create new chat: received no output from chat creation script");
+					return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, "Received no output from chat creation script");
+				}
+				
+				//OUTPUT FORMAT: text chat id iMessage;+;chat428490767995230252
+				
+				String outputLine = lineList.get(0);
+				Matcher matcher = createChatResultPattern.matcher(outputLine);
+				boolean result = matcher.find();
+				if(!result) {
+					Main.getLogger().log(Level.WARNING, "Failed to create new chat: couldn't match regex to \"" + outputLine + "\"");
+					return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, "Couldn't match regex to \"" + outputLine + "\"");
+				}
+				String chatGUID = matcher.group(1);
+				
+				return new Constants.Tuple<>(NetServerManager.nstCreateChatOK, chatGUID);
+			}
+		} catch(IOException exception) {
+			//Printing the stack trace
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			
+			//Returning the error
+			return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, Constants.exceptionToString(exception));
+		}
+	}
+	
+	static Constants.Tuple<Integer, String> sendExistingMessage(String chatGUID, String message) {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
@@ -145,47 +257,13 @@ class AppleScriptManager {
 			command.add(String.format(line, chatGUID, escapeAppleScriptString(message)));
 		}
 		
-		try {
-			//Running the command
-			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
-			
-			//Reading from the error stream
-			BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-			boolean linesRead = false;
-			String lsString;
-			while ((lsString = errorReader.readLine()) != null) {
-				//if(!isFatalResponse(lsString)) continue;
-				Main.getLogger().severe(lsString);
-				linesRead = true;
-			}
-			
-			//Checking if there were any lines read
-			if(linesRead) {
-				//Checking if the conversation has been indexed as a one-on-one chat
-				DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
-				if(targetChat != null) {
-					//Attempting to send the message as a new conversation
-					return sendNewMessage(new String[]{targetChat.getAddress()}, message, targetChat.getService(), true);
-				}
-				
-				//Returning false
-				return false;
-			}
-		} catch(IOException exception) {
-			//Printing the stack trace
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			
-			//Returning false
-			return false;
-		}
-		
-		//Returning true
-		return true;
+		//Running the command
+		return runCommandProcessResult(command.toArray(new String[0]));
 	}
 	
-	static boolean sendNewMessage(String[] chatMembers, String message, String service, boolean isFallback) {
+	static Constants.Tuple<Integer, String> sendNewMessage(String[] chatMembers, String message, String service) {
 		//Returning false if there are no members
-		if(chatMembers.length == 0) return false;
+		if(chatMembers.length == 0) return new Constants.Tuple<>(NetServerManager.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: no target members provided (send new file)")));
 		
 		//Formatting the chat members
 		StringBuilder delimitedChatMembers = new StringBuilder("buddy \"" + escapeAppleScriptString(chatMembers[0]) + "\" of targetService");
@@ -202,35 +280,10 @@ class AppleScriptManager {
 		}
 		
 		//Running the command
-		try {
-			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
-			
-			//Returning false if there was any error
-			BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-			boolean linesRead = false;
-			String lsString;
-			while ((lsString = errorReader.readLine()) != null) {
-				Main.getLogger().severe(lsString);
-				linesRead = true;
-			}
-			
-			if(linesRead) return false;
-		} catch(IOException exception) {
-			//Printing the stack trace
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			
-			//Returning false
-			return false;
-		}
-		
-		//Reindexing the creation targeting index
-		if(!isFallback) DatabaseManager.getInstance().requestCreationTargetingAvailabilityUpdate();
-		
-		//Returning true
-		return true;
+		return runCommandProcessResult(command.toArray(new String[0]));
 	}
 	
-	static boolean sendExistingFile(String chatGUID, File file) {
+	static Constants.Tuple<Integer, String> sendExistingFile(String chatGUID, File file) {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
@@ -239,46 +292,13 @@ class AppleScriptManager {
 			command.add(String.format(line, chatGUID, escapeAppleScriptString(file.getAbsolutePath())));
 		}
 		
-		try {
-			//Running the command
-			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
-			
-			//Reading from the error stream
-			BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-			boolean linesRead = false;
-			String lsString;
-			while ((lsString = errorReader.readLine()) != null) {
-				Main.getLogger().severe(lsString);
-				linesRead = true;
-			}
-			
-			//Checking if there were any lines read
-			if(linesRead) {
-				//Checking if the conversation has been indexed as a one-on-one chat
-				DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
-				if(targetChat != null) {
-					//Attempting to send the message as a new conversation
-					return sendNewFile(new String[]{targetChat.getAddress()}, file, targetChat.getService(), true);
-				}
-				
-				//Returning false
-				return false;
-			}
-		} catch(IOException exception) {
-			//Printing the stack trace
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			
-			//Returning false
-			return false;
-		}
-			
-			//Returning true
-		return true;
+		//Running the command
+		return runCommandProcessResult(command.toArray(new String[0]));
 	}
 	
-	static boolean sendNewFile(String[] chatMembers, File file, String service, boolean isFallback) {
+	static Constants.Tuple<Integer, String> sendNewFile(String[] chatMembers, File file, String service) {
 		//Returning false if there are no members
-		if(chatMembers.length == 0) return false;
+		if(chatMembers.length == 0) return new Constants.Tuple<>(NetServerManager.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: no target members provided (send new file)")));
 		
 		//Formatting the chat members
 		StringBuilder delimitedChatMembers = new StringBuilder("buddy \"" + escapeAppleScriptString(chatMembers[0]) + "\" of targetService");
@@ -295,33 +315,45 @@ class AppleScriptManager {
 		}
 		
 		//Running the command
+		return runCommandProcessResult(command.toArray(new String[0]));
+	}
+	
+	private static Constants.Tuple<Integer, String> runCommandProcessResult(String[] command) {
+		//Running the command
 		try {
-			Process process = Runtime.getRuntime().exec(command.toArray(new String[0]));
+			Process process = Runtime.getRuntime().exec(command);
 			
-			//Returning false if there was any error
+			//Recording any errors
 			BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-			boolean linesRead = false;
+			List<String> lineList = new ArrayList<>(1);
 			String lsString;
 			while ((lsString = errorReader.readLine()) != null) {
-				//if(!isFatalResponse(lsString)) continue;
 				Main.getLogger().severe(lsString);
-				linesRead = true;
+				lineList.add(lsString);
 			}
 			
-			if(linesRead) return false;
+			//Identifying the error
+			if(!lineList.isEmpty()) {
+				String errorDesc = String.join("\n", lineList);
+				
+				if(lineList.size() == 1) {
+					String errorLine = lineList.get(0);
+					if(errorLine.endsWith("(" + Constants.asErrorCodeMessagesUnauthorized + ")")) return new Constants.Tuple<>(NetServerManager.nstSendResultUnauthorized, errorDesc);
+					else if(errorLine.endsWith("(" + Constants.asErrorCodeMessagesNoChat + ")")) return new Constants.Tuple<>(NetServerManager.nstSendResultNoConversation, errorDesc);
+				}
+				
+				return new Constants.Tuple<>(NetServerManager.nstSendResultScriptError, errorDesc);
+			}
 		} catch(IOException exception) {
 			//Printing the stack trace
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
-			//Returning false
-			return false;
+			//Returning the error
+			return new Constants.Tuple<>(NetServerManager.nstSendResultScriptError, Constants.exceptionToString(exception));
 		}
 		
-		//Reindexing the creation targeting index
-		if(!isFallback) DatabaseManager.getInstance().requestCreationTargetingAvailabilityUpdate();
-		
 		//Returning true
-		return true;
+		return new Constants.Tuple<>(NetServerManager.nstSendResultOK, null);
 	}
 	
 	static boolean testAutomation() {
@@ -342,7 +374,7 @@ class AppleScriptManager {
 			boolean linesRead = false;
 			String lsString;
 			while ((lsString = errorReader.readLine()) != null) {
-				if(!lsString.endsWith("(-1749)")) continue; //Error code for access denied. Sometimes, the executed command may return an error anyways if there are no messages.
+				if(!lsString.endsWith("(" + Constants.asErrorCodeMessagesUnauthorized + ")")) continue; //Error code for unauthorized. Sometimes, the executed command may return an error anyways if there are no messages.
 				Main.getLogger().severe(lsString);
 				linesRead = true;
 			}
@@ -380,8 +412,14 @@ class AppleScriptManager {
 		
 		//Checking if the request is invalid (there is no request currently in the list)
 		if(request == null) {
-			//Returning if this isn't the first request (meaning that the request failed, and shouldn't continue)
-			if(index != 0) return;
+			//Checking if this isn't the first request (meaning that the request failed, and shouldn't continue)
+			if(index != 0) {
+				//Sending a negative response
+				NetServerManager.sendMessageRequestResponse(connection, requestID, NetServerManager.nstSendResultBadRequest, "Bad request: index mismatch\nFirst index check failed, received " + index);
+				
+				//Returning
+				return;
+			}
 			
 			//Creating and adding a new request
 			request = new FileUploadRequest(connection, requestID, chatGUID, fileName);
@@ -408,8 +446,14 @@ class AppleScriptManager {
 		
 		//Checking if the request is invalid (there is no request currently in the list)
 		if(request == null) {
-			//Returning if this isn't the first request (meaning that the request failed, and shouldn't continue)
-			if(index != 0) return;
+			//Checking if this isn't the first request (meaning that the request failed, and shouldn't continue)
+			if(index != 0) {
+				//Sending a negative response
+				NetServerManager.sendMessageRequestResponse(connection, requestID, NetServerManager.nstSendResultBadRequest, "Bad request: index mismatch\nFirst index check failed, received " + index);
+				
+				//Returning
+				return;
+			}
 			
 			//Creating and adding a new request
 			request = new FileUploadRequest(connection, requestID, chatMembers, service, fileName);
@@ -464,7 +508,7 @@ class AppleScriptManager {
 		void addFileFragment(FileFragment fileFragment) {
 			//Failing the request if the index doesn't line up
 			if(lastIndex + 1 != fileFragment.index) {
-				failRequest();
+				failRequest(NetServerManager.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: index mismatch\nLast index: " + lastIndex + "\nReceived index: " + fileFragment.index)));
 				return;
 			}
 			
@@ -496,7 +540,7 @@ class AppleScriptManager {
 				@Override
 				public void run() {
 					//Failing the request
-					failRequest();
+					failRequest(NetServerManager.nstSendResultRequestTimeout, null);
 				}
 			}, timeout);
 		}
@@ -507,7 +551,7 @@ class AppleScriptManager {
 			else timeoutTimer = null;
 		}
 		
-		private void failRequest() {
+		private void failRequest(int result, String details) {
 			//Removing the request from the list
 			fileUploadRequests.remove(this);
 			
@@ -518,7 +562,7 @@ class AppleScriptManager {
 			if(writerThread != null) writerThread.stopThread();
 			
 			//Sending a negative response
-			NetServerManager.sendMessageRequestResponse(connection, requestID, false);
+			NetServerManager.sendMessageRequestResponse(connection, requestID, result, details);
 		}
 		
 		private void onDownloadSuccessful(File file) {
@@ -526,10 +570,10 @@ class AppleScriptManager {
 			fileUploadRequests.remove(this);
 			
 			//Sending the file
-			boolean result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service, false);
+			Constants.Tuple<Integer, String> result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service);
 			
 			//Sending the response
-			NetServerManager.sendMessageRequestResponse(connection, requestID, result);
+			NetServerManager.sendMessageRequestResponse(connection, requestID, result.item1, result.item2);
 		}
 		
 		private class AttachmentWriter extends Thread {
@@ -585,7 +629,7 @@ class AppleScriptManager {
 					Sentry.capture(exception);
 					
 					//Failing the download
-					failRequest();
+					failRequest(NetServerManager.nstSendResultBadRequest, Constants.exceptionToString(exception));
 					
 					//Terminating the thread
 					requestKill.set(true);
