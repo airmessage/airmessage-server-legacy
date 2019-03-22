@@ -238,8 +238,7 @@ class DatabaseManager {
 					Sentry.capture(exception);
 				}
 				
-				//TODO cleanup disabled code here
-				/* {
+				{
 					//Checking if the targeting availability index needs to be updated
 					long currentTime = System.currentTimeMillis();
 					if(creationTargetingUpdateRequired || currentTime >= lastCreationTargetingAvailabilityUpdate + creationTargetingAvailabilityUpdateInterval) {
@@ -256,7 +255,7 @@ class DatabaseManager {
 						}
 						Main.getLogger().finest("Updated creation target chat index");
 					}
-				} */
+				}
 			}
 		}
 		
@@ -530,7 +529,7 @@ class DatabaseManager {
 		//Checking if the attempt was a failure
 		if(!succeeded) {
 			//Sending a reply
-			if(request.connection.isConnected()) request.connection.sendDataSync(NetServerManager.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8 + 1).putShort(request.requestID).putInt(errorCode).array());
+			if(request.connection.isConnected()) request.connection.sendDataSync(NetServerManager.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8 + Integer.SIZE / 8).putShort(request.requestID).putInt(errorCode).array());
 		}
 	}
 	

@@ -258,7 +258,20 @@ class AppleScriptManager {
 		}
 		
 		//Running the command
-		return runCommandProcessResult(command.toArray(new String[0]));
+		Constants.Tuple<Integer, String> result = runCommandProcessResult(command.toArray(new String[0]));
+		
+		//Attempting a fallback request if the request failed
+		if(result.item1 == NetServerManager.nstSendResultNoConversation) {
+			//Checking if the conversation has been indexed as a one-on-one chat
+			DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
+			if(targetChat != null) {
+				//Attempting to send the message as a new conversation
+				return sendNewMessage(new String[]{targetChat.getAddress()}, message, targetChat.getService());
+			}
+		}
+		
+		//Returning the result
+		return result;
 	}
 	
 	static Constants.Tuple<Integer, String> sendNewMessage(String[] chatMembers, String message, String service) {
@@ -280,7 +293,13 @@ class AppleScriptManager {
 		}
 		
 		//Running the command
-		return runCommandProcessResult(command.toArray(new String[0]));
+		Constants.Tuple<Integer, String> result = runCommandProcessResult(command.toArray(new String[0]));
+		
+		//Reindexing the creation targeting index
+		DatabaseManager.getInstance().requestCreationTargetingAvailabilityUpdate();
+		
+		//Returning the result
+		return result;
 	}
 	
 	static Constants.Tuple<Integer, String> sendExistingFile(String chatGUID, File file) {
@@ -293,7 +312,20 @@ class AppleScriptManager {
 		}
 		
 		//Running the command
-		return runCommandProcessResult(command.toArray(new String[0]));
+		Constants.Tuple<Integer, String> result = runCommandProcessResult(command.toArray(new String[0]));
+		
+		//Attempting a fallback request if the request failed
+		if(result.item1 == NetServerManager.nstSendResultNoConversation) {
+			//Checking if the conversation has been indexed as a one-on-one chat
+			DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
+			if(targetChat != null) {
+				//Attempting to send the message as a new conversation
+				sendNewFile(new String[]{targetChat.getAddress()}, file, targetChat.getService());
+			}
+		}
+		
+		//Returning the result
+		return result;
 	}
 	
 	static Constants.Tuple<Integer, String> sendNewFile(String[] chatMembers, File file, String service) {
@@ -315,7 +347,13 @@ class AppleScriptManager {
 		}
 		
 		//Running the command
-		return runCommandProcessResult(command.toArray(new String[0]));
+		Constants.Tuple<Integer, String> result = runCommandProcessResult(command.toArray(new String[0]));
+		
+		//Reindexing the creation targeting index
+		DatabaseManager.getInstance().requestCreationTargetingAvailabilityUpdate();
+		
+		//Returning the result
+		return result;
 	}
 	
 	private static Constants.Tuple<Integer, String> runCommandProcessResult(String[] command) {

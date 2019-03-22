@@ -66,8 +66,8 @@ class Main {
 			Sentry.init(Constants.SENTRY_DSN + "?release=" + Constants.SERVER_VERSION);
 			
 			//Marking the user's ID (with their MAC address)
-			String macAddress = Constants.getMACAddress();
-			if(macAddress != null) Sentry.getContext().setUser(new UserBuilder().setId(macAddress).build());
+			//String macAddress = Constants.getMACAddress();
+			//if(macAddress != null) Sentry.getContext().setUser(new UserBuilder().setId(macAddress).build());
 			
 			//Recording the system version
 			Sentry.getContext().addTag("system_version", System.getProperty("os.version"));
