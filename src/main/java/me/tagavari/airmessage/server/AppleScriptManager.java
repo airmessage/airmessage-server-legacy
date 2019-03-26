@@ -365,8 +365,8 @@ class AppleScriptManager {
 			BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 			List<String> lineList = new ArrayList<>(1);
 			String lsString;
-			while ((lsString = errorReader.readLine()) != null) {
-				Main.getLogger().severe(lsString);
+			while((lsString = errorReader.readLine()) != null) {
+				Main.getLogger().log(Level.SEVERE, lsString);
 				lineList.add(lsString);
 			}
 			
