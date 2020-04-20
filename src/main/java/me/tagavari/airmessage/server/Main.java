@@ -2,6 +2,9 @@ package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
 import io.sentry.event.UserBuilder;
+import me.tagavari.airmessage.connection.ConnectionManager;
+import me.tagavari.airmessage.connection.DataProxy;
+import me.tagavari.airmessage.connection.direct.DataProxyTCP;
 
 import javax.swing.*;
 import java.io.*;
@@ -12,14 +15,14 @@ import java.util.Date;
 import java.util.ResourceBundle;
 import java.util.logging.*;
 
-class Main {
+public class Main {
 	//Creating the reference values
-	static final String PREFIX_DEBUG = "DEBUG LOG: ";
-	static final int serverStateStarting = 0;
-	static final int serverStateRunning = 1;
-	static final int serverStateFailedDatabase = 2;
-	static final int serverStateFailedServerPort = 3;
-	static final int serverStateFailedServerInternal = 4;
+	public static final String PREFIX_DEBUG = "DEBUG LOG: ";
+	public static final int serverStateStarting = 0;
+	public static final int serverStateRunning = 1;
+	public static final int serverStateFailedDatabase = 2;
+	public static final int serverStateFailedServerPort = 3;
+	public static final int serverStateFailedServerInternal = 4;
 	
 	private static final File logFile = new File(Constants.applicationSupportDir, "logs/latest.log");
 	
@@ -76,9 +79,6 @@ class Main {
 		//Returning if the system is not valid
 		if(!runSystemCheck()) return;
 		
-		//Registering BouncyCastle as a security provider
-		//Security.addProvider(new BouncyCastleProvider());
-		
 		//Preparing the preferences
 		if(!PreferencesManager.loadPreferences()) return;
 		
@@ -92,9 +92,6 @@ class Main {
 		//Setting up the system tray
 		SystemTrayManager.setupSystemTray();
 		
-		//Processing the arguments
-		//processArgs(args);
-		
 		//Getting the time system
 		timeHelper = TimeHelper.getCorrectTimeSystem();
 		getLogger().info("Using time system " + Main.getTimeHelper().toString() + " with current time " + System.currentTimeMillis() + " -> " + Main.getTimeHelper().toDatabaseTime(System.currentTimeMillis()));
@@ -103,8 +100,10 @@ class Main {
 		System.setProperty("org.jooq.no-logo", "true");
 		
 		//Logging the startup messages
-		//getLogger().info("Thank you for using jOOQ " + org.jooq.Constants.FULL_VERSION);
 		getLogger().info("Starting AirMessage server version " + Constants.SERVER_VERSION);
+		
+		//Setting the data proxy
+		ConnectionManager.assignDataProxy();
 		
 		//Starting the server
 		startServer();
@@ -115,7 +114,7 @@ class Main {
 		//Adding a shutdown hook
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			//Stopping the services
-			NetServerManager.destroyServer();
+			ConnectionManager.stop();
 			DatabaseManager.stop();
 			UpdateManager.stopUpdateChecker();
 			
@@ -150,48 +149,28 @@ class Main {
 		}
 		
 		//Starting the server manager
-		{
-			int result = NetServerManager.createServer(PreferencesManager.getPrefServerPort(), false);
-			if(result != NetServerManager.createServerResultOK) {
-				//Updating the server state
-				setServerState(NetServerManager.createServerErrorToServerState(result));
-				SystemTrayManager.updateStatusMessage();
-				
-				//Returning
-				return;
-			}
-		}
-		
-		//Updating the server state
-		setServerState(serverStateRunning);
-		SystemTrayManager.updateStatusMessage();
+		ConnectionManager.start();
 		
 		//Logging a message
 		getLogger().info("Initialization complete");
 	}
 	
-	static void restartServer() {
-		//Returning if the database manager isn't running
-		if(DatabaseManager.getInstance() == null) return;
-		
+	static void reinitializeServer() {
 		//Updating the server state
 		setServerState(serverStateStarting);
 		SystemTrayManager.updateStatusMessage();
 		
-		//Starting the server manager
-		int result = NetServerManager.createServer(PreferencesManager.getPrefServerPort(), true);
-		if(result != NetServerManager.createServerResultOK) {
-			//Updating the server state
-			setServerState(NetServerManager.createServerErrorToServerState(result));
-			SystemTrayManager.updateStatusMessage();
-			
-			//Returning
-			return;
-		}
+		//Returning if the database manager isn't running
+		if(DatabaseManager.getInstance() == null) return;
 		
-		//Updating the server state
-		setServerState(serverStateRunning);
-		SystemTrayManager.updateStatusMessage();
+		//Disconnecting the server if it's currently running
+		ConnectionManager.stop();
+		
+		//Re-assigning the proxy (to realign with preferences updates)
+		ConnectionManager.assignDataProxy();
+		
+		//Starting the server back up again
+		ConnectionManager.start();
 		
 		//Logging a message
 		getLogger().info("Restart complete");
@@ -223,7 +202,7 @@ class Main {
 		return true;
 	}
 	
-	static void runPermissionCheck() {
+	public static void runPermissionCheck() {
 		//Checking AppleScript automation permissions
 		if(!AppleScriptManager.testAutomation()) UIHelper.displayAutomationWarning();
 		
@@ -242,7 +221,7 @@ class Main {
 		}
 	}
 	
-	static boolean isDebugMode() {
+	public static boolean isDebugMode() {
 		return debugMode;
 	}
 	
@@ -263,23 +242,23 @@ class Main {
 		};
 	}
 	
-	static TimeHelper getTimeHelper() {
+	public static TimeHelper getTimeHelper() {
 		return timeHelper;
 	}
 	
-	static Logger getLogger() {
+	public static Logger getLogger() {
 		return logger;
 	}
 	
-	static int getServerState() {
+	public static int getServerState() {
 		return serverState;
 	}
 	
-	static void setServerState(int value) {
+	public static void setServerState(int value) {
 		serverState = value;
 	}
 	
-	static ResourceBundle resources() {
+	public static ResourceBundle resources() {
 		return ResourceBundle.getBundle("me.tagavari.airmessage.server.Translations");
 	}
 }

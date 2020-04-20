@@ -1,6 +1,9 @@
 package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
+import me.tagavari.airmessage.connection.ClientRegistration;
+import me.tagavari.airmessage.connection.CommConst;
+import me.tagavari.airmessage.connection.ConnectionManager;
 
 import java.io.*;
 import java.util.*;
@@ -12,7 +15,7 @@ import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-class AppleScriptManager {
+public class AppleScriptManager {
 	//Creating the AppleScript commands
 	private static final String[] ASTextExisting = { //ARGS: Chat GUID / Message
 			"tell application \"Messages\"",
@@ -160,12 +163,12 @@ class AppleScriptManager {
 	private static final Pattern createChatResultPattern = Pattern.compile("\\Atext chat id (\\S+)\\Z"); //text chat id iMessage;+;chat428490767995230252 <- ACTUAL OUTPUT
 	
 	//Returns: result code, chat GUID (if successful) OR error message (if unsuccessful)
-	static Constants.Tuple<Integer, String> createChat(String[] chatMembers, String service) {
+	public static Constants.Tuple<Integer, String> createChat(String[] chatMembers, String service) {
 		//Returning false if there are no members
 		if(chatMembers.length == 0) {
 			Exception exception = new IllegalArgumentException("Bad request: no target members provided (send new file)");
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			return new Constants.Tuple<>(NetServerManager.nstCreateChatBadRequest, Constants.exceptionToString(exception));
+			return new Constants.Tuple<>(CommConst.nstCreateChatBadRequest, Constants.exceptionToString(exception));
 		}
 		
 		//Formatting the chat members
@@ -203,11 +206,11 @@ class AppleScriptManager {
 					if(lineList.size() == 1) {
 						String errorLine = lineList.get(0);
 						if(errorLine.endsWith("(" + Constants.asErrorCodeMessagesUnauthorized + ")")) {
-							return new Constants.Tuple<>(NetServerManager.nstCreateChatUnauthorized, errorDesc);
+							return new Constants.Tuple<>(CommConst.nstCreateChatUnauthorized, errorDesc);
 						}
 					}
 					
-					return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, errorDesc);
+					return new Constants.Tuple<>(CommConst.nstCreateChatScriptError, errorDesc);
 				}
 			}
 			
@@ -223,7 +226,7 @@ class AppleScriptManager {
 				
 				if(lineList.isEmpty()) {
 					Main.getLogger().log(Level.WARNING, "Failed to create new chat: received no output from chat creation script");
-					return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, "Received no output from chat creation script");
+					return new Constants.Tuple<>(CommConst.nstCreateChatScriptError, "Received no output from chat creation script");
 				}
 				
 				//OUTPUT FORMAT: text chat id iMessage;+;chat428490767995230252
@@ -233,22 +236,22 @@ class AppleScriptManager {
 				boolean result = matcher.find();
 				if(!result) {
 					Main.getLogger().log(Level.WARNING, "Failed to create new chat: couldn't match regex to \"" + outputLine + "\"");
-					return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, "Couldn't match regex to \"" + outputLine + "\"");
+					return new Constants.Tuple<>(CommConst.nstCreateChatScriptError, "Couldn't match regex to \"" + outputLine + "\"");
 				}
 				String chatGUID = matcher.group(1);
 				
-				return new Constants.Tuple<>(NetServerManager.nstCreateChatOK, chatGUID);
+				return new Constants.Tuple<>(CommConst.nstCreateChatOK, chatGUID);
 			}
 		} catch(IOException exception) {
 			//Printing the stack trace
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning the error
-			return new Constants.Tuple<>(NetServerManager.nstCreateChatScriptError, Constants.exceptionToString(exception));
+			return new Constants.Tuple<>(CommConst.nstCreateChatScriptError, Constants.exceptionToString(exception));
 		}
 	}
 	
-	static Constants.Tuple<Integer, String> sendExistingMessage(String chatGUID, String message) {
+	public static Constants.Tuple<Integer, String> sendExistingMessage(String chatGUID, String message) {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
@@ -261,7 +264,7 @@ class AppleScriptManager {
 		Constants.Tuple<Integer, String> result = runCommandProcessResult(command.toArray(new String[0]));
 		
 		//Attempting a fallback request if the request failed
-		if(result.item1 == NetServerManager.nstSendResultNoConversation) {
+		if(result.item1 == CommConst.nstSendResultNoConversation) {
 			//Checking if the conversation has been indexed as a one-on-one chat
 			DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
 			if(targetChat != null) {
@@ -274,9 +277,9 @@ class AppleScriptManager {
 		return result;
 	}
 	
-	static Constants.Tuple<Integer, String> sendNewMessage(String[] chatMembers, String message, String service) {
+	public static Constants.Tuple<Integer, String> sendNewMessage(String[] chatMembers, String message, String service) {
 		//Returning false if there are no members
-		if(chatMembers.length == 0) return new Constants.Tuple<>(NetServerManager.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: no target members provided (send new file)")));
+		if(chatMembers.length == 0) return new Constants.Tuple<>(CommConst.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: no target members provided (send new file)")));
 		
 		//Formatting the chat members
 		StringBuilder delimitedChatMembers = new StringBuilder("buddy \"" + escapeAppleScriptString(chatMembers[0]) + "\" of targetService");
@@ -302,7 +305,7 @@ class AppleScriptManager {
 		return result;
 	}
 	
-	static Constants.Tuple<Integer, String> sendExistingFile(String chatGUID, File file) {
+	public static Constants.Tuple<Integer, String> sendExistingFile(String chatGUID, File file) {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
@@ -315,7 +318,7 @@ class AppleScriptManager {
 		Constants.Tuple<Integer, String> result = runCommandProcessResult(command.toArray(new String[0]));
 		
 		//Attempting a fallback request if the request failed
-		if(result.item1 == NetServerManager.nstSendResultNoConversation) {
+		if(result.item1 == CommConst.nstSendResultNoConversation) {
 			//Checking if the conversation has been indexed as a one-on-one chat
 			DatabaseManager.CreationTargetingChat targetChat = DatabaseManager.getInstance().getCreationTargetingAvailabilityList().get(chatGUID);
 			if(targetChat != null) {
@@ -328,9 +331,9 @@ class AppleScriptManager {
 		return result;
 	}
 	
-	static Constants.Tuple<Integer, String> sendNewFile(String[] chatMembers, File file, String service) {
+	public static Constants.Tuple<Integer, String> sendNewFile(String[] chatMembers, File file, String service) {
 		//Returning false if there are no members
-		if(chatMembers.length == 0) return new Constants.Tuple<>(NetServerManager.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: no target members provided (send new file)")));
+		if(chatMembers.length == 0) return new Constants.Tuple<>(CommConst.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: no target members provided (send new file)")));
 		
 		//Formatting the chat members
 		StringBuilder delimitedChatMembers = new StringBuilder("buddy \"" + escapeAppleScriptString(chatMembers[0]) + "\" of targetService");
@@ -376,25 +379,25 @@ class AppleScriptManager {
 				
 				if(lineList.size() == 1) {
 					String errorLine = lineList.get(0);
-					if(errorLine.endsWith("(" + Constants.asErrorCodeMessagesUnauthorized + ")")) return new Constants.Tuple<>(NetServerManager.nstSendResultUnauthorized, errorDesc);
-					else if(errorLine.endsWith("(" + Constants.asErrorCodeMessagesNoChat + ")")) return new Constants.Tuple<>(NetServerManager.nstSendResultNoConversation, errorDesc);
+					if(errorLine.endsWith("(" + Constants.asErrorCodeMessagesUnauthorized + ")")) return new Constants.Tuple<>(CommConst.nstSendResultUnauthorized, errorDesc);
+					else if(errorLine.endsWith("(" + Constants.asErrorCodeMessagesNoChat + ")")) return new Constants.Tuple<>(CommConst.nstSendResultNoConversation, errorDesc);
 				}
 				
-				return new Constants.Tuple<>(NetServerManager.nstSendResultScriptError, errorDesc);
+				return new Constants.Tuple<>(CommConst.nstSendResultScriptError, errorDesc);
 			}
 		} catch(IOException exception) {
 			//Printing the stack trace
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Returning the error
-			return new Constants.Tuple<>(NetServerManager.nstSendResultScriptError, Constants.exceptionToString(exception));
+			return new Constants.Tuple<>(CommConst.nstSendResultScriptError, Constants.exceptionToString(exception));
 		}
 		
 		//Returning true
-		return new Constants.Tuple<>(NetServerManager.nstSendResultOK, null);
+		return new Constants.Tuple<>(CommConst.nstSendResultOK, null);
 	}
 	
-	static boolean testAutomation() {
+	public static boolean testAutomation() {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
@@ -430,16 +433,16 @@ class AppleScriptManager {
 		return true;
 	}
 	
-	static void showAutomationWarning() {
+	public static void showAutomationWarning() {
 		runBasicAS(ASShowAutomationWarning, Main.resources().getString("message.automation_error"), Main.resources().getString("action.ignore"), Main.resources().getString("action.system_preferences"));
 	}
 	
-	static void showDiskAccessWarning() {
+	public static void showDiskAccessWarning() {
 		runBasicAS(ASShowDiskAccessWarning, Main.resources().getString("message.diskaccess_error"), Main.resources().getString("action.ignore"), Main.resources().getString("action.system_preferences"));
 	}
 	
 	private static final List<FileUploadRequest> fileUploadRequests = Collections.synchronizedList(new ArrayList<>());
-	static void addFileFragment(NetServerManager.SocketManager connection, short requestID, String chatGUID, String fileName, int index, byte[] compressedBytes, boolean isLast) {
+	public static void addFileFragment(ClientRegistration connection, short requestID, String chatGUID, String fileName, int index, byte[] compressedBytes, boolean isLast) {
 		//Attempting to find a matching request
 		FileUploadRequest request = null;
 		for(FileUploadRequest allRequests : fileUploadRequests) {
@@ -453,7 +456,7 @@ class AppleScriptManager {
 			//Checking if this isn't the first request (meaning that the request failed, and shouldn't continue)
 			if(index != 0) {
 				//Sending a negative response
-				NetServerManager.sendMessageRequestResponse(connection, requestID, NetServerManager.nstSendResultBadRequest, "Bad request: index mismatch\nFirst index check failed, received " + index);
+				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, requestID, CommConst.nstSendResultBadRequest, "Bad request: index mismatch\nFirst index check failed, received " + index);
 				
 				//Returning
 				return;
@@ -473,7 +476,7 @@ class AppleScriptManager {
 		request.addFileFragment(new FileUploadRequest.FileFragment(index, compressedBytes, isLast));
 	}
 	
-	static void addFileFragment(NetServerManager.SocketManager connection, short requestID, String[] chatMembers, String service, String fileName, int index, byte[] compressedBytes, boolean isLast) {
+	public static void addFileFragment(ClientRegistration connection, short requestID, String[] chatMembers, String service, String fileName, int index, byte[] compressedBytes, boolean isLast) {
 		//Attempting to find a matching request
 		FileUploadRequest request = null;
 		for(FileUploadRequest allRequests : fileUploadRequests) {
@@ -487,7 +490,7 @@ class AppleScriptManager {
 			//Checking if this isn't the first request (meaning that the request failed, and shouldn't continue)
 			if(index != 0) {
 				//Sending a negative response
-				NetServerManager.sendMessageRequestResponse(connection, requestID, NetServerManager.nstSendResultBadRequest, "Bad request: index mismatch\nFirst index check failed, received " + index);
+				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, requestID, CommConst.nstSendResultBadRequest, "Bad request: index mismatch\nFirst index check failed, received " + index);
 				
 				//Returning
 				return;
@@ -509,7 +512,7 @@ class AppleScriptManager {
 	
 	private static class FileUploadRequest {
 		//Creating the request variables
-		final NetServerManager.SocketManager connection;
+		final ClientRegistration connection;
 		final short requestID;
 		final String chatGUID;
 		final String[] chatMembers;
@@ -523,7 +526,7 @@ class AppleScriptManager {
 		private AttachmentWriter writerThread = null;
 		private int lastIndex = -1;
 		
-		FileUploadRequest(NetServerManager.SocketManager connection, short requestID, String chatGUID, String fileName) {
+		FileUploadRequest(ClientRegistration connection, short requestID, String chatGUID, String fileName) {
 			//Setting the variables
 			this.connection = connection;
 			this.requestID = requestID;
@@ -533,7 +536,7 @@ class AppleScriptManager {
 			this.fileName = fileName;
 		}
 		
-		FileUploadRequest(NetServerManager.SocketManager connection, short requestID, String[] chatMembers, String service, String fileName) {
+		FileUploadRequest(ClientRegistration connection, short requestID, String[] chatMembers, String service, String fileName) {
 			//Setting the variables
 			this.connection = connection;
 			this.requestID = requestID;
@@ -546,7 +549,7 @@ class AppleScriptManager {
 		void addFileFragment(FileFragment fileFragment) {
 			//Failing the request if the index doesn't line up
 			if(lastIndex + 1 != fileFragment.index) {
-				failRequest(NetServerManager.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: index mismatch\nLast index: " + lastIndex + "\nReceived index: " + fileFragment.index)));
+				failRequest(CommConst.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: index mismatch\nLast index: " + lastIndex + "\nReceived index: " + fileFragment.index)));
 				return;
 			}
 			
@@ -578,7 +581,7 @@ class AppleScriptManager {
 				@Override
 				public void run() {
 					//Failing the request
-					failRequest(NetServerManager.nstSendResultRequestTimeout, null);
+					failRequest(CommConst.nstSendResultRequestTimeout, null);
 				}
 			}, timeout);
 		}
@@ -600,7 +603,7 @@ class AppleScriptManager {
 			if(writerThread != null) writerThread.stopThread();
 			
 			//Sending a negative response
-			NetServerManager.sendMessageRequestResponse(connection, requestID, result, details);
+			ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, requestID, result, details);
 		}
 		
 		private void onDownloadSuccessful(File file) {
@@ -611,7 +614,7 @@ class AppleScriptManager {
 			Constants.Tuple<Integer, String> result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service);
 			
 			//Sending the response
-			NetServerManager.sendMessageRequestResponse(connection, requestID, result.item1, result.item2);
+			ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, requestID, result.item1, result.item2);
 		}
 		
 		private class AttachmentWriter extends Thread {
@@ -667,7 +670,7 @@ class AppleScriptManager {
 					Sentry.capture(exception);
 					
 					//Failing the download
-					failRequest(NetServerManager.nstSendResultBadRequest, Constants.exceptionToString(exception));
+					failRequest(CommConst.nstSendResultBadRequest, Constants.exceptionToString(exception));
 					
 					//Terminating the thread
 					requestKill.set(true);

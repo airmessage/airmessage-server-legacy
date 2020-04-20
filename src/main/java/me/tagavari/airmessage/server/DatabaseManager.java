@@ -2,6 +2,9 @@ package me.tagavari.airmessage.server;
 
 import io.sentry.Sentry;
 import me.tagavari.airmessage.common.Blocks;
+import me.tagavari.airmessage.connection.ClientRegistration;
+import me.tagavari.airmessage.connection.CommConst;
+import me.tagavari.airmessage.connection.ConnectionManager;
 import org.jooq.*;
 import org.jooq.impl.DSL;
 
@@ -23,7 +26,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
-class DatabaseManager {
+public class DatabaseManager {
 	//Creating the reference variables
 	//private static final long checkTime = 5 * 1000;
 	//private static final long pollTime = 100;
@@ -53,7 +56,7 @@ class DatabaseManager {
 	private boolean creationTargetingUpdateRequired = true;
 	private final AtomicReference<HashMap<String, CreationTargetingChat>> creationTargetingAvailabilityList = new AtomicReference<>(new HashMap<>());
 	
-	static boolean start(long scanFrequency) {
+	public static boolean start(long scanFrequency) {
 		//Checking if there is already an instance
 		if(instance != null) {
 			//Logging the exception
@@ -97,7 +100,7 @@ class DatabaseManager {
 		return true;
 	}
 	
-	static void stop() {
+	public static void stop() {
 		//Validating the instance
 		if(instance == null) return;
 		
@@ -138,15 +141,15 @@ class DatabaseManager {
 		requestThread.start();
 	}
 	
-	static DatabaseManager getInstance() {
+	public static DatabaseManager getInstance() {
 		return instance;
 	}
 	
-	HashMap<String, CreationTargetingChat> getCreationTargetingAvailabilityList() {
+	public HashMap<String, CreationTargetingChat> getCreationTargetingAvailabilityList() {
 		return creationTargetingAvailabilityList.get();
 	}
 	
-	void requestCreationTargetingAvailabilityUpdate() {
+	public void requestCreationTargetingAvailabilityUpdate() {
 		creationTargetingUpdateRequired = true;
 	}
 	
@@ -223,7 +226,7 @@ class DatabaseManager {
 						out.flush();
 						
 						//Sending the data
-						NetServerManager.sendPacket(null, NetServerManager.nhtMessageUpdate, trgt.toByteArray(), true);
+						ConnectionManager.activeProxy().sendMessage(null, CommConst.nhtMessageUpdate, trgt.toByteArray());
 					} catch(IOException | GeneralSecurityException exception) {
 						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 						Sentry.capture(exception);
@@ -320,7 +323,7 @@ class DatabaseManager {
 		}
 	}
 	
-	void addClientRequest(Object request) {
+	public void addClientRequest(Object request) {
 		requestThread.addRequest(request);
 	}
 	
@@ -399,8 +402,7 @@ class DatabaseManager {
 				out.flush();
 				
 				//Sending the conversation info
-				request.connection.sendDataSync(NetServerManager.nhtConversationUpdate, trgt.toByteArray());
-				//NetServerManager.sendPacket(request.connection, Blocks.nhtConversationUpdate, bos.toByteArray());
+				ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtConversationUpdate, trgt.toByteArray());
 			} catch(IOException | GeneralSecurityException exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
@@ -428,7 +430,7 @@ class DatabaseManager {
 		//Setting the succeeded variable to false if there are no results
 		if(results.isEmpty()) {
 			succeeded = false;
-			errorCode = NetServerManager.nstAttachmentReqNotFound;
+			errorCode = CommConst.nstAttachmentReqNotFound;
 		} else {
 			//Getting the file
 			String filePath = results.getValue(0, DSL.field("filename", String.class));
@@ -436,7 +438,7 @@ class DatabaseManager {
 			//Failing the file check if the path is invalid
 			if(filePath == null) {
 				succeeded = false;
-				errorCode = NetServerManager.nstAttachmentReqNotSaved;
+				errorCode = CommConst.nstAttachmentReqNotSaved;
 			} else {
 				if(filePath.startsWith("~")) filePath = filePath.replaceFirst("~", System.getProperty("user.home"));
 				file = new File(filePath);
@@ -444,10 +446,10 @@ class DatabaseManager {
 				//Failing the file check if the file doesn't exist
 				if(!file.exists()) {
 					succeeded = false;
-					errorCode = NetServerManager.nstAttachmentReqNotSaved;
+					errorCode = CommConst.nstAttachmentReqNotSaved;
 				} else if(!file.canRead()) {
 					succeeded = false;
-					errorCode = NetServerManager.nstAttachmentReqUnreadable;
+					errorCode = CommConst.nstAttachmentReqUnreadable;
 				}
 			}
 		}
@@ -491,7 +493,7 @@ class DatabaseManager {
 								out.flush();
 								
 								//Sending the data
-								request.connection.sendDataSync(NetServerManager.nhtAttachmentReq, bos.toByteArray());
+								ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtAttachmentReq, bos.toByteArray());
 								//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
 							}
 						} else {
@@ -505,7 +507,7 @@ class DatabaseManager {
 				} else {
 					//Updating the state
 					succeeded = false;
-					errorCode = NetServerManager.nstAttachmentReqIO;
+					errorCode = CommConst.nstAttachmentReqIO;
 				}
 			} catch(IOException exception) {
 				//Logging the error
@@ -514,7 +516,7 @@ class DatabaseManager {
 				
 				//Updating the state
 				succeeded = false;
-				errorCode = NetServerManager.nstAttachmentReqIO;
+				errorCode = CommConst.nstAttachmentReqIO;
 			} catch (GeneralSecurityException exception) {
 				//Logging the error
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
@@ -522,14 +524,14 @@ class DatabaseManager {
 				
 				//Updating the state
 				succeeded = false;
-				errorCode = NetServerManager.nstAttachmentReqIO;
+				errorCode = CommConst.nstAttachmentReqIO;
 			}
 		}
 		
 		//Checking if the attempt was a failure
 		if(!succeeded) {
 			//Sending a reply
-			if(request.connection.isConnected()) request.connection.sendDataSync(NetServerManager.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8 + Integer.SIZE / 8).putShort(request.requestID).putInt(errorCode).array());
+			if(request.connection.isConnected()) ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8 + Integer.SIZE / 8).putShort(request.requestID).putInt(errorCode).array());
 		}
 	}
 	
@@ -549,7 +551,8 @@ class DatabaseManager {
 					out.flush();
 					
 					//Sending the data
-					request.connection.sendDataSync(request.messageResponseType, trgt.toByteArray());
+					//request.connection.sendDataSync(request.messageResponseType, trgt.toByteArray());
+					ConnectionManager.activeProxy().sendMessage(request.connection, request.messageResponseType, trgt.toByteArray());
 					//NetServerManager.sendPacket(request.connection, request.messageResponseType, bos.toByteArray());
 				}
 			}
@@ -644,7 +647,7 @@ class DatabaseManager {
 				out.flush();
 				
 				//Sending the data
-				request.connection.sendDataSync(NetServerManager.nhtMassRetrieval, trgt.toByteArray());
+				ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtMassRetrieval, trgt.toByteArray());
 			}
 			
 			//Reading the message data
@@ -681,7 +684,7 @@ class DatabaseManager {
 						out.flush();
 						
 						//Sending the data
-						request.connection.sendDataSync(NetServerManager.nhtMassRetrieval, trgt.toByteArray());
+						ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtMassRetrieval, trgt.toByteArray());
 					} catch(IOException | GeneralSecurityException exception) {
 						//Logging the exception
 						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
@@ -737,8 +740,7 @@ class DatabaseManager {
 											out.flush();
 											
 											//Sending the data
-											request.connection.sendDataSync(NetServerManager.nhtMassRetrievalFile, bos.toByteArray());
-											//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
+											ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtMassRetrievalFile, bos.toByteArray());
 										}
 									} else {
 										Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
@@ -767,7 +769,7 @@ class DatabaseManager {
 					if(!request.connection.isConnected()) return;
 					
 					//Sending the finish message
-					request.connection.sendDataSync(NetServerManager.nhtMassRetrievalFinish, new byte[0]);
+					ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtMassRetrievalFinish, new byte[0]);
 				}
 			});
 		} catch(IOException | OutOfMemoryError | RuntimeException | SQLException | GeneralSecurityException exception) {
@@ -1216,7 +1218,7 @@ class DatabaseManager {
 			out.flush();
 			
 			//Sending the data
-			NetServerManager.sendPacket(null, NetServerManager.nhtModifierUpdate, trgt.toByteArray(), true);
+			ConnectionManager.activeProxy().sendMessage(null, CommConst.nhtModifierUpdate, trgt.toByteArray());
 		} catch(IOException | GeneralSecurityException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			Sentry.capture(exception);
@@ -1299,7 +1301,7 @@ class DatabaseManager {
 		if(!file.exists() || !file.isFile() || !file.canRead()) return null;
 		
 		//Preparing to read the file
-		MessageDigest messageDigest = MessageDigest.getInstance(NetServerManager.hashAlgorithm);
+		MessageDigest messageDigest = MessageDigest.getInstance(CommConst.hashAlgorithm);
 		try(FileInputStream inputStream = new FileInputStream(file)) {
 			byte[] dataBytes = new byte[1024];
 			
@@ -1324,27 +1326,27 @@ class DatabaseManager {
 		}
 	}
 	
-	static class ConversationInfoRequest {
-		final NetServerManager.SocketManager connection;
+	public static class ConversationInfoRequest {
+		final ClientRegistration connection;
 		final List<String> conversationsGUIDs;
 		
-		ConversationInfoRequest(NetServerManager.SocketManager connection, List<String> conversationsGUIDs) {
+		public ConversationInfoRequest(ClientRegistration connection, List<String> conversationsGUIDs) {
 			//Setting the values
 			this.connection = connection;
 			this.conversationsGUIDs = conversationsGUIDs;
 		}
 	}
 	
-	interface RetrievalFilter {
+	public interface RetrievalFilter {
 		Condition filter();
 	}
 	
-	static class CustomRetrievalRequest {
-		final NetServerManager.SocketManager connection;
+	public static class CustomRetrievalRequest {
+		final ClientRegistration connection;
 		final RetrievalFilter filter;
 		final int messageResponseType;
 		
-		CustomRetrievalRequest(NetServerManager.SocketManager connection, RetrievalFilter filter, int messageResponseType) {
+		public CustomRetrievalRequest(ClientRegistration connection, RetrievalFilter filter, int messageResponseType) {
 			//Setting the values
 			this.connection = connection;
 			this.filter = filter;
@@ -1352,8 +1354,8 @@ class DatabaseManager {
 		}
 	}
 	
-	static class MassRetrievalRequest {
-		final NetServerManager.SocketManager connection;
+	public static class MassRetrievalRequest {
+		final ClientRegistration connection;
 		final short requestID;
 		final boolean restrictMessages;
 		final long timeSinceMessages;
@@ -1366,7 +1368,7 @@ class DatabaseManager {
 		String[] attachmentFilterBlacklist;
 		boolean attachmentFilterDLOutside;
 		
-		MassRetrievalRequest(NetServerManager.SocketManager connection, short requestID, boolean restrictMessages, long timeSinceMessages, boolean downloadAttachments, boolean restrictAttachments, long timeSinceAttachments, boolean restrictAttachmentsSizes, long attachmentSizeLimit, String[] attachmentFilterWhitelist, String[] attachmentFilterBlacklist, boolean attachmentFilterDLOutside) {
+		public MassRetrievalRequest(ClientRegistration connection, short requestID, boolean restrictMessages, long timeSinceMessages, boolean downloadAttachments, boolean restrictAttachments, long timeSinceAttachments, boolean restrictAttachmentsSizes, long attachmentSizeLimit, String[] attachmentFilterWhitelist, String[] attachmentFilterBlacklist, boolean attachmentFilterDLOutside) {
 			this.connection = connection;
 			this.requestID = requestID;
 			this.restrictMessages = restrictMessages;
@@ -1382,13 +1384,13 @@ class DatabaseManager {
 		}
 	}
 	
-	static class FileRequest {
-		final NetServerManager.SocketManager connection;
+	public static class FileRequest {
+		final ClientRegistration connection;
 		final String fileGuid;
 		final short requestID;
 		final int chunkSize;
 		
-		FileRequest(NetServerManager.SocketManager connection, String fileGuid, short requestID, int chunkSize) {
+		public FileRequest(ClientRegistration connection, String fileGuid, short requestID, int chunkSize) {
 			this.connection = connection;
 			this.fileGuid = fileGuid;
 			this.requestID = requestID;
@@ -1396,7 +1398,7 @@ class DatabaseManager {
 		}
 	}
 	
-	static class CreationTargetingChat {
+	public static class CreationTargetingChat {
 		private final String address;
 		private final String service;
 		

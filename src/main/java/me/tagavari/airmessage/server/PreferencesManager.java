@@ -410,7 +410,7 @@ public class PreferencesManager {
 		if(databaseManager != null) databaseManager.scannerThread.updateScanFrequency((int) (prefScanFrequency * 1000));
 		
 		//Restarting the server
-		Main.restartServer();
+		Main.reinitializeServer();
 	}
 	
 	static boolean checkFirstRun() {
@@ -789,19 +789,19 @@ public class PreferencesManager {
 		shell.open();
 	}
 	
-	static int getPrefServerPort() {
+	public static int getPrefServerPort() {
 		return prefServerPort;
 	}
 	
-	static boolean getPrefAutoCheckUpdates() {
+	public static boolean getPrefAutoCheckUpdates() {
 		return prefAutoCheckUpdates;
 	}
 	
-	static float getPrefScanFrequency() {
+	public static float getPrefScanFrequency() {
 		return prefScanFrequency;
 	}
 	
-	static String getPrefPassword() {
+	public static String getPrefPassword() {
 		return prefPassword.get();
 	}
 }

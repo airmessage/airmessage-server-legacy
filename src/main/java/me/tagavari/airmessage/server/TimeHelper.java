@@ -3,7 +3,7 @@ package me.tagavari.airmessage.server;
 import java.util.Calendar;
 import java.util.TimeZone;
 
-enum TimeHelper {
+public enum TimeHelper {
 	COCOA_CORE_DATA, //Cocoa core data / Seconds since January 1st, 2001, 00:00, UTC-0
 	MAC_ABSOLUTE_TIME; //Mac absolute time / Nanoseconds since January 1st, 2001, 00:00, UTC-0
 	
@@ -21,7 +21,7 @@ enum TimeHelper {
 		else return MAC_ABSOLUTE_TIME;
 	}
 	
-	long toDatabaseTime(long time) {
+	public long toDatabaseTime(long time) {
 		switch(this) {
 			case COCOA_CORE_DATA:
 				return (time - millisAppleUnixDifference) / 1000L; //Unix epoch -> Apple epoch / Milliseconds -> Seconds

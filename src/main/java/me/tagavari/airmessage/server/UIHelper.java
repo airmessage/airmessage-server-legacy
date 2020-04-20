@@ -10,7 +10,7 @@ import org.eclipse.swt.widgets.*;
 
 import java.util.logging.Level;
 
-class UIHelper {
+public class UIHelper {
 	//Creating the reference values
 	static final int windowMargin = 5;
 	static final int sheetMargin = 20;
@@ -19,12 +19,12 @@ class UIHelper {
 	static final int smallMinButtonWidth = 80;
 	private static Display display;
 	
-	static void initialize() {
+	public static void initialize() {
 		display = Display.getCurrent();
 		if(display == null) display = Display.getDefault(); //The display may be null if outside the UI thread
 	}
 	
-	static boolean displayVersionWarning() {
+	public static boolean displayVersionWarning() {
 		//Showing an alert dialog
 		Shell shell = new Shell();
 		MessageBox dialog = new MessageBox(shell, SWT.ICON_WARNING | SWT.YES | SWT.NO);
@@ -36,7 +36,7 @@ class UIHelper {
 		return result == SWT.YES;
 	}
 	
-	static int displaySchemaWarning() {
+	public static int displaySchemaWarning() {
 		//Showing an alert dialog
 		Shell shell = new Shell();
 		MessageBox dialog = new MessageBox(shell, SWT.ICON_WARNING | SWT.ABORT | SWT.RETRY | SWT.IGNORE);
@@ -56,15 +56,15 @@ class UIHelper {
 		}
 	}
 	
-	static void displayAutomationWarning() {
+	public static void displayAutomationWarning() {
 		AppleScriptManager.showAutomationWarning();
 	}
 	
-	static void displayDiskAccessWarning() {
+	public static void displayDiskAccessWarning() {
 		AppleScriptManager.showDiskAccessWarning();
 	}
 	
-	static void openIntroWindow() {
+	public static void openIntroWindow() {
 		//Creating the shell
 		Shell shell = new Shell(display, SWT.NONE);
 		
@@ -132,7 +132,7 @@ class UIHelper {
 		new MouseTracker().registerShell(shell, shell);
 	}
 	
-	static void displayAlertDialog(String message) {
+	public static void displayAlertDialog(String message) {
 		//Showing an alert dialog
 		Shell shell = new Shell();
 		MessageBox dialog = new MessageBox(shell, SWT.ICON_WARNING | SWT.OK);
@@ -140,8 +140,8 @@ class UIHelper {
 		dialog.open();
 		if(!shell.isDisposed()) shell.dispose();
 	}
-
-	static void startEventLoop() {
+	
+	public static void startEventLoop() {
 		try {
 			while(!display.isDisposed()) if(!display.readAndDispatch()) display.sleep();
 		} catch(Exception exception) {
@@ -213,7 +213,7 @@ class UIHelper {
 		}
 	}
 	
-	static Font getFont(Font font, int fontSize, int style) {
+	public static Font getFont(Font font, int fontSize, int style) {
 		//Getting the font data
 		FontData fontData = font.getFontData()[0];
 		
@@ -225,14 +225,14 @@ class UIHelper {
 		return new Font(getDisplay(), fontData);
 	}
 	
-	static void packControl(Control control, String text, int padding) {
+	public static void packControl(Control control, String text, int padding) {
 		GC gc = new GC(control);
 		Point textSize = gc.textExtent(text);
 		gc.dispose();
 		control.setSize(textSize.x + padding, control.getSize().y);
 	}
 	
-	static int computeMaxSize(Button[] buttons) {
+	public static int computeMaxSize(Button[] buttons) {
 		int maxSize = 0;
 		for(Button button : buttons) {
 			int buttonSize = button.computeSize(SWT.DEFAULT, SWT.DEFAULT).x;
@@ -241,7 +241,7 @@ class UIHelper {
 		return maxSize;
 	}
 	
-	static Display getDisplay() {
+	public static Display getDisplay() {
 		return display;
 	}
 }

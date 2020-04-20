@@ -1,5 +1,6 @@
 package me.tagavari.airmessage.server;
 
+import me.tagavari.airmessage.connection.ConnectionManager;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.widgets.*;
@@ -123,7 +124,7 @@ public class SystemTrayManager {
 		return true;
 	}
 	
-	static void updateStatusMessage() {
+	public static void updateStatusMessage() {
 		//Getting the message
 		switch(Main.getServerState()) {
 			case Main.serverStateStarting:
@@ -133,7 +134,7 @@ public class SystemTrayManager {
 				break;
 			case Main.serverStateRunning:
 				miStatus.setText(Main.resources().getString("message.status.running"));
-				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), NetServerManager.getConnectionCount()));
+				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), ConnectionManager.getConnectionCount()));
 				miStatusSub.setEnabled(false);
 				break;
 			case Main.serverStateFailedDatabase:
@@ -154,12 +155,12 @@ public class SystemTrayManager {
 		}
 	}
 	
-	static void updateConnectionsMessage() {
+	public static void updateConnectionsMessage() {
 		//Returning if the state isn't connected
 		if(Main.getServerState() != Main.serverStateRunning) return;
 		
 		//Updating the message
-		miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), NetServerManager.getConnectionCount()));
+		miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), ConnectionManager.getConnectionCount()));
 	}
 	
 	private static Image getTrayIcon() {

@@ -12,7 +12,7 @@ import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-class Constants {
+public class Constants {
 	static final String SENTRY_DSN = "https://4240bd1f5e2f4ecfac822f78dda19fce:00d4dcd23b244f46a4489b5b80811d39@sentry.io/301837";
 	
 	//Creating the version values
@@ -39,7 +39,7 @@ class Constants {
 	static final String regExSplitFilename = "\\.(?=[^.]+$)";
 	
 	//Creating the reporting values
-	static final String sentryBCatPacket = "packet-info";
+	public static final String sentryBCatPacket = "packet-info";
 	
 	//Creating the other values
 	static final int minPort = 0;
@@ -162,7 +162,7 @@ class Constants {
 	 *
 	 * @param port the port to check for availability
 	 */
-	static boolean checkPortAvailability(int port) {
+	public static boolean checkPortAvailability(int port) {
 		//Returning if the port is out of range
 		if(port < minPort || port > maxPort) throw new IllegalArgumentException("Invalid start port: " + port);
 		
@@ -230,11 +230,11 @@ class Constants {
 		}
 	}
 	
-	static boolean checkDisconnected(IOException exception) {
+	public static boolean checkDisconnected(IOException exception) {
 		return exception.getMessage().toLowerCase().contains("broken pipe");
 	}
 	
-	static boolean checkDisconnected(SocketException exception) {
+	public static boolean checkDisconnected(SocketException exception) {
 		return exception.getMessage().toLowerCase().contains("socket closed");
 	}
 	
@@ -288,11 +288,11 @@ class Constants {
 		return exception.getMessage() + ":\n" + sw.toString();
 	}
 	
-	static class Tuple<A, B> {
-		final A item1;
-		final B item2;
+	public static class Tuple<A, B> {
+		public final A item1;
+		public final B item2;
 		
-		Tuple(A item1, B item2) {
+		public Tuple(A item1, B item2) {
 			this.item1 = item1;
 			this.item2 = item2;
 		}
