@@ -1,0 +1,109 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group 'me.tagavari'
+version '0.4'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation group: 'junit', name: 'junit', version: '4.12'
+
+    //SQLite JDBC - Database library
+    implementation 'org.xerial:sqlite-jdbc:3.30.1'
+
+    //jOOQ - Database library
+    implementation 'org.jooq:jooq:3.13.1'
+
+    //Sentry - Crash reporting library
+    implementation 'io.sentry:sentry:1.7.30'
+
+    //SLF4J - Logging library
+    implementation 'org.slf4j:slf4j-nop:1.7.30'
+
+    //JSON in Java - JSON library
+    implementation 'org.json:json:20190722'
+
+    //Commonmark Java - Markdown parser
+    implementation 'com.atlassian.commonmark:commonmark:0.14.0'
+
+    //MessagePack - Serialization library
+    implementation 'org.msgpack:msgpack-core:0.8.20'
+
+    implementation fileTree('lib') { include '*.jar' }
+}
+
+task copyToLib(type: Copy) {
+    from configurations.default
+    into jar.destinationDirectory.asFile.get()
+}
+
+task jlink(type: Exec) {
+    final String jDeps = 'java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming'
+
+    inputs.property("jlink.jdeps", jDeps)
+
+    commandLine "${System.properties.'java.home'}/bin/jlink",
+            '--no-header-files',
+            '--no-man-pages',
+            '--strip-debug',
+            '--compress=2',
+            '--add-modules', jDeps,
+            '--output', "${buildDir}/java-runtime"
+}
+
+task jpackage(type: Exec) {
+    dependsOn ordered('build', 'copyToLib', 'jlink')
+
+    inputs.dir(jar.destinationDirectory.asFile.get())
+    inputs.dir("${buildDir}/java-runtime")
+
+    commandLine "${System.properties.'java.home'}/bin/jpackage",
+            '--name', 'AirMessage',
+            '--app-version', version,
+            '--input', jar.destinationDirectory.asFile.get(),
+            '--main-jar', jar.archiveFileName.get(),
+            '--main-class', 'me.tagavari.airmessageserver.server.Main',
+            '--type', 'app-image',
+            '--java-options', '-XstartOnFirstThread',
+            '--runtime-image', "${buildDir}/java-runtime",
+            '--mac-package-identifier', 'me.tagavari.airmessageserver',
+            '--mac-package-name', 'AirMessage',
+            '--mac-package-signing-prefix', 'airmessage',
+//            '--mac-sign',
+//            '--mac-signing-key-user-name', 'Mac Developer: Developer Name (DUCNFCN445)',
+            '--icon', 'AirMessage.icns'
+}
+
+task configurePlist(type: Exec) {
+    mustRunAfter jpackage
+//    inputs.file('AirMessage.app/Contents/Info.plist')
+//    outputs.file('AirMessage.app/Contents/Info.plist')
+
+    commandLine 'plutil', '-insert', 'LSUIElement', '-string', 'True', 'AirMessage.app/Contents/Info.plist'
+}
+
+task publish {
+    dependsOn ordered('jpackage', 'configurePlist')
+}
+
+application {
+    mainClassName = 'me.tagavari.airmessageserver.server.Main'
+    applicationDefaultJvmArgs = ['-XstartOnFirstThread']
+}
+
+run {
+    args = ["-debug"]
+}
+
+def ordered(String... dependencyPaths) {
+    def dependencies = dependencyPaths.collect { tasks.getByPath(it) }
+    for (int i = 0; i < dependencies.size() - 1; i++) {
+        dependencies[i + 1].mustRunAfter(dependencies[i])
+    }
+    return dependencies
+}
