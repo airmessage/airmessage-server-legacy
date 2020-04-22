@@ -43,7 +43,7 @@ task copyToLib(type: Copy) {
 }
 
 task jlink(type: Exec) {
-    final String jDeps = 'java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming'
+    final String jDeps = 'java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec'
 
     inputs.property("jlink.jdeps", jDeps)
 

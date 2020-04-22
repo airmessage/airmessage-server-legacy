@@ -15,27 +15,38 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLConnection;
 import java.text.MessageFormat;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 class UpdateManager {
 	//Creating the reference values
 	private static final URL updateURL = makeURL("https://airmessage.org/update/server/1/");
+	//private static final URL updateURL = makeURL(new File(System.getProperty("user.home") + "/Downloads/update.json"));
 	
 	//Creating the state values
 	private static final AtomicBoolean updateCheckInProgress = new AtomicBoolean(false);
+	private static final AtomicBoolean updateInstallationInProgress = new AtomicBoolean(false);
 	private static Shell manualUpdateShell = null;
 	private static Shell updateResultShell = null;
+	private static Shell updateInstallationShell = null;
+	private static ProgressBar updateInstallationProgressBar = null;
 	
 	//Creating the timer values
 	private static final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
@@ -147,7 +158,18 @@ class UpdateManager {
 		}
 	}
 	
-	private static void openUpdateWindow(String newVer, String releaseNotes, String targetLink) {
+	private static URL makeURL(File file) {
+		try {
+			return file.toURI().toURL();
+		} catch(MalformedURLException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			throw new IllegalArgumentException(exception);
+		}
+	}
+	
+	private static void openUpdateWindow(String newVer, String releaseNotes, String downloadURL) {
 		//Closing the current update result shell
 		if(updateResultShell != null && !updateResultShell.isDisposed()) updateResultShell.close();
 		
@@ -229,7 +251,13 @@ class UpdateManager {
 			acceptButtonFD.right = new FormAttachment(100);
 			acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
 			acceptButton.setLayoutData(acceptButtonFD);
-			acceptButton.addListener(SWT.Selection, event -> Program.launch(targetLink));
+			acceptButton.addListener(SWT.Selection, event -> {
+				//Closing the window
+				if(!shell.isDisposed()) shell.close();
+				
+				//Starting the update
+				startUpdateInstallation(downloadURL);
+			});
 			shell.setDefaultButton(acceptButton);
 			
 			Button ignoreButton = new Button(buttonContainer, SWT.PUSH);
@@ -368,5 +396,278 @@ class UpdateManager {
 		//Opening the shell
 		shell.open();
 		shell.forceActive();
+	}
+	
+	private static void startUpdateInstallation(String downloadURL) {
+		//Returning if there is already an installation in progress
+		if(updateInstallationInProgress.get()) return;
+		
+		//Showing the installation window
+		showInstallationWindow();
+		
+		//Downloading and installing the update
+		new Thread(() -> installUpdate(downloadURL)).start();
+	}
+	
+	private static void installUpdate(String downloadURL) {
+		//Updating the state
+		updateInstallationInProgress.set(true);
+		
+		//The top-level directory of the extracted update file (the AirMessage.app file)
+		File topZipFile = null;
+		try {
+			//Connecting to the provided URL
+			Main.getLogger().log(Level.INFO, "Downloading update URL: " + downloadURL);
+			URL url = new URL(downloadURL);
+			URLConnection conn = url.openConnection();
+			conn.setConnectTimeout(10 * 1000);
+			
+			/* //Following redirects
+			while(conn.getResponseCode() >= 300 && conn.getResponseCode() < 400) {
+				String location = conn.getHeaderField("Location");
+				if(location != null) {
+					conn = (HttpURLConnection) new URL(location).openConnection();
+				}
+			} */
+			
+			//Getting the header data
+			String contentType = conn.getHeaderField("content-type");
+			int contentLength = conn.getHeaderFieldInt("content-length", -1);
+			
+			//Checking if this content type can't be handled by the app
+			if(contentType == null || !contentType.equals("application/zip")) {
+				//Passing the request on to the system to handle
+				Program.launch(downloadURL);
+				return;
+			}
+			
+			//Preparing the update directory
+			if(Constants.updateDir.isFile()) {
+				boolean result = Constants.updateDir.delete();
+				if(!result) throw new IOException("File at " + Constants.updateDir + " can't be removed");
+			}
+			if(Constants.updateDir.exists()) {
+				File[] directoryContents = Constants.updateDir.listFiles();
+				if(directoryContents == null)
+					throw new IOException("Directory at " + Constants.updateDir + " can't be emptied");
+				for(File file : directoryContents) Constants.recursiveDelete(file);
+			} else {
+				boolean result = Constants.updateDir.mkdir();
+				if(!result) throw new IOException("Directory at " + Constants.updateDir + " can't be created");
+			}
+			
+			//Downloading and extracting the file contents
+			String canonicalDestDirPath = Constants.updateDir.getCanonicalPath();
+			try(ZipInputStream zipInputStream = new ZipInputStream(new BufferedInputStream(conn.getInputStream()))) {
+				byte[] buffer = new byte[32 * 1024]; //32 kb
+				ZipEntry zipEntry = zipInputStream.getNextEntry();
+				int bytesRead = 0;
+				int lastProgress = 0; //0 to 100
+				while(zipEntry != null) {
+					File destFile = new File(Constants.updateDir, zipEntry.getName());
+					
+					if(Constants.updateDir.equals(destFile.getParentFile())) {
+						topZipFile = destFile;
+					}
+					
+					//Zip slip prevention
+					if(!destFile.getCanonicalPath().startsWith(canonicalDestDirPath + File.separator)) {
+						throw new IOException("Entry is outside of the target dir: " + zipEntry.getName());
+					}
+					
+					//Writing the data
+					if(zipEntry.isDirectory()) {
+						destFile.mkdir();
+					} else {
+						try(FileOutputStream outputStream = new FileOutputStream(destFile)) {
+							int len;
+							while((len = zipInputStream.read(buffer)) > 0) {
+								outputStream.write(buffer, 0, len);
+							}
+						}
+						destFile.setExecutable(true);
+					}
+					
+					if(contentLength > 0) {
+						//Adding to the total read count
+						bytesRead += zipEntry.getCompressedSize();
+						
+						//Updating the progress
+						int newProgress = (int) (((float) bytesRead / contentLength) * 100);
+						if(lastProgress != newProgress) {
+							lastProgress = newProgress;
+							
+							//Updating the progress bar
+							UIHelper.getDisplay().asyncExec(() -> {
+								if(updateInstallationProgressBar != null && !updateInstallationProgressBar.isDisposed()) {
+									updateInstallationProgressBar.setSelection(newProgress);
+								}
+							});
+						}
+					}
+					
+					//Reading the next entry
+					zipEntry = zipInputStream.getNextEntry();
+				}
+			}
+			
+			//Closing the installation progress window
+			UIHelper.getDisplay().asyncExec(() -> {
+				if(updateInstallationShell != null && !updateInstallationShell.isDisposed()) {
+					updateInstallationShell.close();
+				}
+			});
+		} catch(IOException exception) {
+			//Logging the error
+			Main.getLogger().log(Level.INFO, "Couldn't download update file / " + exception.getMessage(), exception);
+			
+			//Updating the state
+			updateInstallationInProgress.set(false);
+			
+			UIHelper.getDisplay().asyncExec(() -> {
+				//Closing the installation progress window
+				if(updateInstallationShell != null && !updateInstallationShell.isDisposed()) {
+					updateInstallationShell.close();
+				}
+				
+				//Displaying an error
+				UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.network"));
+			});
+			
+			return;
+		}
+		
+		//No update data downloaded?
+		if(topZipFile == null) {
+			//Updating the state
+			updateInstallationInProgress.set(false);
+			
+			//Displaying an error
+			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.badupdate")));
+			
+			return;
+		}
+		
+		//Getting the app install location
+		URL jarURL = Main.class.getProtectionDomain().getCodeSource().getLocation();
+		File jarFile = null;
+		try {
+			if("file".equals(jarURL.getProtocol())) jarFile = new File(jarURL.toURI());
+		} catch(URISyntaxException exception) {
+			Main.getLogger().log(Level.WARNING, "Couldn't find program JAR location / " + exception.getMessage(), exception);
+		}
+		
+		//The JAR file was loaded from a network location or something?
+		if(jarFile == null) {
+			//Updating the state
+			updateInstallationInProgress.set(false);
+			
+			//Displaying an error
+			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.installlocation")));
+			
+			return;
+		}
+		
+		//Finding the app directory
+		File appDir = jarFile;
+		do {
+			appDir = appDir.getParentFile();
+		} while(appDir != null && !appDir.getName().endsWith(".app"));
+		
+		if(appDir == null) {
+			//Updating the state
+			updateInstallationInProgress.set(false);
+			
+			//Displaying an error
+			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.installformat")));
+			
+			return;
+		}
+		
+		//Kicking off the installer process
+		try {
+			final String pathInstalled = appDir.getCanonicalPath(); //The path of the currently installed copy of AirMessage
+			File installedParent = appDir.getParentFile();
+			final String pathInstalledParent = installedParent != null ? installedParent.getCanonicalPath() : "/"; //The parent directory of the currently installed copy of AirMessage
+			final String pathUpdate = topZipFile.getCanonicalPath(); //The path of the copy of AirMessage to install
+			final String pathUpdateParent = Constants.updateDir.getCanonicalPath();
+			
+			Main.getLogger().log(Level.INFO, "Starting installer process");
+			Main.getLogger().log(Level.INFO, "Installed path: " + pathInstalled);
+			Main.getLogger().log(Level.INFO, "Installed parent path: " + pathInstalledParent);
+			Main.getLogger().log(Level.INFO, "Update path: " + pathUpdate);
+			Main.getLogger().log(Level.INFO, "Update parent path: " + pathUpdateParent);
+			
+			String command = String.join(" ",
+					"sleep", "2", //Wait for AirMessage to exit
+					"&&",
+					"rm", "-r", "\"" + pathInstalled + "\"", //Delete this AirMessage installation
+					"&&",
+					"mv", "\"" + pathUpdate + "\"", "\"" + pathInstalledParent + "\"", //Move the new AirMessage installation to the app directory
+					"&&",
+					"open", "\"" + pathInstalled + "\"", //Open the new app
+					"&&",
+					"rm", "-r", "\"" + pathUpdateParent + "\"" //Clean up the update directory
+			);
+			
+			ProcessBuilder processBuilder = new ProcessBuilder();
+			processBuilder.command("sh", "-c", command);
+			processBuilder.start();
+		} catch(IOException exception) {
+			//Logging the error
+			Main.getLogger().log(Level.INFO, "Couldn't initialize installation or update paths / " + exception.getMessage(), exception);
+			
+			//Updating the state
+			updateInstallationInProgress.set(false);
+			
+			//Displaying an error
+			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.internal")));
+			
+			return;
+		}
+		
+		//Ending this process
+		System.exit(0);
+	}
+	
+	private static void showInstallationWindow() {
+		//Creating the shell
+		updateInstallationShell = new Shell(SWT.TITLE);
+		updateInstallationShell.setText(Main.resources().getString("label.update.check.title"));
+		updateInstallationShell.setMinimumSize(300, 0);
+		
+		GridLayout updateDownloadShellGL = new GridLayout();
+		updateDownloadShellGL.numColumns = 1;
+		updateDownloadShellGL.marginTop = updateDownloadShellGL.marginBottom = updateDownloadShellGL.marginLeft = updateDownloadShellGL.marginRight = UIHelper.windowMargin;
+		updateDownloadShellGL.verticalSpacing = UIHelper.windowMargin;
+		updateInstallationShell.setLayout(updateDownloadShellGL);
+		
+		//Adding the title
+		Label title = new Label(updateInstallationShell, SWT.NONE);
+		title.setText(Main.resources().getString("label.update.process.download"));
+		title.setFont(UIHelper.getFont(title.getFont(), -1, SWT.BOLD));
+		GridData titleGD = new GridData();
+		titleGD.horizontalAlignment = GridData.FILL;
+		titleGD.grabExcessHorizontalSpace = true;
+		title.setLayoutData(titleGD);
+		
+		//Adding the progress bar
+		ProgressBar progressBar = updateInstallationProgressBar = new ProgressBar(updateInstallationShell, SWT.HORIZONTAL);
+		GridData progressBarGD = new GridData();
+		progressBarGD.horizontalAlignment = GridData.FILL;
+		progressBarGD.grabExcessHorizontalSpace = true;
+		progressBar.setLayoutData(progressBarGD);
+		
+		//Packing the shell
+		updateInstallationShell.pack();
+		
+		//Centering the window
+		Rectangle screenBounds = UIHelper.getDisplay().getPrimaryMonitor().getBounds();
+		Rectangle windowBounds = updateInstallationShell.getBounds();
+		updateInstallationShell.setLocation(screenBounds.x + (screenBounds.width - windowBounds.width) / 2, screenBounds.y + (screenBounds.height - windowBounds.height) / 2);
+		
+		//Opening the shell
+		updateInstallationShell.open();
+		updateInstallationShell.forceActive();
 	}
 }
