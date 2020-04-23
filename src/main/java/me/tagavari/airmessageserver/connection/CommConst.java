@@ -3,7 +3,7 @@ package me.tagavari.airmessageserver.connection;
 public class CommConst {
 	//Transmission header values
 	public static final int mmCommunicationsVersion = 4;
-	public static final int mmCommunicationsSubVersion = 6;
+	public static final int mmCommunicationsSubVersion = 7;
 	
 	//NHT - Net header type
 	public static final int nhtClose = -1;
@@ -31,8 +31,6 @@ public class CommConst {
 	
 	public static final String stringCharset = "UTF-8";
 	public static final String hashAlgorithm = "MD5";
-	@Deprecated
-	public static final String transmissionCheck = "4yAIlVK0Ce_Y7nv6at_hvgsFtaMq!lZYKipV40Fp5E%VSsLSML";
 	
 	//NST - Net subtype
 	public static final int nstAuthenticationOK = 0;
@@ -62,4 +60,6 @@ public class CommConst {
 	public static final long keepAliveMillis = 30 * 60 * 1000; //30 minutes
 	
 	public static final long maxPacketAllocation = 50 * 1024 * 1024; //50 MB
+	
+	public static final int transmissionCheckLength = 32;
 }

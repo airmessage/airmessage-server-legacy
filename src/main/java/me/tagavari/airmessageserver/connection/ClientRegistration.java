@@ -1,5 +1,6 @@
 package me.tagavari.airmessageserver.connection;
 
+import java.util.Arrays;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -37,6 +38,14 @@ public class ClientRegistration {
 	 */
 	private boolean clientRegistered = false;
 	
+	/**
+	 * The current awaited transmission check for this client
+	 */
+	private byte[] transmissionCheck;
+	
+	/**
+	 * Keeps track of whether this client is connected or not
+	 */
 	private final AtomicBoolean isConnected = new AtomicBoolean(true);
 	
 	//Creating the timer values
@@ -142,6 +151,16 @@ public class ClientRegistration {
 		} finally {
 			pingResponseTimerLock.unlock();
 		}
+	}
+	
+	public void setTransmissionCheck(byte[] value) {
+		transmissionCheck = value;
+	}
+	
+	public boolean checkClearTransmissionCheck(byte[] value) {
+		boolean result = Arrays.equals(transmissionCheck, value);
+		transmissionCheck = null;
+		return result;
 	}
 	
 	public boolean isConnected() {

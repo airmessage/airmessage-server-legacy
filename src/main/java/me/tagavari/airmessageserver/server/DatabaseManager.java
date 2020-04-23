@@ -800,7 +800,7 @@ public class DatabaseManager {
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
 		//Building the base query
-		List<SelectField<?>> fields = new ArrayList<>(Arrays.asList(DSL.field("message.ROWID", Long.class), DSL.field("message.guid", String.class), DSL.field("message.date", Long.class), DSL.field("message.item_type", Integer.class), DSL.field("message.group_action_type", Integer.class), DSL.field("message.text", String.class), DSL.field("message.error", Integer.class), DSL.field("message.date_read", Long.class), DSL.field("message.is_from_me", Boolean.class), DSL.field("message.group_title", String.class),
+		List<SelectField<?>> fields = new ArrayList<>(Arrays.asList(DSL.field("message.ROWID", Long.class), DSL.field("message.guid", String.class), DSL.field("message.date", Long.class), DSL.field("message.item_type", Integer.class), DSL.field("message.group_action_type", Integer.class), DSL.field("message.text", String.class), DSL.field("message.subject", String.class), DSL.field("message.error", Integer.class), DSL.field("message.date_read", Long.class), DSL.field("message.is_from_me", Boolean.class), DSL.field("message.group_title", String.class),
 				DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.is_delivered", Boolean.class),
 				DSL.field("sender_handle.id", String.class), DSL.field("other_handle.id", String.class),
 				DSL.field("chat.guid", String.class)));
@@ -1046,6 +1046,7 @@ public class DatabaseManager {
 					text = text.replace(Character.toString('\uFFFD'), "");
 					if(text.isEmpty()) text = null;
 				}
+				String subject = generalMessageRecords.getValue(i, DSL.field("message.subject", String.class));
 				String sendStyle = dbSupportsSendStyle ? generalMessageRecords.getValue(i, DSL.field("message.expressive_send_style_id", String.class)) : null;
 				int stateCode = determineMessageState(generalMessageRecords.getValue(i, DSL.field("message.is_sent", Boolean.class)),
 						generalMessageRecords.getValue(i, DSL.field("message.is_delivered", Boolean.class)),
@@ -1097,7 +1098,7 @@ public class DatabaseManager {
 				}
 				
 				//Adding the conversation item
-				conversationItems.add(new Blocks.MessageInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), text, sender, files, new ArrayList<>(), new ArrayList<>(), sendStyle, stateCode, errorCode, Main.getTimeHelper().toUnixTime(dateRead)));
+				conversationItems.add(new Blocks.MessageInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), text, subject, sender, files, new ArrayList<>(), new ArrayList<>(), sendStyle, stateCode, errorCode, Main.getTimeHelper().toUnixTime(dateRead)));
 			}
 			//Otherwise checking if the item is a group action
 			else if(itemType == 1) {

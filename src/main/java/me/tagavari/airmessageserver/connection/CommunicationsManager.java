@@ -8,6 +8,7 @@ import org.jooq.impl.DSL;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Timer;
@@ -16,6 +17,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
 public class CommunicationsManager implements DataProxyListener<ClientRegistration> {
+	//Creating the constants
+	private static final SecureRandom secureRandom = new SecureRandom();
+	
 	//Creating the communications values
 	protected final DataProxy<ClientRegistration> dataProxy;
 	
@@ -106,8 +110,20 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	
 	@Override
 	public void onOpen(ClientRegistration client) {
+		//Generating the transmission check
+		byte[] transmissionCheck = new byte[CommConst.transmissionCheckLength];
+		secureRandom.nextBytes(transmissionCheck);
+		client.setTransmissionCheck(transmissionCheck);
+		
+		//Creating the info data
+		byte[] infoData = ByteBuffer.allocate(Integer.SIZE * 2 / 8 + CommConst.transmissionCheckLength)
+				.putInt(CommConst.mmCommunicationsVersion)
+				.putInt(CommConst.mmCommunicationsSubVersion)
+				.put(transmissionCheck)
+				.array();
+		
 		//Sending the server version
-		dataProxy.sendMessage(client, CommConst.nhtInformation, ByteBuffer.allocate(Integer.SIZE * 2 / 8).putInt(CommConst.mmCommunicationsVersion).putInt(CommConst.mmCommunicationsSubVersion).array());
+		dataProxy.sendMessage(client, CommConst.nhtInformation, infoData);
 		
 		//Starting the handshake expiry timer
 		client.startHandshakeExpiryTimer(CommConst.handshakeTimeout, () -> initiateClose(client));
@@ -445,11 +461,11 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			client.cancelHandshakeExpiryTimer();
 			
 			//Reading the data
-			String transmissionWord;
+			byte[] transmissionCheck;
 			try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
 				Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
 				dataSec.decrypt(PreferencesManager.getPrefPassword());
-				transmissionWord = new String(dataSec.data, CommConst.stringCharset);
+				transmissionCheck = dataSec.data;
 			} catch(IOException | RuntimeException | GeneralSecurityException exception) {
 				//Logging the exception
 				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
@@ -462,7 +478,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			}
 			
 			//Validating the transmission
-			if(CommConst.transmissionCheck.equals(transmissionWord)) {
+			if(client.checkClearTransmissionCheck(transmissionCheck)) {
 				//Marking the client as registered
 				client.setClientRegistered(true);
 				

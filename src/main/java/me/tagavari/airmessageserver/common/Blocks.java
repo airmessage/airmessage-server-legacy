@@ -101,6 +101,7 @@ public class Blocks {
 		public static final int errorCodeUnregistered = 3; //Not registered with iMessage
 		
 		public String text;
+		public String subject;
 		public String sender;
 		public List<AttachmentInfo> attachments;
 		public List<StickerModifierInfo> stickers;
@@ -110,12 +111,13 @@ public class Blocks {
 		public int errorCode;
 		public long dateRead;
 		
-		public MessageInfo(long serverID, String guid, String chatGuid, long date, String text, String sender, List<AttachmentInfo> attachments, List<StickerModifierInfo> stickers, List<TapbackModifierInfo> tapbacks, String sendEffect, int stateCode, int errorCode, long dateRead) {
+		public MessageInfo(long serverID, String guid, String chatGuid, long date, String text, String subject, String sender, List<AttachmentInfo> attachments, List<StickerModifierInfo> stickers, List<TapbackModifierInfo> tapbacks, String sendEffect, int stateCode, int errorCode, long dateRead) {
 			//Calling the super constructor
 			super(serverID, guid, chatGuid, date);
 			
 			//Setting the variables
 			this.text = text;
+			this.subject = subject;
 			this.sender = sender;
 			this.attachments = attachments;
 			this.stickers = stickers;
@@ -133,6 +135,8 @@ public class Blocks {
 			
 			stream.writeBoolean(text != null);
 			if(text != null) stream.writeUTF(text);
+			stream.writeBoolean(subject != null);
+			if(subject != null) stream.writeUTF(subject);
 			stream.writeBoolean(sender != null);
 			if(sender != null) stream.writeUTF(sender);
 			stream.writeInt(attachments.size());
