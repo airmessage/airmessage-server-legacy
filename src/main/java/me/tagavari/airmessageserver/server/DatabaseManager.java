@@ -4,6 +4,7 @@ import io.sentry.Sentry;
 import me.tagavari.airmessageserver.common.Blocks;
 import me.tagavari.airmessageserver.connection.ClientRegistration;
 import me.tagavari.airmessageserver.connection.CommConst;
+import me.tagavari.airmessageserver.connection.CommunicationsManager;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
 import org.jooq.*;
 import org.jooq.impl.DSL;
@@ -25,6 +26,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
+import java.util.zip.GZIPInputStream;
 
 public class DatabaseManager {
 	//Creating the reference variables
@@ -215,22 +217,8 @@ public class DatabaseManager {
 				
 				//Checking if there are new messages
 				if(dataFetchResult != null && !dataFetchResult.conversationItems.isEmpty()) {
-					try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
-						ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-						//Serializing the data
-						outSec.writeInt(dataFetchResult.conversationItems.size());
-						for(Blocks.ConversationItem item : dataFetchResult.conversationItems) item.writeObject(outSec);
-						outSec.flush();
-						
-						new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
-						out.flush();
-						
-						//Sending the data
-						ConnectionManager.activeProxy().sendMessage(null, CommConst.nhtMessageUpdate, trgt.toByteArray());
-					} catch(IOException | GeneralSecurityException exception) {
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						Sentry.capture(exception);
-					}
+					//Sending the data
+					ConnectionManager.getCommunicationsManager().sendMessageUpdate(dataFetchResult.conversationItems);
 				}
 				
 				//Updating the message states
@@ -390,23 +378,8 @@ public class DatabaseManager {
 		
 		//Checking if the connection is registered and is still open
 		if(request.connection.isConnected()) {
-			//Preparing to serialize the data
-			try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
-				ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-				//Serializing the data
-				outSec.writeInt(conversationInfoList.size());
-				for(Blocks.ConversationInfo item : conversationInfoList) item.writeObject(outSec);
-				outSec.flush();
-				
-				new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
-				out.flush();
-				
-				//Sending the conversation info
-				ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtConversationUpdate, trgt.toByteArray());
-			} catch(IOException | GeneralSecurityException exception) {
-				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-				Sentry.capture(exception);
-			}
+			//Sending the conversation info
+			ConnectionManager.getCommunicationsManager().sendConversationInfo(request.connection, conversationInfoList);
 		} else {
 			Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
 		}
@@ -462,9 +435,10 @@ public class DatabaseManager {
 			int bytesRead;
 			boolean moreDataRead;
 			int requestIndex = 0;
+			long fileLength = file.length();
 			
 			//Streaming the file
-			try(FileInputStream inputStream = new FileInputStream(file)) {
+			try(InputStream inputStream = new BufferedInputStream(new FileInputStream(file))) {
 				//Attempting to read the data
 				if((bytesRead = inputStream.read(buffer)) != -1) {
 					do {
@@ -474,28 +448,9 @@ public class DatabaseManager {
 						//Reading the next chunk
 						moreDataRead = (bytesRead = inputStream.read(buffer)) != -1;
 						
-						//Checking if the connection is ready
-						if(request.connection.isClientRegistered() && request.connection.isConnected()) {
-							//Preparing to serialize the data
-							try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos);
-								ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-								out.writeShort(request.requestID); //Request ID
-								out.writeInt(requestIndex); //Request index
-								if(requestIndex == 0) out.writeLong(file.length()); //Total file length
-								out.writeBoolean(!moreDataRead); //Is last
-								
-								outSec.writeUTF(request.fileGuid); //File GUID
-								outSec.writeInt(compressedBuffer.length); //Compressed chunk data
-								outSec.write(compressedBuffer);
-								outSec.flush();
-								
-								new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
-								out.flush();
-								
-								//Sending the data
-								ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtAttachmentReq, bos.toByteArray());
-								//if(request.connection.isOpen()) request.connection.send(bos.toByteArray());
-							}
+						//Sending the data
+						if(request.connection.isConnected()) {
+							ConnectionManager.getCommunicationsManager().sendFileChunk(request.connection, request.requestID, requestIndex, fileLength, !moreDataRead, request.fileGuid, compressedBuffer);
 						} else {
 							Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
 							break;
@@ -517,21 +472,15 @@ public class DatabaseManager {
 				//Updating the state
 				succeeded = false;
 				errorCode = CommConst.nstAttachmentReqIO;
-			} catch (GeneralSecurityException exception) {
-				//Logging the error
-				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-				Sentry.capture(exception);
-				
-				//Updating the state
-				succeeded = false;
-				errorCode = CommConst.nstAttachmentReqIO;
 			}
 		}
 		
 		//Checking if the attempt was a failure
 		if(!succeeded) {
 			//Sending a reply
-			if(request.connection.isConnected()) ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtAttachmentReqFail, ByteBuffer.allocate(Short.SIZE / 8 + Integer.SIZE / 8).putShort(request.requestID).putInt(errorCode).array());
+			if(request.connection.isConnected()) {
+				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, errorCode, null);
+			}
 		}
 	}
 	
@@ -540,21 +489,7 @@ public class DatabaseManager {
 			//Returning their data
 			DataFetchResult result = fetchData(connection, request.filter, null);
 			if(request.connection.isConnected()) {
-				//Serializing the data
-				try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
-					ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-					outSec.writeInt(result.conversationItems.size());
-					for(Blocks.ConversationItem item : result.conversationItems) item.writeObject(outSec);
-					outSec.flush();
-					
-					new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
-					out.flush();
-					
-					//Sending the data
-					//request.connection.sendDataSync(request.messageResponseType, trgt.toByteArray());
-					ConnectionManager.activeProxy().sendMessage(request.connection, request.messageResponseType, trgt.toByteArray());
-					//NetServerManager.sendPacket(request.connection, request.messageResponseType, bos.toByteArray());
-				}
+				ConnectionManager.getCommunicationsManager().sendMessageUpdate(request.connection, CommConst.nhtMessageUpdate, result.conversationItems);
 			}
 		} catch(IOException | GeneralSecurityException | SQLException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
@@ -624,31 +559,8 @@ public class DatabaseManager {
 			//Returning if the connection is no longer open
 			if(!request.connection.isConnected()) return;
 			
-			//Serializing the data
-			try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
-				ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-				//Writing the request ID
-				out.writeShort(request.requestID);
-				
-				//Writing the packet index
-				out.writeInt(0);
-				
-				//Writing the conversation list
-				outSec.writeInt(conversationInfoList.size());
-				for(Blocks.ConversationInfo item : conversationInfoList) item.writeObject(outSec);
-				
-				//Writing the message count
-				outSec.writeInt(messagesCount);
-				
-				outSec.flush();
-				
-				//Encrypting and writing the data
-				new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out);
-				out.flush();
-				
-				//Sending the data
-				ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtMassRetrieval, trgt.toByteArray());
-			}
+			//Sending the conversations and message count
+			ConnectionManager.getCommunicationsManager().sendMassRetrievalInitial(request.connection, request.requestID, conversationInfoList, messagesCount);
 			
 			//Reading the message data
 			fetchData(connection, request.restrictMessages ? () -> DSL.field("message.date").greaterOrEqual(lTimeSinceMessages) : null, new DataFetchListener(request.downloadAttachments) {
@@ -664,35 +576,9 @@ public class DatabaseManager {
 						return;
 					}
 					
-					//Serializing the data
-					try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
-						ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-						//Writing the request ID
-						out.writeShort(request.requestID);
-						
-						//Writing the packet index
-						out.writeInt(packetIndex++);
-						
-						//Writing the messages list
-						outSec.writeInt(conversationItems.size());
-						for(Blocks.ConversationItem item : conversationItems) item.writeObject(outSec);
-						
-						outSec.flush();
-						
-						//Encrypting and writing the data
-						new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out);
-						out.flush();
-						
-						//Sending the data
-						ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtMassRetrieval, trgt.toByteArray());
-					} catch(IOException | GeneralSecurityException exception) {
-						//Logging the exception
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						Sentry.capture(exception);
-						
-						//Cancelling the fetch
-						cancel();
-					}
+					//Sending the message group
+					boolean result = ConnectionManager.getCommunicationsManager().sendMassRetrievalMessages(request.connection, request.requestID, packetIndex++, conversationItems);
+					if(!result) cancel(); //Cancelling the fetch if the message couldn't be sent
 				}
 				
 				@Override
@@ -722,26 +608,9 @@ public class DatabaseManager {
 									moreDataRead = (bytesRead = inputStream.read(buffer)) != -1;
 									
 									//Checking if the connection is ready
-									if(request.connection.isClientRegistered() && request.connection.isConnected()) {
-										//Preparing to serialize the data
-										try(ByteArrayOutputStream bos = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(bos);
-											ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-											out.writeShort(request.requestID); //Request ID
-											out.writeInt(requestIndex); //Request index
-											if(requestIndex == 0) out.writeUTF(attachment.fileName); //File name
-											out.writeBoolean(!moreDataRead); //Is last
-											
-											outSec.writeUTF(attachment.guid); //File GUID
-											outSec.writeInt(compressedBuffer.length); //Compressed chunk data
-											outSec.write(compressedBuffer);
-											outSec.flush();
-											
-											new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
-											out.flush();
-											
-											//Sending the data
-											ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtMassRetrievalFile, bos.toByteArray());
-										}
+									if(request.connection.isConnected()) {
+										//Sending the data
+										ConnectionManager.getCommunicationsManager().sendMassRetrievalFileChunk(request.connection, request.requestID, requestIndex, attachment.fileName, !moreDataRead, attachment.guid, compressedBuffer);
 									} else {
 										Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
 										break;
@@ -751,7 +620,7 @@ public class DatabaseManager {
 									requestIndex++;
 								} while(moreDataRead);
 							}
-						} catch(IOException | GeneralSecurityException exception) {
+						} catch(IOException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							Sentry.capture(exception);
 						}
@@ -769,7 +638,7 @@ public class DatabaseManager {
 					if(!request.connection.isConnected()) return;
 					
 					//Sending the finish message
-					ConnectionManager.activeProxy().sendMessage(request.connection, CommConst.nhtMassRetrievalFinish, new byte[0]);
+					ConnectionManager.getCommunicationsManager().sendMessageHeaderOnly(request.connection, CommConst.nhtMassRetrievalFinish, true);
 				}
 			});
 		} catch(IOException | OutOfMemoryError | RuntimeException | SQLException | GeneralSecurityException exception) {
@@ -1208,22 +1077,8 @@ public class DatabaseManager {
 		//Returning if there are no modifiers to send
 		if(modifierList.isEmpty()) return;
 
-		//Serializing the data
-		try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
-			ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-			outSec.writeInt(modifierList.size());
-			for(Blocks.ModifierInfo item : modifierList) item.writeObject(outSec);
-			outSec.flush();
-			
-			new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
-			out.flush();
-			
-			//Sending the data
-			ConnectionManager.activeProxy().sendMessage(null, CommConst.nhtModifierUpdate, trgt.toByteArray());
-		} catch(IOException | GeneralSecurityException exception) {
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			Sentry.capture(exception);
-		}
+		//Sending the data
+		ConnectionManager.getCommunicationsManager().sendModifierUpdate(modifierList);
 	}
 	
 	private void indexTargetAvailability(Connection connection) throws SQLException {
@@ -1329,9 +1184,9 @@ public class DatabaseManager {
 	
 	public static class ConversationInfoRequest {
 		final ClientRegistration connection;
-		final List<String> conversationsGUIDs;
+		final String[] conversationsGUIDs;
 		
-		public ConversationInfoRequest(ClientRegistration connection, List<String> conversationsGUIDs) {
+		public ConversationInfoRequest(ClientRegistration connection, String[] conversationsGUIDs) {
 			//Setting the values
 			this.connection = connection;
 			this.conversationsGUIDs = conversationsGUIDs;

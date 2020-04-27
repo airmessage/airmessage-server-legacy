@@ -5,24 +5,32 @@ import io.sentry.event.UserBuilder;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
 import me.tagavari.airmessageserver.connection.DataProxy;
 import me.tagavari.airmessageserver.connection.direct.DataProxyTCP;
+import me.tagavari.airmessageserver.exception.KeychainPermissionException;
 
 import javax.swing.*;
 import java.io.*;
 import java.nio.file.Files;
+import java.security.SecureRandom;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.ResourceBundle;
 import java.util.logging.*;
+import java.util.stream.Collectors;
 
 public class Main {
+	private static final SecureRandom secureRandom = new SecureRandom();
+	
 	//Creating the reference values
 	public static final String PREFIX_DEBUG = "DEBUG LOG: ";
-	public static final int serverStateStarting = 0;
-	public static final int serverStateRunning = 1;
-	public static final int serverStateFailedDatabase = 2;
-	public static final int serverStateFailedServerPort = 3;
-	public static final int serverStateFailedServerInternal = 4;
+	public static final int serverStateSetup = 0;
+	public static final int serverStateStarting = 1;
+	public static final int serverStateRunning = 2;
+	public static final int serverStateFailedDatabase = 3;
+	public static final int serverStateFailedServerPort = 4;
+	public static final int serverStateFailedServerInternal = 5;
+	
+	private static final int databaseScanFrequency = 2 * 1000;
 	
 	private static final File logFile = new File(Constants.applicationSupportDir, "logs/latest.log");
 	
@@ -30,8 +38,9 @@ public class Main {
 	private static boolean debugMode = false;
 	private static TimeHelper timeHelper;
 	private static Logger logger;
+	private static String deviceName;
 	
-	private static int serverState = serverStateStarting;
+	private static int serverState = serverStateSetup;
 	
 	public static void main(String[] args) throws IOException {
 		//Processing the arguments
@@ -62,6 +71,9 @@ public class Main {
 			logger.addHandler(handler);
 		}
 		
+		//Reading the device name
+		deviceName = readDeviceName();
+		
 		if(isDebugMode()) {
 			getLogger().log(Level.INFO, "Server running in debug mode");
 		} else {
@@ -76,18 +88,29 @@ public class Main {
 			Sentry.getContext().addTag("system_version", System.getProperty("os.version"));
 		}
 		
+		//Logging the startup messages
+		getLogger().info("Starting AirMessage server version " + Constants.SERVER_VERSION);
+		
 		//Returning if the system is not valid
 		if(!runSystemCheck()) return;
 		
 		//Preparing the preferences
-		if(!PreferencesManager.loadPreferences()) return;
+		{
+			boolean result;
+			do {
+				result = PreferencesManager.initializePreferences();
+			} while(!result);
+		}
+		
+		//Starting the update checker
+		if(PreferencesManager.getPrefAutoCheckUpdates()) UpdateManager.startUpdateChecker();
 		
 		//Initializing the UI helper
 		UIHelper.initialize();
 		
 		//Opening the intro window
-		if(PreferencesManager.checkFirstRun()) UIHelper.openIntroWindow();
-		else runPermissionCheck(); //The permission check will be run when the user closes the window
+		if(PreferencesManager.getPrefAccountConfirmed()) runPermissionCheck();
+		else UIHelper.openIntroWindow(); //The permission check will be run when the user closes the window
 		
 		//Setting up the system tray
 		SystemTrayManager.setupSystemTray();
@@ -99,17 +122,10 @@ public class Main {
 		//Hiding JOOQ's splash
 		System.setProperty("org.jooq.no-logo", "true");
 		
-		//Logging the startup messages
-		getLogger().info("Starting AirMessage server version " + Constants.SERVER_VERSION);
-		
-		//Setting the data proxy
-		ConnectionManager.assignDataProxy();
-		
-		//Starting the server
-		startServer();
-		
-		//Starting the update checker
-		if(PreferencesManager.getPrefAutoCheckUpdates()) UpdateManager.startUpdateChecker();
+		if(PreferencesManager.getPrefAccountConfirmed()) {
+			//Starting the server
+			startServer();
+		}
 		
 		//Adding a shutdown hook
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -127,6 +143,9 @@ public class Main {
 	}
 	
 	static void startServer() {
+		//Setting the data proxy
+		ConnectionManager.assignDataProxy();
+		
 		//Updating the server state
 		setServerState(serverStateStarting);
 		SystemTrayManager.updateStatusMessage();
@@ -136,8 +155,8 @@ public class Main {
 		//if(!result) System.exit(1);
 		
 		//Starting the database scanner
-		{
-			boolean result = DatabaseManager.start((int) (PreferencesManager.getPrefScanFrequency() * 1000));
+		if(DatabaseManager.getInstance() == null) {
+			boolean result = DatabaseManager.start(databaseScanFrequency);
 			if(!result) {
 				//Updating the server state
 				setServerState(serverStateFailedDatabase);
@@ -156,12 +175,12 @@ public class Main {
 	}
 	
 	static void reinitializeServer() {
+		//Returning if the database manager isn't running
+		if(DatabaseManager.getInstance() == null) return;
+		
 		//Updating the server state
 		setServerState(serverStateStarting);
 		SystemTrayManager.updateStatusMessage();
-		
-		//Returning if the database manager isn't running
-		if(DatabaseManager.getInstance() == null) return;
 		
 		//Disconnecting the server if it's currently running
 		ConnectionManager.stop();
@@ -250,6 +269,10 @@ public class Main {
 		return logger;
 	}
 	
+	public static SecureRandom getSecureRandom() {
+		return secureRandom;
+	}
+	
 	public static int getServerState() {
 		return serverState;
 	}
@@ -260,5 +283,32 @@ public class Main {
 	
 	public static ResourceBundle resources() {
 		return ResourceBundle.getBundle("me.tagavari.airmessageserver.server.Translations");
+	}
+	
+	private static String readDeviceName() {
+		try {
+			Process process = Runtime.getRuntime().exec(new String[]{"scutil", "--get", "ComputerName"});
+			
+			if(process.waitFor() == 0) {
+				//Reading and returning the input
+				BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
+				return in.lines().collect(Collectors.joining());
+			} else {
+				//Logging the error
+				try(BufferedReader in = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+					String errorOutput = in.lines().collect(Collectors.joining());
+					Main.getLogger().log(Level.WARNING, "Unable to read device name: " + errorOutput);
+				}
+			}
+		} catch(IOException | InterruptedException exception) {
+			//Printing the stack trace
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+		}
+		
+		return null;
+	}
+	
+	public static String getDeviceName() {
+		return deviceName;
 	}
 }

@@ -28,8 +28,8 @@ public class ClientSocket extends ClientRegistration {
 		//Initializing the threads and streams
 		readerThread = new ReaderThread(new DataInputStream(socket.getInputStream()), new ReaderThreadListener() {
 			@Override
-			public void processData(int type, byte[] data) {
-				listener.processData(ClientSocket.this, type, data);
+			public void processData(byte[] data, boolean isEncrypted) {
+				listener.processData(ClientSocket.this, data, isEncrypted);
 			}
 			
 			@Override
@@ -44,12 +44,12 @@ public class ClientSocket extends ClientRegistration {
 		Main.getLogger().info("Client connected from " + socket.getInetAddress().getHostName() + " (" + socket.getInetAddress().getHostAddress() + ")");
 	}
 	
-	synchronized boolean sendDataSync(int messageType, byte[] data) {
+	synchronized boolean sendDataSync(byte[] data, boolean isEncrypted) {
 		if(!isConnected()) return false;
 		
 		try {
-			outputStream.writeInt(messageType);
 			outputStream.writeInt(data.length);
+			outputStream.writeBoolean(isEncrypted);
 			outputStream.write(data);
 			outputStream.flush();
 			

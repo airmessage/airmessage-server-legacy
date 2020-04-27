@@ -19,6 +19,7 @@ public class SystemTrayManager {
 	//private static TrayIcon trayIcon;
 	private static MenuItem miStatus;
 	private static MenuItem miStatusSub;
+	private static MenuItem miPrefs;
 	
 	static {
 		//Creating the shell
@@ -36,7 +37,7 @@ public class SystemTrayManager {
 		
 		//Server status
 		miStatus = new MenuItem(menu, SWT.PUSH);
-		miStatus.setText(Main.resources().getString("message.status.starting"));
+		miStatus.setText(Main.resources().getString("message.status.waiting"));
 		miStatus.setEnabled(false);
 		
 		//Clients connected
@@ -49,9 +50,10 @@ public class SystemTrayManager {
 		new MenuItem(menu, SWT.SEPARATOR);
 		
 		//Preferences
-		MenuItem miPrefs = new MenuItem(menu, SWT.PUSH);
+		miPrefs = new MenuItem(menu, SWT.PUSH);
+		miPrefs.setEnabled(false);
 		miPrefs.setText(Main.resources().getString("action.preferences"));
-		miPrefs.addListener(SWT.Selection, event -> PreferencesManager.openWindow());
+		miPrefs.addListener(SWT.Selection, event -> PreferencesUI.openWindow());
 		
 		//Check for updates
 		MenuItem miUpdate = new MenuItem(menu, SWT.PUSH);
@@ -125,34 +127,43 @@ public class SystemTrayManager {
 	}
 	
 	public static void updateStatusMessage() {
+		int state = Main.getServerState();
+		
 		//Getting the message
-		switch(Main.getServerState()) {
-			case Main.serverStateStarting:
+		switch(state) {
+			case Main.serverStateSetup -> {
+				miStatus.setText(Main.resources().getString("message.status.waiting"));
+				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), 0));
+				miStatusSub.setEnabled(false);
+			}
+			case Main.serverStateStarting -> {
 				miStatus.setText(Main.resources().getString("message.status.starting"));
 				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), 0));
 				miStatusSub.setEnabled(false);
-				break;
-			case Main.serverStateRunning:
+			}
+			case Main.serverStateRunning -> {
 				miStatus.setText(Main.resources().getString("message.status.running"));
 				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), ConnectionManager.getConnectionCount()));
 				miStatusSub.setEnabled(false);
-				break;
-			case Main.serverStateFailedDatabase:
+			}
+			case Main.serverStateFailedDatabase -> {
 				miStatus.setText(Main.resources().getString("message.status.error.database"));
 				miStatusSub.setText(Main.resources().getString("action.retry"));
 				miStatusSub.setEnabled(true);
-				break;
-			case Main.serverStateFailedServerPort:
+			}
+			case Main.serverStateFailedServerPort -> {
 				miStatus.setText(Main.resources().getString("message.status.error.port"));
 				miStatusSub.setText(Main.resources().getString("action.retry"));
 				miStatusSub.setEnabled(true);
-				break;
-			case Main.serverStateFailedServerInternal:
+			}
+			case Main.serverStateFailedServerInternal -> {
 				miStatus.setText(Main.resources().getString("message.status.error.internal"));
 				miStatusSub.setText(Main.resources().getString("action.retry"));
 				miStatusSub.setEnabled(true);
-				break;
+			}
 		}
+		
+		miPrefs.setEnabled(state != Main.serverStateSetup);
 	}
 	
 	public static void updateConnectionsMessage() {

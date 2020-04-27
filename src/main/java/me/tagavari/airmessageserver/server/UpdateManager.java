@@ -138,13 +138,18 @@ class UpdateManager {
 		}
 	};
 	private static ScheduledFuture<?> handleUpdateCheck = null;
+	private static boolean updateCheckerRunning = false;
 	
 	static void startUpdateChecker() {
+		if(updateCheckerRunning) return;
 		handleUpdateCheck = scheduler.scheduleAtFixedRate(runUpdateCheck, 0, 1, TimeUnit.DAYS);
+		updateCheckerRunning = true;
 	}
 	
 	static void stopUpdateChecker() {
+		if(!updateCheckerRunning) return;
 		if(handleUpdateCheck != null) handleUpdateCheck.cancel(false);
+		updateCheckerRunning = false;
 	}
 	
 	private static URL makeURL(String target) {

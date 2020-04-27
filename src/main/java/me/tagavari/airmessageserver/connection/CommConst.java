@@ -2,25 +2,26 @@ package me.tagavari.airmessageserver.connection;
 
 public class CommConst {
 	//Transmission header values
-	public static final int mmCommunicationsVersion = 4;
-	public static final int mmCommunicationsSubVersion = 7;
+	public static final int mmCommunicationsVersion = 5;
+	public static final int mmCommunicationsSubVersion = 1;
 	
 	//NHT - Net header type
 	public static final int nhtClose = -1;
 	public static final int nhtPing = -2;
 	public static final int nhtPong = -3;
+	
 	public static final int nhtInformation = 0;
 	public static final int nhtAuthentication = 1;
 	public static final int nhtMessageUpdate = 2;
 	public static final int nhtTimeRetrieval = 3;
 	public static final int nhtMassRetrieval = 4;
-	public static final int nhtMassRetrievalFinish = 10;
-	public static final int nhtMassRetrievalFile = 11;
-	public static final int nhtConversationUpdate = 5;
-	public static final int nhtModifierUpdate = 6;
-	public static final int nhtAttachmentReq = 7;
-	public static final int nhtAttachmentReqConfirm = 8;
-	public static final int nhtAttachmentReqFail = 9;
+	public static final int nhtMassRetrievalFile = 5;
+	public static final int nhtMassRetrievalFinish = 6;
+	public static final int nhtConversationUpdate = 7;
+	public static final int nhtModifierUpdate = 8;
+	public static final int nhtAttachmentReq = 9;
+	public static final int nhtAttachmentReqConfirm = 10;
+	public static final int nhtAttachmentReqFail = 11;
 	public static final int nhtCreateChat = 12;
 	
 	public static final int nhtSendResult = 100;
@@ -29,7 +30,6 @@ public class CommConst {
 	public static final int nhtSendFileExisting = 103;
 	public static final int nhtSendFileNew = 104;
 	
-	public static final String stringCharset = "UTF-8";
 	public static final String hashAlgorithm = "MD5";
 	
 	//NST - Net subtype

@@ -27,9 +27,9 @@ public interface DataProxyListener<C> {
 	
 	/**
 	 * Called when a message is received
+	 * @param wasEncrypted True if this message was encrypted during transit (and probably contains sensitive content)
 	 * @param client The client that sent the message
-	 * @param type The type of message
 	 * @param content The message's body
 	 */
-	void onMessage(C client, int type, byte[] content);
+	void onMessage(C client, byte[] content, boolean wasEncrypted);
 }

@@ -1,5 +1,7 @@
 package me.tagavari.airmessageserver.common;
 
+import org.msgpack.core.MessageBufferPacker;
+
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
@@ -16,7 +18,7 @@ import java.util.List;
 
 public class Blocks {
 	public interface Block {
-		void writeObject(ObjectOutputStream stream) throws IOException;
+		void writeObject(MessageBufferPacker packer) throws IOException;
 	}
 	
 	public static class ConversationInfo implements Block {
@@ -47,16 +49,15 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(ObjectOutputStream stream) throws IOException {
+		public void writeObject(MessageBufferPacker packer) throws IOException {
 			//Writing the fields
-			stream.writeUTF(guid);
-			stream.writeBoolean(available);
+			packer.packString(guid);
+			packer.packBoolean(available);
 			if(available) {
-				stream.writeUTF(service);
-				stream.writeBoolean(name != null);
-				if(name != null) stream.writeUTF(name);
-				stream.writeInt(members.length);
-				for(String member : members) stream.writeUTF(member);
+				packer.packString(service);
+				packString(packer, name);
+				packer.packArrayHeader(members.length);
+				for(String member : members) packer.packString(member);
 			}
 		}
 	}
@@ -75,13 +76,13 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(ObjectOutputStream stream) throws IOException {
-			stream.writeInt(getItemType());
+		public void writeObject(MessageBufferPacker packer) throws IOException {
+			packer.packInt(getItemType());
 			
-			stream.writeLong(serverID);
-			stream.writeUTF(guid);
-			stream.writeUTF(chatGuid);
-			stream.writeLong(date);
+			packer.packLong(serverID);
+			packer.packString(guid);
+			packer.packString(chatGuid);
+			packer.packLong(date);
 		}
 		
 		abstract int getItemType();
@@ -129,27 +130,23 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(ObjectOutputStream stream) throws IOException {
+		public void writeObject(MessageBufferPacker packer) throws IOException {
 			//Writing the fields
-			super.writeObject(stream);
+			super.writeObject(packer);
 			
-			stream.writeBoolean(text != null);
-			if(text != null) stream.writeUTF(text);
-			stream.writeBoolean(subject != null);
-			if(subject != null) stream.writeUTF(subject);
-			stream.writeBoolean(sender != null);
-			if(sender != null) stream.writeUTF(sender);
-			stream.writeInt(attachments.size());
-			for(AttachmentInfo item : attachments) item.writeObject(stream);
-			stream.writeInt(stickers.size());
-			for(StickerModifierInfo item : stickers) item.writeObject(stream);
-			stream.writeInt(tapbacks.size());
-			for(TapbackModifierInfo item : tapbacks) item.writeObject(stream);
-			stream.writeBoolean(sendEffect != null);
-			if(sendEffect != null) stream.writeUTF(sendEffect);
-			stream.writeInt(stateCode);
-			stream.writeInt(errorCode);
-			stream.writeLong(dateRead);
+			packString(packer, text);
+			packString(packer, subject);
+			packString(packer, sender);
+			packer.packArrayHeader(attachments.size());
+			for(AttachmentInfo item : attachments) item.writeObject(packer);
+			packer.packArrayHeader(stickers.size());
+			for(StickerModifierInfo item : stickers) item.writeObject(packer);
+			packer.packArrayHeader(tapbacks.size());
+			for(TapbackModifierInfo item : tapbacks) item.writeObject(packer);
+			packString(packer, sendEffect);
+			packer.packInt(stateCode);
+			packer.packInt(errorCode);
+			packer.packLong(dateRead);
 		}
 		
 		@Override
@@ -180,15 +177,13 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(ObjectOutputStream stream) throws IOException {
+		public void writeObject(MessageBufferPacker packer) throws IOException {
 			//Writing the fields
-			super.writeObject(stream);
+			super.writeObject(packer);
 			
-			stream.writeBoolean(agent != null);
-			if(agent != null) stream.writeUTF(agent);
-			stream.writeBoolean(other != null);
-			if(other != null) stream.writeUTF(other);
-			stream.writeInt(groupActionType);
+			packString(packer, agent);
+			packString(packer, other);
+			packer.packInt(groupActionType);
 		}
 		
 		@Override
@@ -213,14 +208,12 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(ObjectOutputStream stream) throws IOException {
+		public void writeObject(MessageBufferPacker packer) throws IOException {
 			//Writing the fields
-			super.writeObject(stream);
+			super.writeObject(packer);
 			
-			stream.writeBoolean(agent != null);
-			if(agent != null) stream.writeUTF(agent);
-			stream.writeBoolean(newChatName != null);
-			if(newChatName != null) stream.writeUTF(newChatName);
+			packString(packer, agent);
+			packString(packer, newChatName);
 		}
 		
 		@Override
@@ -246,16 +239,15 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(ObjectOutputStream stream) throws IOException {
-			stream.writeUTF(guid);
-			stream.writeUTF(name);
-			stream.writeBoolean(type != null);
-			if(type != null) stream.writeUTF(type);
-			stream.writeLong(size);
-			stream.writeBoolean(checksum != null);
-			if(checksum != null) {
-				stream.writeInt(checksum.length);
-				stream.write(checksum);
+		public void writeObject(MessageBufferPacker packer) throws IOException {
+			packer.packString(guid);
+			packer.packString(name);
+			packString(packer, type);
+			packer.packLong(size);
+			if(checksum == null) packer.packNil();
+			else {
+				packer.packBinaryHeader(checksum.length);
+				packer.addPayload(checksum);
 			}
 		}
 	}
@@ -268,10 +260,10 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(ObjectOutputStream stream) throws IOException {
-			stream.writeInt(getItemType());
+		public void writeObject(MessageBufferPacker packer) throws IOException {
+			packer.packInt(getItemType());
 			
-			stream.writeUTF(message);
+			packer.packString(message);
 		}
 		
 		abstract int getItemType();
@@ -292,12 +284,12 @@ public class Blocks {
 			this.dateRead = dateRead;
 		}
 		
-		public void writeObject(ObjectOutputStream stream) throws IOException {
+		public void writeObject(MessageBufferPacker packer) throws IOException {
 			//Writing the fields
-			super.writeObject(stream);
+			super.writeObject(packer);
 			
-			stream.writeInt(state);
-			stream.writeLong(dateRead);
+			packer.packInt(state);
+			packer.packLong(dateRead);
 		}
 		
 		@Override
@@ -328,17 +320,16 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(ObjectOutputStream stream) throws IOException {
+		public void writeObject(MessageBufferPacker packer) throws IOException {
 			//Writing the fields
-			super.writeObject(stream);
+			super.writeObject(packer);
 			
-			stream.writeInt(messageIndex);
-			stream.writeUTF(fileGuid);
-			stream.writeBoolean(sender != null);
-			if(sender != null) stream.writeUTF(sender);
-			stream.writeLong(date);
-			stream.writeInt(image.length);
-			stream.write(image);
+			packer.packInt(messageIndex);
+			packer.packString(fileGuid);
+			packString(packer, sender);
+			packer.packLong(date);
+			packer.packBinaryHeader(image.length);
+			packer.addPayload(image);
 		}
 		
 		@Override
@@ -375,14 +366,13 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(ObjectOutputStream stream) throws IOException {
+		public void writeObject(MessageBufferPacker packer) throws IOException {
 			//Writing the fields
-			super.writeObject(stream);
+			super.writeObject(packer);
 			
-			stream.writeInt(messageIndex);
-			stream.writeBoolean(sender != null);
-			if(sender != null) stream.writeUTF(sender);
-			stream.writeInt(code);
+			packer.packInt(messageIndex);
+			packString(packer, sender);
+			packer.packInt(code);
 		}
 		
 		@Override
@@ -391,127 +381,8 @@ public class Blocks {
 		}
 	}
 	
-	public static class EncryptableData implements Block {
-		//Creating the reference values
-		private static final int saltLen = 8; //8 bytes
-		private static final int ivLen = 12; //12 bytes (instead of 16 because of GCM)
-		private static final String keyFactoryAlgorithm = "PBKDF2WithHmacSHA256";
-		private static final String keyAlgorithm = "AES";
-		private static final String cipherTransformation = "AES/GCM/NoPadding";
-		private static final int keyIterationCount = 10000;
-		private static final int keyLength = 128; //128 bits
-		
-		//private static final long serialVersionUID = 0;
-		public byte[] salt;
-		public byte[] iv;
-		public byte[] data;
-		private transient boolean dataEncrypted;
-		
-		public EncryptableData(byte[] data) {
-			this.data = data;
-			this.salt = null;
-			this.iv = null;
-			dataEncrypted = false;
-		}
-		
-		public EncryptableData(byte[] salt, byte[] iv, byte[] data) {
-			this.salt = salt;
-			this.iv = iv;
-			this.data = data;
-			dataEncrypted = true;
-		}
-		
-		public EncryptableData encrypt(String password) throws ClassCastException, GeneralSecurityException {
-			//Returning if the data is already encrypted
-			if(dataEncrypted) return this;
-			
-			//Creating a secure random
-			SecureRandom random = new SecureRandom();
-			
-			//Generating a salt
-			salt = new byte[saltLen];
-			random.nextBytes(salt);
-			
-			//Creating the key
-			SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(keyFactoryAlgorithm);
-			KeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, keyIterationCount, keyLength);
-			SecretKey secretKey = secretKeyFactory.generateSecret(keySpec);
-			SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getEncoded(), keyAlgorithm);
-			
-			//Generating the IV
-			iv = new byte[ivLen];
-			random.nextBytes(iv);
-			GCMParameterSpec gcmSpec = new GCMParameterSpec(keyLength, iv);
-			
-			Cipher cipher = Cipher.getInstance(cipherTransformation);
-			cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, gcmSpec);
-			
-			//Encrypting the data
-			data = cipher.doFinal(data);
-			dataEncrypted = true;
-			
-			//Returning the object
-			return this;
-		}
-		
-		public EncryptableData decrypt(String password) throws ClassCastException, GeneralSecurityException {
-			//Returning if the data is not encrypted
-			if(!dataEncrypted) return this;
-			
-			//Creating the key
-			SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(keyFactoryAlgorithm);
-			KeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, keyIterationCount, keyLength);
-			SecretKey secretKey = secretKeyFactory.generateSecret(keySpec);
-			SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getEncoded(), keyAlgorithm);
-			
-			//Creating the IV
-			GCMParameterSpec gcmSpec = new GCMParameterSpec(keyLength, iv);
-			
-			//Creating the cipher
-			Cipher cipher = Cipher.getInstance(cipherTransformation);
-			cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, gcmSpec);
-			
-			//Deciphering the data
-			data = cipher.doFinal(data);
-			dataEncrypted = false;
-			
-			//Invalidating the encryption information
-			salt = null;
-			iv = null;
-			
-			//Returning the object
-			return this;
-		}
-		
-		@Override
-		public void writeObject(ObjectOutputStream stream) throws IOException {
-			//Throwing an exception if the data isn't encrypted
-			if(!dataEncrypted) throw new RuntimeException("Data serialization attempt before encryption!");
-			
-			//Writing the data
-			stream.write(salt);
-			stream.write(iv);
-			stream.writeInt(data.length);
-			stream.write(data);
-		}
-		
-		public static EncryptableData readObject(ObjectInputStream stream) throws IOException {
-			//Reading the data
-			byte[] salt = new byte[saltLen];
-			stream.readFully(salt);
-			
-			byte[] iv = new byte[ivLen];
-			stream.readFully(iv);
-			
-			byte[] data = new byte[stream.readInt()];
-			stream.readFully(data);
-			
-			//Returning the data
-			return new EncryptableData(salt, iv, data);
-		}
-		
-		public boolean isEncrypted() {
-			return dataEncrypted;
-		}
+	private static void packString(MessageBufferPacker packer, String string) throws IOException {
+		if(string == null) packer.packNil();
+		else packer.packString(string);
 	}
 }

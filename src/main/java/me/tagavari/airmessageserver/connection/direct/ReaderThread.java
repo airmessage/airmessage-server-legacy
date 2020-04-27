@@ -29,23 +29,14 @@ class ReaderThread extends Thread {
 		while(!isInterrupted()) {
 			try {
 				//Reading the header data
-				int messageType = inputStream.readInt();
 				int contentLen = inputStream.readInt();
+				boolean isEncrypted = inputStream.readBoolean();
 				
-				//Adding a breadcrumb
-				{
-					Map<String, String> dataMap = new HashMap<>(2);
-					dataMap.put("Message type", Integer.toString(messageType));
-					dataMap.put("Content length", Integer.toString(contentLen));
-					Sentry.getContext().recordBreadcrumb(new BreadcrumbBuilder().setCategory(Constants.sentryBCatPacket).setMessage("New packet received").setData(dataMap).build());
-				}
-				
-				Main.getLogger().log(Level.FINEST, "New message received: " + messageType + " / " + contentLen);
 				//Checking if the content length is greater than the maximum packet allocation
 				if(contentLen > CommConst.maxPacketAllocation) {
 					//Logging the error
 					Main.getLogger().log(Level.WARNING, "Rejecting large packet (size " + contentLen + ")");
-					Sentry.getContext().recordBreadcrumb(new BreadcrumbBuilder().setCategory(Constants.sentryBCatPacket).setMessage("Rejecting large packet (type: " + messageType + " - size: " + contentLen + ")").build());
+					Sentry.getContext().recordBreadcrumb(new BreadcrumbBuilder().setCategory(Constants.sentryBCatPacket).setMessage("Rejecting large packet (size " + contentLen + ")").build());
 					
 					//Closing the connection
 					listener.cancelConnection(true);
@@ -57,7 +48,7 @@ class ReaderThread extends Thread {
 				inputStream.readFully(content);
 				
 				//Processing the data
-				listener.processData(messageType, content);
+				listener.processData(content, isEncrypted);
 			} catch(OutOfMemoryError exception) {
 				//Logging the error
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);

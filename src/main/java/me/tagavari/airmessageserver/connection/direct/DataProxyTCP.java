@@ -4,10 +4,14 @@ import io.sentry.Sentry;
 import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
 import me.tagavari.airmessageserver.connection.DataProxy;
+import me.tagavari.airmessageserver.connection.EncryptionHelper;
 import me.tagavari.airmessageserver.server.Constants;
 import me.tagavari.airmessageserver.server.Main;
+import me.tagavari.airmessageserver.server.PreferencesManager;
 
+import java.io.IOException;
 import java.net.ServerSocket;
+import java.security.GeneralSecurityException;
 import java.util.*;
 import java.util.logging.Level;
 
@@ -74,9 +78,19 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 	}
 	
 	@Override
-	public void processData(ClientSocket client, int type, byte[] data) {
+	public void processData(ClientSocket client, byte[] data, boolean isEncrypted) {
+		//Decrypting the data
+		if(isEncrypted) {
+			try {
+				data = EncryptionHelper.decrypt(data);
+			} catch(GeneralSecurityException exception) {
+				Main.getLogger().log(Level.WARNING, "Failed to decrypt incoming message / " + exception.getMessage(), exception);
+				return;
+			}
+		}
+		
 		//Notifying the communications manager
-		notifyMessage(client, type, data);
+		notifyMessage(client, data, isEncrypted);
 	}
 	
 	@Override
@@ -105,8 +119,20 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 	}
 	
 	@Override
-	public void sendMessage(ClientSocket client, int type, byte[] content, Runnable sentRunnable) {
-		writerThread.sendPacket(new WriterThread.PacketStruct(client, type, content, sentRunnable));
+	public void sendMessage(ClientSocket client, byte[] content, boolean encrypt, Runnable sentRunnable) {
+		//Encrypting the content if requested
+		if(encrypt) {
+			try {
+				content = EncryptionHelper.encrypt(content);
+			} catch(GeneralSecurityException exception) {
+				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+				Sentry.capture(exception);
+				return;
+			}
+		}
+		
+		//Sending the packet
+		writerThread.sendPacket(new WriterThread.PacketStruct(client, content, encrypt, sentRunnable));
 	}
 	
 	@Override

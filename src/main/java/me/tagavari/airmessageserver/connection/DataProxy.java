@@ -26,23 +26,23 @@ public abstract class DataProxy<C extends ClientRegistration> {
 	/**
 	 * Sends a message to the specified client
 	 * @param client A representation of the client object to send the data to
-	 * @param type The type of message
 	 * @param content The message's body
+	 * @param encrypt Whether or not this message should be encrypted
 	 */
-	public void sendMessage(C client, int type, byte[] content) {
-		sendMessage(client, type, content, null);
+	public void sendMessage(C client, byte[] content, boolean encrypt) {
+		sendMessage(client, content, encrypt, null);
 	}
 	
 	/**
 	 * Sends a message to the specified client
 	 * @param client A representation of the client object to send the data to
-	 * @param type The type of message
 	 * @param content The message's body
+	 * @param encrypt Whether or not this message should be encrypted
 	 * @param sentRunnable A runnable to be executed when the message is sent
 	 *                     Leave NULL to disable this functionality
 	 *                     Please note that this runnable will be called on the writer thread!
 	 */
-	public abstract void sendMessage(C client, int type, byte[] content, Runnable sentRunnable);
+	public abstract void sendMessage(C client, byte[] content, boolean encrypt, Runnable sentRunnable);
 	
 	/**
 	 * Disconnects a client from this server
@@ -72,8 +72,8 @@ public abstract class DataProxy<C extends ClientRegistration> {
 		for(DataProxyListener<C> messageListener : messageListenerSet) messageListener.onClose(client);
 	}
 	
-	protected void notifyMessage(C client, int type, byte[] data) {
-		for(DataProxyListener<C> messageListener : messageListenerSet) messageListener.onMessage(client, type, data);
+	protected void notifyMessage(C client, byte[] data, boolean wasEncrypted) {
+		for(DataProxyListener<C> messageListener : messageListenerSet) messageListener.onMessage(client, data, wasEncrypted);
 	}
 	
 	/**

@@ -456,7 +456,7 @@ public class AppleScriptManager {
 			//Checking if this isn't the first request (meaning that the request failed, and shouldn't continue)
 			if(index != 0) {
 				//Sending a negative response
-				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, requestID, CommConst.nstSendResultBadRequest, "Bad request: index mismatch\nFirst index check failed, received " + index);
+				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, CommConst.nhtSendResult, requestID, CommConst.nstSendResultBadRequest, "Bad request: index mismatch\nFirst index check failed, received " + index);
 				
 				//Returning
 				return;
@@ -490,7 +490,7 @@ public class AppleScriptManager {
 			//Checking if this isn't the first request (meaning that the request failed, and shouldn't continue)
 			if(index != 0) {
 				//Sending a negative response
-				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, requestID, CommConst.nstSendResultBadRequest, "Bad request: index mismatch\nFirst index check failed, received " + index);
+				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, CommConst.nhtSendResult, requestID, CommConst.nstSendResultBadRequest, "Bad request: index mismatch\nFirst index check failed, received " + index);
 				
 				//Returning
 				return;
@@ -603,7 +603,7 @@ public class AppleScriptManager {
 			if(writerThread != null) writerThread.stopThread();
 			
 			//Sending a negative response
-			ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, requestID, result, details);
+			ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, CommConst.nhtSendResult, requestID, result, details);
 		}
 		
 		private void onDownloadSuccessful(File file) {
@@ -614,7 +614,7 @@ public class AppleScriptManager {
 			Constants.Tuple<Integer, String> result = chatGUID != null ? sendExistingFile(chatGUID, file) : sendNewFile(chatMembers, file, service);
 			
 			//Sending the response
-			ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, requestID, result.item1, result.item2);
+			ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(connection, CommConst.nhtSendResult, requestID, result.item1, result.item2);
 		}
 		
 		private class AttachmentWriter extends Thread {
@@ -711,7 +711,7 @@ public class AppleScriptManager {
 		command.add("osascript");
 		for(String line : commandLines) {
 			command.add("-e");
-			command.add(String.format(line, arguments));
+			command.add(String.format(line, (Object) arguments));
 		}
 		
 		try {

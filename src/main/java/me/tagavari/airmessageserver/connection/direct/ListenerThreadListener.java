@@ -10,10 +10,10 @@ public interface ListenerThreadListener {
 	/**
 	 * Called when a new message is received
 	 * @param client The client that issued this callback
-	 * @param type The type of this message
 	 * @param data This message's body content
+	 * @param isEncrypted True if this message is encrypted
 	 */
-	void processData(ClientSocket client, int type, byte[] data);
+	void processData(ClientSocket client, byte[] data, boolean isEncrypted);
 	
 	/**
 	 * Called when an exception occurs in the connection, and the connection must be killed

@@ -81,11 +81,11 @@ public class UIHelper {
 		rowLayout.spacing = 5; */
 		GridLayout gridLayout = new GridLayout();
 		gridLayout.numColumns = 1;
-		gridLayout.marginLeft = windowMargin;
-		gridLayout.marginTop = windowMargin;
-		gridLayout.marginRight = windowMargin;
-		gridLayout.marginBottom = windowMargin;
-		gridLayout.verticalSpacing = 5;
+		gridLayout.marginLeft = 10;
+		gridLayout.marginTop = 10;
+		gridLayout.marginRight = 10;
+		gridLayout.marginBottom = 10;
+		gridLayout.verticalSpacing = 10;
 		shell.setLayout(gridLayout);
 		
 		//Creating the UI components
@@ -101,17 +101,51 @@ public class UIHelper {
 		}
 		
 		{
-			Button prefsButton = new Button(shell, SWT.PUSH);
-			prefsButton.setText(Main.resources().getString("action.open_preferences"));
-			prefsButton.addListener(SWT.Selection, event -> {
-				shell.close();
-				PreferencesManager.openWindow();
-			});
-			shell.setDefaultButton(prefsButton);
-			
-			GridData gridData = new GridData();
-			gridData.horizontalAlignment = SWT.END;
-			prefsButton.setLayoutData(gridData);
+			Composite buttonContainer = new Composite(shell, SWT.NONE);
+			buttonContainer.setLayoutData(new GridData(GridData.HORIZONTAL_ALIGN_END));
+			//Configuring the buttons
+			{
+				FormLayout buttonContainerFL = new FormLayout();
+				//buttonContainerFL.marginLeft = buttonContainerFL.marginRight = buttonContainerFL.marginTop = buttonContainerFL.marginBottom = buttonContainerFL.marginWidth = buttonContainerFL.marginHeight = 0;
+				buttonContainer.setLayout(buttonContainerFL);
+				
+				Button accountButton = new Button(buttonContainer, SWT.PUSH);
+				accountButton.setText(Main.resources().getString("action.connect_account"));
+				FormData accountButtonFD = new FormData();
+				if(accountButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) accountButtonFD.width = UIHelper.minButtonWidth;
+				accountButtonFD.right = new FormAttachment(100);
+				accountButtonFD.top = new FormAttachment(50, -accountButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
+				accountButton.setLayoutData(accountButtonFD);
+				accountButton.addListener(SWT.Selection, event -> {
+					//TODO open Connect browser
+				});
+				shell.setDefaultButton(accountButton);
+				
+				Button manualButton = new Button(buttonContainer, SWT.PUSH);
+				manualButton.setText(Main.resources().getString("action.setup_manual"));
+				FormData manualButtonFD = new FormData();
+				if(manualButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) manualButtonFD.width = UIHelper.minButtonWidth;
+				manualButtonFD.right = new FormAttachment(accountButton);
+				manualButtonFD.top = new FormAttachment(accountButton, 0, SWT.CENTER);
+				manualButton.setLayoutData(manualButtonFD);
+				manualButton.addListener(SWT.Selection, event -> {
+					PreferencesUI.openPrefsPasswordWindow(shell, () -> {
+						//Closing the shell
+						shell.close();
+						
+						//Saving the new initialized state
+						PreferencesManager.setPrefAccountType(PreferencesManager.accountTypeDirect);
+						PreferencesManager.setPrefAccountConfirmed(true);
+						PreferencesManager.setPrefServerPort(PreferencesManager.defaultPort);
+						
+						//Running the permission check
+						Main.runPermissionCheck();
+						
+						//Starting the server
+						Main.startServer();
+					});
+				});
+			}
 		}
 		
 		//Packing the shell

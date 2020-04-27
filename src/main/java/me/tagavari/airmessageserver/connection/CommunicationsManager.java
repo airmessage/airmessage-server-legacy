@@ -1,25 +1,23 @@
 package me.tagavari.airmessageserver.connection;
 
 import io.sentry.Sentry;
+import io.sentry.event.BreadcrumbBuilder;
 import me.tagavari.airmessageserver.common.Blocks;
 import me.tagavari.airmessageserver.server.*;
 import org.jooq.impl.DSL;
+import org.msgpack.core.MessageBufferPacker;
+import org.msgpack.core.MessagePack;
+import org.msgpack.core.MessagePackException;
+import org.msgpack.core.MessageUnpacker;
 
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
-import java.security.SecureRandom;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
 public class CommunicationsManager implements DataProxyListener<ClientRegistration> {
-	//Creating the constants
-	private static final SecureRandom secureRandom = new SecureRandom();
-	
 	//Creating the communications values
 	protected final DataProxy<ClientRegistration> dataProxy;
 	
@@ -77,12 +75,14 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		keepAliveTimer.scheduleAtFixedRate(new TimerTask() {
 			@Override
 			public void run() {
-				//Sending a ping to all clients
-				dataProxy.sendMessage(null, CommConst.nhtPing, new byte[0]);
+				//Sending a ping to all connected clients
+				boolean result = sendMessageHeaderOnly(null, CommConst.nhtPing, false);
 				
 				//Starting ping response timers
-				for(ClientRegistration connection : dataProxy.getConnections()) {
-					connection.startPingExpiryTimer(CommConst.pingTimeout, () -> initiateClose(connection));
+				if(result) {
+					for(ClientRegistration connection : dataProxy.getConnections()) {
+						connection.startPingExpiryTimer(CommConst.pingTimeout, () -> initiateClose(connection));
+					}
 				}
 			}
 		}, CommConst.keepAliveMillis, CommConst.keepAliveMillis);
@@ -112,25 +112,28 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	public void onOpen(ClientRegistration client) {
 		//Generating the transmission check
 		byte[] transmissionCheck = new byte[CommConst.transmissionCheckLength];
-		secureRandom.nextBytes(transmissionCheck);
+		Main.getSecureRandom().nextBytes(transmissionCheck);
 		client.setTransmissionCheck(transmissionCheck);
 		
-		//Creating the info data
-		byte[] infoData = ByteBuffer.allocate(Integer.SIZE * 2 / 8 + CommConst.transmissionCheckLength)
-				.putInt(CommConst.mmCommunicationsVersion)
-				.putInt(CommConst.mmCommunicationsSubVersion)
-				.put(transmissionCheck)
-				.array();
-		
-		//Sending the server version
-		dataProxy.sendMessage(client, CommConst.nhtInformation, infoData);
+		//Sending this server's information
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtInformation);
+			
+			packer.packInt(CommConst.mmCommunicationsVersion);
+			packer.packInt(CommConst.mmCommunicationsSubVersion);
+			packer.packBinaryHeader(transmissionCheck.length);
+			packer.addPayload(transmissionCheck);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), false);
+		} catch(IOException exception) {
+			exception.printStackTrace();
+		}
 		
 		//Starting the handshake expiry timer
 		client.startHandshakeExpiryTimer(CommConst.handshakeTimeout, () -> initiateClose(client));
 		
 		//Updating the UI
 		UIHelper.getDisplay().asyncExec(SystemTrayManager::updateConnectionsMessage);
-		
 	}
 	
 	@Override
@@ -140,384 +143,512 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	@Override
-	public void onMessage(ClientRegistration client, int messageType, byte[] data) {
+	public void onMessage(ClientRegistration client, byte[] data, boolean wasEncrypted) {
 		//Resetting the ping timer
 		client.cancelPingExpiryTimer();
 		
-		//Responding to standard requests
-		if(messageType == CommConst.nhtClose) {
-			dataProxy.disconnectClient(client);
-			return;
+		//Wrapping the data in a MessagePack unpacker
+		MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(data);
+		try {
+			//Reading the message type
+			int messageType = unpacker.unpackInt();
+			
+			//Logging the event
+			{
+				//Adding a breadcrumb
+				int contentLength = data.length;
+				
+				Map<String, String> dataMap = new HashMap<>(2);
+				dataMap.put("Message type", Integer.toString(messageType));
+				dataMap.put("Content length", Integer.toString(contentLength));
+				Sentry.getContext().recordBreadcrumb(new BreadcrumbBuilder().setCategory(Constants.sentryBCatPacket).setMessage("New packet received").setData(dataMap).build());
+				
+				Main.getLogger().log(Level.FINEST, "New message received: " + messageType + " / " + contentLength);
+			}
+			
+			/*
+			 * Standard requests
+			 * If a request that contains sensitive data wasn't encrypted, don't accept it
+			 */
+			if(!wasEncrypted) {
+				//Responding to standard requests
+				switch(messageType) {
+					case CommConst.nhtClose -> dataProxy.disconnectClient(client);
+					case CommConst.nhtPing -> sendMessageHeaderOnly(client, CommConst.nhtPong, false);
+					case CommConst.nhtAuthentication -> handleMessageAuthentication(client, unpacker);
+				}
+			} else {
+				//The client can't perform any sensitive tasks unless they are authenticated
+				if(client.isClientRegistered()) {
+					switch(messageType) {
+						case CommConst.nhtTimeRetrieval -> handleMessageTimeRetrieval(client, unpacker);
+						case CommConst.nhtMassRetrieval -> handleMessageMassRetrieval(client, unpacker);
+						case CommConst.nhtConversationUpdate -> handleMessageConversationUpdate(client, unpacker);
+						case CommConst.nhtAttachmentReq -> handleMessageAttachmentRequest(client, unpacker);
+						case CommConst.nhtCreateChat -> handleMessageCreateChat(client, unpacker);
+						case CommConst.nhtSendTextExisting -> handleMessageSendTextExisting(client, unpacker);
+						case CommConst.nhtSendTextNew -> handleMessageSendTextNew(client, unpacker);
+						case CommConst.nhtSendFileExisting -> handleMessageSendFileExisting(client, unpacker);
+						case CommConst.nhtSendFileNew -> handleMessageSendFileNew(client, unpacker);
+					}
+				}
+			}
+		} catch(IOException | MessagePackException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+		} finally {
+			try {
+				unpacker.close();
+			} catch(IOException exception) {
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			}
 		}
-		else if(messageType == CommConst.nhtPing) {
-			dataProxy.sendMessage(client, CommConst.nhtPong, new byte[0]);
+	}
+	
+	private void handleMessageAuthentication(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+		//Stopping the registration timer
+		client.cancelHandshakeExpiryTimer();
+		
+		byte[] transmissionCheck;
+		String installationID;
+		String clientName, platformID;
+		try {
+			//Decrypting the message
+			byte[] secureData = unpacker.readPayload(unpacker.unpackBinaryHeader());
+			byte[] data = EncryptionHelper.decrypt(secureData);
+			
+			MessageUnpacker secureUnpacker = MessagePack.newDefaultUnpacker(data);
+			try {
+				//Reading the data
+				transmissionCheck = secureUnpacker.readPayload(CommConst.transmissionCheckLength);
+				installationID = secureUnpacker.unpackString();
+				clientName = secureUnpacker.unpackString();
+				platformID = secureUnpacker.unpackString();
+			} finally {
+				secureUnpacker.close();
+			}
+		} catch(GeneralSecurityException exception) {
+			//Logging the exception
+			Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
+			
+			//Sending a message and closing the connection
+			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+				packer.packInt(CommConst.nhtAuthentication);
+				packer.packInt(CommConst.nstAuthenticationUnauthorized);
+				dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
+			}
+			
+			return;
+		} catch(IOException | MessagePackException exception) {
+			//Logging the exception
+			Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
+			
+			//Sending a message and closing the connection
+			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+				packer.packInt(CommConst.nhtAuthentication);
+				packer.packInt(CommConst.nstAuthenticationBadRequest);
+				dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
+			}
+			
 			return;
 		}
 		
-		//Checking if the client is registered
-		if(client.isClientRegistered()) {
-			switch(messageType) {
-				case CommConst.nhtTimeRetrieval: {
-					//Reading the data
-					final long timeLower;
-					final long timeUpper;
-					
-					ByteBuffer byteBuffer = ByteBuffer.wrap(data);
-					timeLower = byteBuffer.getLong();
-					timeUpper = byteBuffer.getLong();
-					
-					//Creating a new request and queuing it
-					DatabaseManager.getInstance().addClientRequest(new DatabaseManager.CustomRetrievalRequest(
-							client,
-							() -> DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper))),
-							CommConst.nhtTimeRetrieval));
-					
-					break;
+		//Validating the transmission
+		if(client.checkClearTransmissionCheck(transmissionCheck)) {
+			//Disconnecting clients with the same installation ID
+			Collection<ClientRegistration> connections = new HashSet<>(dataProxy.getConnections()); //Avoid concurrent modifications
+			for(ClientRegistration connectedClient : connections) {
+				if(installationID.equals(connectedClient.getInstallationID())) {
+					initiateClose(client);
 				}
-				case CommConst.nhtMassRetrieval: {
-					//Getting the request information
-					short requestID;
-					boolean restrictMessages = false;
-					long timeSinceMessages = -1;
-					boolean downloadAttachments = false;
-					boolean restrictAttachments = false;
-					long timeSinceAttachments = -1;
-					boolean restrictAttachmentSize = false;
-					long attachmentSizeLimit = -1;
-					String[] attachmentFilterWhitelist = null;
-					String[] attachmentFilterBlacklist = null;
-					boolean attachmentFilterDLOther = false;
-					
-					//Reading the request data
-					try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-						requestID = in.readShort();
-						if(restrictMessages = in.readBoolean()) timeSinceMessages = in.readLong();
-						if(downloadAttachments = in.readBoolean()) {
-							if(restrictAttachments = in.readBoolean()) timeSinceAttachments = in.readLong();
-							if(restrictAttachmentSize = in.readBoolean()) attachmentSizeLimit = in.readLong();
-							
-							attachmentFilterWhitelist = new String[in.readInt()];
-							for(int i = 0; i < attachmentFilterWhitelist.length; i++) attachmentFilterWhitelist[i] = in.readUTF();
-							attachmentFilterBlacklist = new String[in.readInt()];
-							for(int i = 0; i < attachmentFilterBlacklist.length; i++) attachmentFilterBlacklist[i] = in.readUTF();
-							attachmentFilterDLOther = in.readBoolean();
-						}
-					} catch(IOException | RuntimeException exception) {
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						break;
-					}
-					
-					//Creating a new request and queuing it
-					DatabaseManager.getInstance().addClientRequest(new DatabaseManager.MassRetrievalRequest(client, requestID, restrictMessages, timeSinceMessages, downloadAttachments, restrictAttachments, timeSinceAttachments, restrictAttachmentSize, attachmentSizeLimit, attachmentFilterWhitelist, attachmentFilterBlacklist, attachmentFilterDLOther));
-					
-					break;
-				}
-				case CommConst.nhtConversationUpdate: {
-					//Reading the chat GUID list
-					List<String> list;
-					try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-						Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
-						dataSec.decrypt(PreferencesManager.getPrefPassword());
-						
-						try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
-							int count = inSec.readInt();
-							list = new ArrayList<>(count);
-							for(int i = 0; i < count; i++) list.add(inSec.readUTF());
-						}
-					} catch(IOException | RuntimeException | GeneralSecurityException exception) {
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						break;
-					}
-					
-					//Creating a new request and queuing it
-					DatabaseManager.getInstance().addClientRequest(new DatabaseManager.ConversationInfoRequest(client, list));
-					
-					break;
-				}
-				case CommConst.nhtAttachmentReq: {
-					//Getting the request information
-					short requestID;
-					int chunkSize;
-					
-					String fileGUID;
-					
-					try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-						requestID = in.readShort();
-						chunkSize = in.readInt();
-						
-						Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
-						dataSec.decrypt(PreferencesManager.getPrefPassword());
-						
-						try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
-							fileGUID = inSec.readUTF();
-						}
-					} catch(IOException | RuntimeException | GeneralSecurityException exception) {
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						break;
-					}
-					
-					//Sending a reply
-					dataProxy.sendMessage(client, CommConst.nhtAttachmentReqConfirm, ByteBuffer.allocate(Short.SIZE / 8).putShort(requestID).array());
-					
-					//Adding the request
-					DatabaseManager.getInstance().addClientRequest(new DatabaseManager.FileRequest(client, fileGUID, requestID, chunkSize));
-					
-					break;
-				}
-				case CommConst.nhtCreateChat: {
-					//Getting the request information
-					short requestID;
-					
-					String[] chatMembers;
-					String service;
-					
-					try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-						requestID = in.readShort();
-						
-						Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
-						dataSec.decrypt(PreferencesManager.getPrefPassword());
-						
-						try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
-							chatMembers = new String[inSec.readInt()];
-							for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = inSec.readUTF();
-							service = inSec.readUTF();
-						}
-					} catch(IOException | RuntimeException | GeneralSecurityException exception) {
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						break;
-					}
-					
-					//Sending the message
-					Constants.Tuple<Integer, String> result = AppleScriptManager.createChat(chatMembers, service);
-					
-					//Serializing the data
-					try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
-						ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-						out.writeShort(requestID); //Request ID
-						
-						outSec.writeInt(result.item1); //Result code
-						if(result.item1 != CommConst.nstCreateChatOK) {
-							outSec.writeBoolean(result.item2 != null); //Details message
-							if(result.item2 != null) outSec.writeUTF(result.item2);
-						} else {
-							outSec.writeUTF(result.item2);
-						}
-						outSec.flush();
-						
-						new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
-						
-						out.flush();
-						
-						//Sending the data
-						dataProxy.sendMessage(client, CommConst.nhtCreateChat, trgt.toByteArray());
-					} catch(IOException | GeneralSecurityException exception) {
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						Sentry.capture(exception);
-					}
-					
-					break;
-				}
-				case CommConst.nhtSendTextExisting: {
-					//Getting the request information
-					short requestID;
-					
-					String chatGUID;
-					String message;
-					
-					try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-						requestID = in.readShort();
-						
-						Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
-						dataSec.decrypt(PreferencesManager.getPrefPassword());
-						
-						try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
-							chatGUID = inSec.readUTF();
-							message = inSec.readUTF();
-						}
-					} catch(IOException | RuntimeException | GeneralSecurityException exception) {
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						break;
-					}
-					
-					//Sending the message
-					Constants.Tuple<Integer, String> result = AppleScriptManager.sendExistingMessage(chatGUID, message);
-					
-					//Sending the response
-					sendMessageRequestResponse(client, requestID, result.item1, result.item2);
-					
-					break;
-				}
-				case CommConst.nhtSendTextNew: {
-					//Getting the request information
-					short requestID;
-					
-					String[] chatMembers;
-					String message;
-					String service;
-					
-					try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-						requestID = in.readShort();
-						
-						Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
-						dataSec.decrypt(PreferencesManager.getPrefPassword());
-						
-						try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
-							chatMembers = new String[inSec.readInt()];
-							for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = inSec.readUTF();
-							message = inSec.readUTF();
-							service = inSec.readUTF();
-						}
-					} catch(IOException | RuntimeException | GeneralSecurityException exception) {
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						break;
-					}
-					
-					//Sending the message
-					Constants.Tuple<Integer, String> result = AppleScriptManager.sendNewMessage(chatMembers, message, service);
-					
-					//Sending the response
-					sendMessageRequestResponse(client, requestID, result.item1, result.item2);
-					
-					break;
-				}
-				case CommConst.nhtSendFileExisting: {
-					//Getting the request information
-					short requestID;
-					int requestIndex;
-					boolean isLast;
-					
-					String chatGUID;
-					byte[] compressedBytes;
-					String fileName = null;
-					
-					try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-						requestID = in.readShort();
-						requestIndex = in.readInt();
-						isLast = in.readBoolean();
-						
-						Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
-						dataSec.decrypt(PreferencesManager.getPrefPassword());
-						
-						try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
-							chatGUID = inSec.readUTF();
-							compressedBytes = new byte[inSec.readInt()];
-							inSec.readFully(compressedBytes);
-							if(requestIndex == 0) fileName = inSec.readUTF();
-						}
-					} catch(IOException | RuntimeException | GeneralSecurityException exception) {
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						break;
-					}
-					
-					//Forwarding the data
-					AppleScriptManager.addFileFragment(client, requestID, chatGUID, fileName, requestIndex, compressedBytes, isLast);
-					
-					break;
-				}
-				case CommConst.nhtSendFileNew: {
-					//Getting the request information
-					short requestID;
-					int requestIndex;
-					boolean isLast;
-					
-					String[] chatMembers;
-					byte[] compressedBytes;
-					String fileName = null;
-					String service = null;
-					
-					try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-						requestID = in.readShort();
-						requestIndex = in.readInt();
-						isLast = in.readBoolean();
-						
-						Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
-						dataSec.decrypt(PreferencesManager.getPrefPassword());
-						
-						try(ByteArrayInputStream srcSec = new ByteArrayInputStream(dataSec.data); ObjectInputStream inSec = new ObjectInputStream(srcSec)) {
-							chatMembers = new String[inSec.readInt()];
-							for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = inSec.readUTF();
-							compressedBytes = new byte[inSec.readInt()];
-							inSec.readFully(compressedBytes);
-							if(requestIndex == 0) {
-								fileName = inSec.readUTF();
-								service = inSec.readUTF();
-							}
-						}
-					} catch(IOException | RuntimeException | GeneralSecurityException exception) {
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						break;
-					}
-					
-					//Forwarding the data
-					AppleScriptManager.addFileFragment(client, requestID, chatMembers, service, fileName, requestIndex, compressedBytes, isLast);
-					
-					break;
-				}
+			}
+			
+			//Marking the client as registered
+			client.setClientRegistered(true);
+			client.setRegistration(installationID, clientName, platformID);
+			
+			//Sending a message
+			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+				packer.packInt(CommConst.nhtAuthentication);
+				packer.packInt(CommConst.nstAuthenticationOK);
+				packer.packString(PreferencesManager.getInstallationID()); //Installation ID
+				packer.packString(Main.getDeviceName()); //Device name
+				packer.packString(System.getProperty("os.version")); //System version
+				packer.packString(Constants.SERVER_VERSION); //Software version
+				
+				dataProxy.sendMessage(client, packer.toByteArray(), true);
 			}
 		} else {
-			if(messageType != CommConst.nhtAuthentication) return;
-			
-			//Stopping the registration timer
-			client.cancelHandshakeExpiryTimer();
-			
-			//Reading the data
-			byte[] transmissionCheck;
-			try(ByteArrayInputStream src = new ByteArrayInputStream(data); ObjectInputStream in = new ObjectInputStream(src)) {
-				Blocks.EncryptableData dataSec = Blocks.EncryptableData.readObject(in);
-				dataSec.decrypt(PreferencesManager.getPrefPassword());
-				transmissionCheck = dataSec.data;
-			} catch(IOException | RuntimeException | GeneralSecurityException exception) {
-				//Logging the exception
-				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
-				
-				//Sending a message and closing the connection
-				int responseCode = exception instanceof GeneralSecurityException ? CommConst.nstAuthenticationUnauthorized : CommConst.nstAuthenticationBadRequest;
-				dataProxy.sendMessage(client, CommConst.nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(responseCode).array(), () -> initiateClose(client));
-				
-				return;
-			}
-			
-			//Validating the transmission
-			if(client.checkClearTransmissionCheck(transmissionCheck)) {
-				//Marking the client as registered
-				client.setClientRegistered(true);
-				
-				//Sending a message
-				dataProxy.sendMessage(client, CommConst.nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(CommConst.nstAuthenticationOK).array());
-			} else {
-				//Sending a message and closing the connection
-				dataProxy.sendMessage(client, CommConst.nhtAuthentication, ByteBuffer.allocate(Integer.SIZE / 4).putInt(CommConst.nstAuthenticationUnauthorized).array(), () -> initiateClose(client));
+			//Sending a message and closing the connection
+			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+				packer.packInt(CommConst.nhtAuthentication);
+				packer.packInt(CommConst.nstAuthenticationUnauthorized);
+				dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
 			}
 		}
+	}
+	
+	private void handleMessageTimeRetrieval(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+		//Reading the request data
+		long timeLower = unpacker.unpackLong();
+		long timeUpper = unpacker.unpackLong();
+		
+		//Creating a new request and queuing it
+		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.CustomRetrievalRequest(
+				client,
+				() -> DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper))),
+				CommConst.nhtTimeRetrieval));
+	}
+	
+	private void handleMessageMassRetrieval(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+		//Reading the request data
+		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
+		
+		boolean restrictMessages = unpacker.unpackBoolean(); //Should we filter messages by date?
+		long timeSinceMessages = restrictMessages ? unpacker.unpackLong() : -1; //If so, download messages since when?
+		
+		boolean downloadAttachments = unpacker.unpackBoolean(); //Should we download attachments
+		boolean restrictAttachmentsDate = false; //Should we filter attachments by date?
+		long timeSinceAttachments = -1; //If so, download attachments since when?
+		boolean restrictAttachmentsSize = false; //Should we filter attachments by size?
+		long attachmentsSizeLimit = -1; //If so, download attachments smaller than how many bytes?
+		
+		String[] attachmentFilterWhitelist = null; //Only download attachment files if they're on this list
+		String[] attachmentFilterBlacklist = null; //Don't download attachment files if they're on this list
+		boolean attachmentFilterDLOther = false; //Download attachment files if they're not on either list
+		
+		if(downloadAttachments) {
+			restrictAttachmentsDate = unpacker.unpackBoolean();
+			if(restrictAttachmentsDate) timeSinceAttachments = unpacker.unpackLong();
+			
+			restrictAttachmentsSize = unpacker.unpackBoolean();
+			if(restrictAttachmentsSize) attachmentsSizeLimit = unpacker.unpackLong();
+			
+			attachmentFilterWhitelist = new String[unpacker.unpackArrayHeader()];
+			for(int i = 0; i < attachmentFilterWhitelist.length; i++) attachmentFilterWhitelist[i] = unpacker.unpackString();
+			attachmentFilterBlacklist = new String[unpacker.unpackArrayHeader()];
+			for(int i = 0; i < attachmentFilterBlacklist.length; i++) attachmentFilterBlacklist[i] = unpacker.unpackString();
+			attachmentFilterDLOther = unpacker.unpackBoolean();
+		}
+		
+		//Creating a new request and queuing it
+		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.MassRetrievalRequest(client, requestID, restrictMessages, timeSinceMessages, downloadAttachments, restrictAttachmentsDate, timeSinceAttachments, restrictAttachmentsSize, attachmentsSizeLimit, attachmentFilterWhitelist, attachmentFilterBlacklist, attachmentFilterDLOther));
+	}
+	
+	private void handleMessageConversationUpdate(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+		//Reading the chat GUID list
+		String[] chatGUIDs = new String[unpacker.unpackArrayHeader()];
+		for(int i = 0; i < chatGUIDs.length; i++) chatGUIDs[i] = unpacker.unpackString();
+		
+		//Creating a new request and queuing it
+		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.ConversationInfoRequest(client, chatGUIDs));
+	}
+	
+	private void handleMessageAttachmentRequest(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+		//Reading the request information
+		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
+		int chunkSize = unpacker.unpackInt(); //How many bytes to upload per packet
+		String fileGUID = unpacker.unpackString(); //The GUID of the file to download
+		
+		//Sending a reply
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtAttachmentReqConfirm);
+			packer.packShort(requestID);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
+		}
+		
+		//Adding the request
+		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.FileRequest(client, fileGUID, requestID, chunkSize));
+	}
+	
+	private void handleMessageCreateChat(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+		//Reading the request information
+		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
+		String[] chatMembers = new String[unpacker.unpackArrayHeader()]; //The members of this conversation
+		for(int i = 0; i < chatMembers.length; i++) chatMembers[i] = unpacker.unpackString();
+		String service = unpacker.unpackString(); //The service of this conversation
+		
+		//Creating the chat
+		Constants.Tuple<Integer, String> result = AppleScriptManager.createChat(chatMembers, service);
+		
+		//Sending a response
+		sendMessageRequestResponse(client, CommConst.nhtCreateChat, requestID, result.item1, result.item2);
+	}
+	
+	private void handleMessageSendTextExisting(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+		//Reading the request information
+		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
+		String chatGUID = unpacker.unpackString(); //The GUID of the chat to send a message to
+		String message = unpacker.unpackString(); //The message to send
+		
+		//Sending the message
+		Constants.Tuple<Integer, String> result = AppleScriptManager.sendExistingMessage(chatGUID, message);
+		
+		//Sending the response
+		sendMessageRequestResponse(client, CommConst.nhtSendResult, requestID, result.item1, result.item2);
+	}
+	
+	private void handleMessageSendTextNew(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+		//Reading the request information
+		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
+		String[] members = new String[unpacker.unpackArrayHeader()]; //The members of the chat to send the message to
+		for(int i = 0; i < members.length; i++) members[i] = unpacker.unpackString();
+		String service = unpacker.unpackString(); //The service of the chat
+		String message = unpacker.unpackString(); //The message to send
+		
+		//Sending the message
+		Constants.Tuple<Integer, String> result = AppleScriptManager.sendNewMessage(members, message, service);
+		
+		//Sending the response
+		sendMessageRequestResponse(client, CommConst.nhtSendResult, requestID, result.item1, result.item2);
+	}
+	
+	private void handleMessageSendFileExisting(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+		//Reading the request information
+		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
+		int requestIndex = unpacker.unpackInt(); //The index of this request, to ensure that packets are received and written in order
+		boolean isLast = unpacker.unpackBoolean(); //Is this the last packet?
+		String chatGUID = unpacker.unpackString(); //The GUID of the chat to send the message to
+		byte[] compressedBytes = unpacker.readPayload(unpacker.unpackBinaryHeader()); //The file bytes to append
+		String fileName = requestIndex == 0 ? unpacker.unpackString() : null; //The name of the file to send
+		
+		//Forwarding the data
+		AppleScriptManager.addFileFragment(client, requestID, chatGUID, fileName, requestIndex, compressedBytes, isLast);
+	}
+	
+	private void handleMessageSendFileNew(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+		//Reading the request information
+		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
+		int requestIndex = unpacker.unpackInt(); //The index of this request, to ensure that packets are received and written in order
+		boolean isLast = unpacker.unpackBoolean(); //Is this the last packet?
+		String[] members = new String[unpacker.unpackArrayHeader()]; //The members of the chat to send the message to
+		for(int i = 0; i < members.length; i++) members[i] = unpacker.unpackString();
+		byte[] compressedBytes = unpacker.readPayload(unpacker.unpackBinaryHeader()); //The file bytes to append
+		String fileName = null; //The name of the file to send
+		String service = null; //The service of the conversation
+		if(requestIndex == 0) {
+			fileName = unpacker.unpackString();
+			service = unpacker.unpackString();
+		}
+		
+		//Forwarding the data
+		AppleScriptManager.addFileFragment(client, requestID, members, service, fileName, requestIndex, compressedBytes, isLast);
 	}
 	
 	public void initiateClose(ClientRegistration client) {
-		dataProxy.sendMessage(client, CommConst.nhtClose, new byte[0], () -> dataProxy.disconnectClient(client));
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtClose);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), false, () -> dataProxy.disconnectClient(client));
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			
+			//Disconnecting the client anyways
+			dataProxy.disconnectClient(client);
+		}
 	}
 	
-	public void sendMessageRequestResponse(ClientRegistration target, short requestID, int result, String details) {
+	//Helper function for sending responses to basic requests with a request ID, result code, and result description (either error message or result details)
+	public boolean sendMessageRequestResponse(ClientRegistration client, int header, short requestID, int resultCode, String details) {
 		//Returning if the connection is not open
-		if(!target.isConnected()) return;
+		if(!client.isConnected()) return false;
 		
-		//Serializing the data
-		try(ByteArrayOutputStream trgt = new ByteArrayOutputStream(); ObjectOutputStream out = new ObjectOutputStream(trgt);
-			ByteArrayOutputStream trgtSec = new ByteArrayOutputStream(); ObjectOutputStream outSec = new ObjectOutputStream(trgtSec)) {
-			out.writeShort(requestID); //Request ID
+		//Sending a reply
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(header);
+			packer.packShort(requestID);
+			packer.packInt(resultCode); //Result code
+			if(details == null) packer.packNil();
+			else packer.packString(details);
 			
-			outSec.writeInt(result); //Result code
-			outSec.writeBoolean(details != null); //Details message
-			if(details != null) outSec.writeUTF(details);
-			outSec.flush();
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			
-			new Blocks.EncryptableData(trgtSec.toByteArray()).encrypt(PreferencesManager.getPrefPassword()).writeObject(out); //Encrypted data
-			
-			out.flush();
-			
-			//Sending the data
-			dataProxy.sendMessage(target, CommConst.nhtSendResult, trgt.toByteArray());
-		} catch(IOException | GeneralSecurityException exception) {
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			return true;
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	//Helper function for sending a packet with only a header and an empty body
+	public boolean sendMessageHeaderOnly(ClientRegistration client, int header, boolean encrypt) {
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(header);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), encrypt);
+			
+			return true;
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendMessageUpdate(Collection<Blocks.ConversationItem> items) {
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtMessageUpdate);
+			
+			packer.packArrayHeader(items.size());
+			for(Blocks.Block item : items) item.writeObject(packer);
+			
+			dataProxy.sendMessage(null, packer.toByteArray(), true);
+			
+			return true;
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendMessageUpdate(ClientRegistration client, int header, Collection<Blocks.ConversationItem> items) {
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(header);
+			
+			packer.packArrayHeader(items.size());
+			for(Blocks.Block item : items) item.writeObject(packer);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
+			
+			return true;
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendConversationInfo(ClientRegistration client, Collection<Blocks.ConversationInfo> items) {
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtConversationUpdate);
+			
+			packer.packArrayHeader(items.size());
+			for(Blocks.Block item : items) item.writeObject(packer);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
+			
+			return true;
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendFileChunk(ClientRegistration client, short requestID, int requestIndex, long fileLength, boolean isLast, String fileGUID, byte[] chunkData) {
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtAttachmentReq);
+			
+			packer.packShort(requestID);
+			packer.packInt(requestIndex);
+			if(requestIndex == 0) packer.packLong(fileLength);
+			packer.packBoolean(isLast);
+			
+			packer.packString(fileGUID);
+			packer.packBinaryHeader(chunkData.length);
+			packer.addPayload(chunkData);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
+			
+			return true;
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendMassRetrievalInitial(ClientRegistration client, short requestID, Collection<Blocks.ConversationInfo> conversations, int messageCount) {
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtMassRetrieval);
+			
+			packer.packShort(requestID);
+			packer.packInt(0); //Request index
+			
+			packer.packArrayHeader(conversations.size());
+			for(Blocks.Block item : conversations) item.writeObject(packer);
+			
+			packer.packInt(messageCount);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
+			
+			return true;
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendMassRetrievalMessages(ClientRegistration client, short requestID, int packetIndex, Collection<Blocks.ConversationItem> conversationItems) {
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtMassRetrieval);
+			
+			packer.packShort(requestID);
+			packer.packInt(packetIndex);
+			
+			packer.packArrayHeader(conversationItems.size());
+			for(Blocks.Block item : conversationItems) item.writeObject(packer);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
+			
+			return true;
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendMassRetrievalFileChunk(ClientRegistration client, short requestID, int requestIndex, String fileName, boolean isLast, String fileGUID, byte[] chunkData) {
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtMassRetrievalFile);
+			
+			packer.packShort(requestID);
+			packer.packInt(requestIndex);
+			if(requestIndex == 0) packer.packString(fileName);
+			packer.packBoolean(isLast);
+			
+			packer.packString(fileGUID);
+			packer.packBinaryHeader(chunkData.length);
+			packer.addPayload(chunkData);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
+			
+			return true;
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendModifierUpdate(Collection<Blocks.ModifierInfo> items) {
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtModifierUpdate);
+			
+			packer.packArrayHeader(items.size());
+			for(Blocks.Block item : items) item.writeObject(packer);
+			
+			dataProxy.sendMessage(null, packer.toByteArray(), true);
+			
+			return true;
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
 		}
 	}
 }

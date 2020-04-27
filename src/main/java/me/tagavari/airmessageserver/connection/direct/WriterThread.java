@@ -22,10 +22,10 @@ class WriterThread extends Thread {
 				if(packet.target == null) {
 					for(ClientSocket client : clientList) {
 						if(!client.isClientRegistered()) continue;
-						client.sendDataSync(packet.type, packet.content);
+						client.sendDataSync(packet.content, packet.isEncrypted);
 					}
 				} else {
-					packet.target.sendDataSync(packet.type, packet.content);
+					packet.target.sendDataSync(packet.content, packet.isEncrypted);
 				}
 				if(packet.sentRunnable != null) packet.sentRunnable.run();
 			}
@@ -40,18 +40,18 @@ class WriterThread extends Thread {
 	
 	static class PacketStruct {
 		final ClientSocket target;
-		final int type;
-		final byte[] content;
+		private final byte[] content;
+		final boolean isEncrypted;
 		Runnable sentRunnable = null;
 		
-		PacketStruct(ClientSocket target, int type, byte[] content) {
+		PacketStruct(ClientSocket target, byte[] content, boolean isEncrypted) {
 			this.target = target;
-			this.type = type;
+			this.isEncrypted = isEncrypted;
 			this.content = content;
 		}
 		
-		PacketStruct(ClientSocket target, int type, byte[] content, Runnable sentRunnable) {
-			this(target, type, content);
+		PacketStruct(ClientSocket target, byte[] content, boolean isEncrypted, Runnable sentRunnable) {
+			this(target, content, isEncrypted);
 			this.sentRunnable = sentRunnable;
 		}
 	}

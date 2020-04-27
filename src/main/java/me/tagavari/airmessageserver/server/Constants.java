@@ -16,8 +16,8 @@ public class Constants {
 	static final String SENTRY_DSN = "https://4240bd1f5e2f4ecfac822f78dda19fce:00d4dcd23b244f46a4489b5b80811d39@sentry.io/301837";
 	
 	//Creating the version values
-	static final String SERVER_VERSION = "0.4";
-	static final int SERVER_VERSION_CODE = 17;
+	public static final String SERVER_VERSION = "0.4-dev1";
+	public static final int SERVER_VERSION_CODE = 17;
 	
 	//Creating the file values
 	static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
@@ -116,8 +116,9 @@ public class Constants {
 		//Creating the directory if the file doesn't exist
 		if(!applicationSupportDir.exists()) {
 			boolean result = applicationSupportDir.mkdir();
-			if(!result)
+			if(!result) {
 				UIHelper.displayAlertDialog("Couldn't start application: failed to create Application Support directory at " + applicationSupportDir.getPath());
+			}
 			return result;
 		}
 		

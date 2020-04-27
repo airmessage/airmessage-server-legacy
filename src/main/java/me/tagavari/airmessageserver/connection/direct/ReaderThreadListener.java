@@ -3,10 +3,10 @@ package me.tagavari.airmessageserver.connection.direct;
 public interface ReaderThreadListener {
 	/**
 	 * Called when a new message is received
-	 * @param type The type of this message
 	 * @param data This message's body content
+	 * @param isEncrypted True if this message is encrypted
 	 */
-	void processData(int type, byte[] data);
+	void processData(byte[] data, boolean isEncrypted);
 	
 	/**
 	 * Called when an exception occurs in the connection, and the connection must be killed
