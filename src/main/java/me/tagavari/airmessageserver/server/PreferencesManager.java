@@ -168,7 +168,7 @@ public class PreferencesManager {
 		//Saving the new data
 		preferencesNode.putInt("SchemaVersion", 1);
 		preferencesNode.putInt("AccountType", 0);
-		preferencesNode.putBoolean("AccountConfirmed", false);
+		preferencesNode.putBoolean("AccountConfirmed", true);
 		preferencesNode.putBoolean("AutomaticUpdateCheck", autoCheckUpdates);
 		preferencesNode.putInt("ServerPort", port);
 		

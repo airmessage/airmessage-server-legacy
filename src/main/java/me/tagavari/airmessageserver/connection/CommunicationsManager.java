@@ -258,7 +258,8 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			Collection<ClientRegistration> connections = new HashSet<>(dataProxy.getConnections()); //Avoid concurrent modifications
 			for(ClientRegistration connectedClient : connections) {
 				if(installationID.equals(connectedClient.getInstallationID())) {
-					initiateClose(client);
+					Main.getLogger().log(Level.INFO, "Closing old connection for " + connectedClient.getClientName());
+					initiateClose(connectedClient);
 				}
 			}
 			
