@@ -14,7 +14,7 @@ import java.net.SocketException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
-public class ClientSocket extends ClientRegistration {
+class ClientSocket extends ClientRegistration {
 	private final Socket socket;
 	private final ReaderThread readerThread;
 	private final DataOutputStream outputStream;

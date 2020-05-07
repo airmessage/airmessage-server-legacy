@@ -10,8 +10,7 @@ import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePackException;
 import org.msgpack.core.MessageUnpacker;
 
-import java.io.*;
-import java.nio.ByteBuffer;
+import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -67,7 +66,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	public void onStart() {
 		//Updating the state
 		UIHelper.getDisplay().asyncExec(() -> {
-			Main.setServerState(Main.serverStateRunning);
+			Main.setServerState(ServerState.RUNNING);
 			SystemTrayManager.updateStatusMessage();
 		});
 		
@@ -91,11 +90,10 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	@Override
-	public void onStop(int code) {
+	public void onStop(ServerState code) {
 		//Updating the state
-		int serverState = ConnectionManager.proxyErrorToServerState(code);
 		UIHelper.getDisplay().asyncExec(() -> {
-			Main.setServerState(serverState);
+			Main.setServerState(code);
 			SystemTrayManager.updateStatusMessage();
 		});
 		
@@ -110,23 +108,41 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	
 	@Override
 	public void onOpen(ClientRegistration client) {
-		//Generating the transmission check
-		byte[] transmissionCheck = new byte[CommConst.transmissionCheckLength];
-		Main.getSecureRandom().nextBytes(transmissionCheck);
-		client.setTransmissionCheck(transmissionCheck);
-		
-		//Sending this server's information
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
-			packer.packInt(CommConst.nhtInformation);
+		if(dataProxy.requiresAuthentication()) {
+			//Generating the transmission check
+			byte[] transmissionCheck = new byte[CommConst.transmissionCheckLength];
+			Main.getSecureRandom().nextBytes(transmissionCheck);
+			client.setTransmissionCheck(transmissionCheck);
 			
-			packer.packInt(CommConst.mmCommunicationsVersion);
-			packer.packInt(CommConst.mmCommunicationsSubVersion);
-			packer.packBinaryHeader(transmissionCheck.length);
-			packer.addPayload(transmissionCheck);
-			
-			dataProxy.sendMessage(client, packer.toByteArray(), false);
-		} catch(IOException exception) {
-			exception.printStackTrace();
+			//Sending this server's information with the transmission check
+			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+				packer.packInt(CommConst.nhtInformation);
+				
+				packer.packInt(CommConst.mmCommunicationsVersion);
+				packer.packInt(CommConst.mmCommunicationsSubVersion);
+				
+				packer.packBoolean(true); //Transmission check required
+				packer.packBinaryHeader(transmissionCheck.length);
+				packer.addPayload(transmissionCheck);
+				
+				dataProxy.sendMessage(client, packer.toByteArray(), false);
+			} catch(IOException exception) {
+				exception.printStackTrace();
+			}
+		} else {
+			//Sending this server's information without the transmission check
+			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+				packer.packInt(CommConst.nhtInformation);
+				
+				packer.packInt(CommConst.mmCommunicationsVersion);
+				packer.packInt(CommConst.mmCommunicationsSubVersion);
+				
+				packer.packBoolean(false); //Transmission check not required
+				
+				dataProxy.sendMessage(client, packer.toByteArray(), false);
+			} catch(IOException exception) {
+				exception.printStackTrace();
+			}
 		}
 		
 		//Starting the handshake expiry timer
@@ -166,33 +182,8 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 				Main.getLogger().log(Level.FINEST, "New message received: " + messageType + " / " + contentLength);
 			}
 			
-			/*
-			 * Standard requests
-			 * If a request that contains sensitive data wasn't encrypted, don't accept it
-			 */
-			if(!wasEncrypted) {
-				//Responding to standard requests
-				switch(messageType) {
-					case CommConst.nhtClose -> dataProxy.disconnectClient(client);
-					case CommConst.nhtPing -> sendMessageHeaderOnly(client, CommConst.nhtPong, false);
-					case CommConst.nhtAuthentication -> handleMessageAuthentication(client, unpacker);
-				}
-			} else {
-				//The client can't perform any sensitive tasks unless they are authenticated
-				if(client.isClientRegistered()) {
-					switch(messageType) {
-						case CommConst.nhtTimeRetrieval -> handleMessageTimeRetrieval(client, unpacker);
-						case CommConst.nhtMassRetrieval -> handleMessageMassRetrieval(client, unpacker);
-						case CommConst.nhtConversationUpdate -> handleMessageConversationUpdate(client, unpacker);
-						case CommConst.nhtAttachmentReq -> handleMessageAttachmentRequest(client, unpacker);
-						case CommConst.nhtCreateChat -> handleMessageCreateChat(client, unpacker);
-						case CommConst.nhtSendTextExisting -> handleMessageSendTextExisting(client, unpacker);
-						case CommConst.nhtSendTextNew -> handleMessageSendTextNew(client, unpacker);
-						case CommConst.nhtSendFileExisting -> handleMessageSendFileExisting(client, unpacker);
-						case CommConst.nhtSendFileNew -> handleMessageSendFileNew(client, unpacker);
-					}
-				}
-			}
+			if(wasEncrypted) processMessageSecure(client, messageType, unpacker);
+			else processMessageInsecure(client, messageType, unpacker);
 		} catch(IOException | MessagePackException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 		} finally {
@@ -204,87 +195,136 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		}
 	}
 	
+	private boolean processMessageInsecure(ClientRegistration client, int messageType, MessageUnpacker unpacker) throws IOException {
+		//Responding to standard requests
+		switch(messageType) {
+			case CommConst.nhtClose -> dataProxy.disconnectClient(client);
+			case CommConst.nhtPing -> sendMessageHeaderOnly(client, CommConst.nhtPong, false);
+			case CommConst.nhtAuthentication -> handleMessageAuthentication(client, unpacker);
+			default -> {
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	private boolean processMessageSecure(ClientRegistration client, int messageType, MessageUnpacker unpacker) throws IOException {
+		if(processMessageInsecure(client, messageType, unpacker)) return true;
+		
+		//The client can't perform any sensitive tasks unless they are authenticated
+		if(!client.isClientRegistered()) return false;
+		
+		switch(messageType) {
+			case CommConst.nhtTimeRetrieval -> handleMessageTimeRetrieval(client, unpacker);
+			case CommConst.nhtMassRetrieval -> handleMessageMassRetrieval(client, unpacker);
+			case CommConst.nhtConversationUpdate -> handleMessageConversationUpdate(client, unpacker);
+			case CommConst.nhtAttachmentReq -> handleMessageAttachmentRequest(client, unpacker);
+			case CommConst.nhtCreateChat -> handleMessageCreateChat(client, unpacker);
+			case CommConst.nhtSendTextExisting -> handleMessageSendTextExisting(client, unpacker);
+			case CommConst.nhtSendTextNew -> handleMessageSendTextNew(client, unpacker);
+			case CommConst.nhtSendFileExisting -> handleMessageSendFileExisting(client, unpacker);
+			case CommConst.nhtSendFileNew -> handleMessageSendFileNew(client, unpacker);
+			default -> {
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
 	private void handleMessageAuthentication(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
 		//Stopping the registration timer
 		client.cancelHandshakeExpiryTimer();
 		
-		byte[] transmissionCheck;
 		String installationID;
 		String clientName, platformID;
-		try {
-			//Decrypting the message
-			byte[] secureData = unpacker.readPayload(unpacker.unpackBinaryHeader());
-			byte[] data = EncryptionHelper.decrypt(secureData);
-			
-			MessageUnpacker secureUnpacker = MessagePack.newDefaultUnpacker(data);
-			try {
-				//Reading the data
-				transmissionCheck = secureUnpacker.readPayload(CommConst.transmissionCheckLength);
-				installationID = secureUnpacker.unpackString();
-				clientName = secureUnpacker.unpackString();
-				platformID = secureUnpacker.unpackString();
-			} finally {
-				secureUnpacker.close();
-			}
-		} catch(GeneralSecurityException exception) {
-			//Logging the exception
-			Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
-			
-			//Sending a message and closing the connection
-			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
-				packer.packInt(CommConst.nhtAuthentication);
-				packer.packInt(CommConst.nstAuthenticationUnauthorized);
-				dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
-			}
-			
-			return;
-		} catch(IOException | MessagePackException exception) {
-			//Logging the exception
-			Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
-			
-			//Sending a message and closing the connection
-			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
-				packer.packInt(CommConst.nhtAuthentication);
-				packer.packInt(CommConst.nstAuthenticationBadRequest);
-				dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
-			}
-			
-			return;
-		}
 		
-		//Validating the transmission
-		if(client.checkClearTransmissionCheck(transmissionCheck)) {
-			//Disconnecting clients with the same installation ID
-			Collection<ClientRegistration> connections = new HashSet<>(dataProxy.getConnections()); //Avoid concurrent modifications
-			for(ClientRegistration connectedClient : connections) {
-				if(installationID.equals(connectedClient.getInstallationID())) {
-					Main.getLogger().log(Level.INFO, "Closing old connection for " + connectedClient.getClientName());
-					initiateClose(connectedClient);
+		if(dataProxy.requiresAuthentication()) {
+			byte[] transmissionCheck;
+			try {
+				//Decrypting the message
+				byte[] secureData = unpacker.readPayload(unpacker.unpackBinaryHeader());
+				byte[] data = EncryptionHelper.decrypt(secureData);
+				
+				MessageUnpacker secureUnpacker = MessagePack.newDefaultUnpacker(data);
+				try {
+					//Reading the data
+					transmissionCheck = secureUnpacker.readPayload(CommConst.transmissionCheckLength);
+					installationID = secureUnpacker.unpackString();
+					clientName = secureUnpacker.unpackString();
+					platformID = secureUnpacker.unpackString();
+				} finally {
+					secureUnpacker.close();
 				}
+			} catch(GeneralSecurityException exception) {
+				//Logging the exception
+				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
+				
+				//Sending a message and closing the connection
+				try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+					packer.packInt(CommConst.nhtAuthentication);
+					packer.packInt(CommConst.nstAuthenticationUnauthorized);
+					dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
+				}
+				
+				return;
+			} catch(IOException | MessagePackException exception) {
+				//Logging the exception
+				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
+				
+				//Sending a message and closing the connection
+				try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+					packer.packInt(CommConst.nhtAuthentication);
+					packer.packInt(CommConst.nstAuthenticationBadRequest);
+					dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
+				}
+				
+				return;
 			}
 			
-			//Marking the client as registered
-			client.setClientRegistered(true);
-			client.setRegistration(installationID, clientName, platformID);
-			
-			//Sending a message
-			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
-				packer.packInt(CommConst.nhtAuthentication);
-				packer.packInt(CommConst.nstAuthenticationOK);
-				packer.packString(PreferencesManager.getInstallationID()); //Installation ID
-				packer.packString(Main.getDeviceName()); //Device name
-				packer.packString(System.getProperty("os.version")); //System version
-				packer.packString(Constants.SERVER_VERSION); //Software version
+			//Checking if the transmission check fails
+			if(!client.checkClearTransmissionCheck(transmissionCheck)) {
+				//Sending a message and closing the connection
+				try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+					packer.packInt(CommConst.nhtAuthentication);
+					packer.packInt(CommConst.nstAuthenticationUnauthorized);
+					dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
+				}
 				
-				dataProxy.sendMessage(client, packer.toByteArray(), true);
+				//Returning
+				return;
 			}
 		} else {
-			//Sending a message and closing the connection
-			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
-				packer.packInt(CommConst.nhtAuthentication);
-				packer.packInt(CommConst.nstAuthenticationUnauthorized);
-				dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
+			//Reading the data plainly
+			installationID = unpacker.unpackString();
+			clientName = unpacker.unpackString();
+			platformID = unpacker.unpackString();
+		}
+		
+		//Disconnecting clients with the same installation ID
+		Collection<ClientRegistration> connections = new HashSet<>(dataProxy.getConnections()); //Avoid concurrent modifications
+		for(ClientRegistration connectedClient : connections) {
+			if(installationID.equals(connectedClient.getInstallationID())) {
+				Main.getLogger().log(Level.INFO, "Closing old connection for " + connectedClient.getClientName());
+				initiateClose(connectedClient);
 			}
+		}
+		
+		//Marking the client as registered
+		client.setClientRegistered(true);
+		client.setRegistration(installationID, clientName, platformID);
+		
+		//Sending a message
+		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			packer.packInt(CommConst.nhtAuthentication);
+			packer.packInt(CommConst.nstAuthenticationOK);
+			packer.packString(PreferencesManager.getInstallationID()); //Installation ID
+			packer.packString(Main.getDeviceName()); //Device name
+			packer.packString(System.getProperty("os.version")); //System version
+			packer.packString(Constants.SERVER_VERSION); //Software version
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
 		}
 	}
 	

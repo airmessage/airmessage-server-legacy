@@ -31,6 +31,9 @@ dependencies {
     //Commonmark Java - Markdown parser
     implementation 'com.atlassian.commonmark:commonmark:0.14.0'
 
+    //JavaWebsocket - WebSocket library
+    implementation 'org.java-websocket:Java-WebSocket:1.4.1'
+
     //MessagePack - Serialization library
     implementation 'org.msgpack:msgpack-core:0.8.20'
 
@@ -43,9 +46,14 @@ task copyToLib(type: Copy) {
 }
 
 task jlink(type: Exec) {
-    final String jDeps = 'java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec'
+    final String jDeps = 'java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver'
 
     inputs.property("jlink.jdeps", jDeps)
+    outputs.dir("${buildDir}/java-runtime")
+
+    doFirst {
+        delete "${buildDir}/java-runtime"
+    }
 
     commandLine "${System.properties.'java.home'}/bin/jlink",
             '--no-header-files',
@@ -61,6 +69,11 @@ task jpackage(type: Exec) {
 
     inputs.dir(jar.destinationDirectory.asFile.get())
     inputs.dir("${buildDir}/java-runtime")
+    outputs.dir("AirMessage.app")
+
+    doFirst {
+        delete "AirMessage.app"
+    }
 
     commandLine "${System.properties.'java.home'}/bin/jpackage",
             '--name', 'AirMessage',
@@ -81,14 +94,26 @@ task jpackage(type: Exec) {
 
 task configurePlist(type: Exec) {
     mustRunAfter jpackage
-//    inputs.file('AirMessage.app/Contents/Info.plist')
-//    outputs.file('AirMessage.app/Contents/Info.plist')
+    inputs.dir("AirMessage.app")
+    outputs.file('AirMessage.app/Contents/Info.plist')
 
     commandLine 'plutil', '-insert', 'LSUIElement', '-string', 'True', 'AirMessage.app/Contents/Info.plist'
+
+    doLast {
+        exec {
+            commandLine 'plutil', '-insert', 'NSAppTransportSecurity', '-xml', '<dict><key>NSAllowsLocalNetworking</key><true/></dict>', 'AirMessage.app/Contents/Info.plist'
+        }
+    }
 }
 
 task publish {
     dependsOn ordered('jpackage', 'configurePlist')
+}
+
+task buildAndRun(type: Exec) {
+    dependsOn publish
+
+    commandLine 'AirMessage.app/Contents/MacOS/AirMessage'
 }
 
 application {

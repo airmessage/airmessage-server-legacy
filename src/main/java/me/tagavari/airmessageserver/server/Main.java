@@ -6,6 +6,7 @@ import me.tagavari.airmessageserver.connection.ConnectionManager;
 import me.tagavari.airmessageserver.connection.DataProxy;
 import me.tagavari.airmessageserver.connection.direct.DataProxyTCP;
 import me.tagavari.airmessageserver.exception.KeychainPermissionException;
+import org.java_websocket.framing.CloseFrame;
 
 import javax.swing.*;
 import java.io.*;
@@ -19,20 +20,10 @@ import java.util.logging.*;
 import java.util.stream.Collectors;
 
 public class Main {
+	//Creating the constants
 	private static final SecureRandom secureRandom = new SecureRandom();
-	
-	//Creating the reference values
-	public static final String PREFIX_DEBUG = "DEBUG LOG: ";
-	public static final int serverStateSetup = 0;
-	public static final int serverStateStarting = 1;
-	public static final int serverStateRunning = 2;
-	public static final int serverStateFailedDatabase = 3;
-	public static final int serverStateFailedServerPort = 4;
-	public static final int serverStateFailedServerInternal = 5;
-	
-	private static final int databaseScanFrequency = 2 * 1000;
-	
 	private static final File logFile = new File(Constants.applicationSupportDir, "logs/latest.log");
+	public static final int databaseScanFrequency = 2 * 1000;
 	
 	//Creating the variables
 	private static boolean debugMode = false;
@@ -40,7 +31,8 @@ public class Main {
 	private static Logger logger;
 	private static String deviceName;
 	
-	private static int serverState = serverStateSetup;
+	private static boolean isSetupMode;
+	private static ServerState serverState = ServerState.SETUP;
 	
 	public static void main(String[] args) throws IOException {
 		//Processing the arguments
@@ -78,7 +70,7 @@ public class Main {
 			getLogger().log(Level.INFO, "Server running in debug mode");
 		} else {
 			//Initializing Sentry
-			Sentry.init(Constants.SENTRY_DSN + "?release=" + Constants.SERVER_VERSION);
+			//Sentry.init(Constants.SENTRY_DSN + "?release=" + Constants.SERVER_VERSION);
 			
 			//Marking the user's ID (with their MAC address)
 			//String macAddress = Constants.getMACAddress();
@@ -89,7 +81,7 @@ public class Main {
 		}
 		
 		//Logging the startup messages
-		getLogger().info("Starting AirMessage server version " + Constants.SERVER_VERSION);
+		getLogger().info("Starting AirMessage Server version " + Constants.SERVER_VERSION);
 		
 		//Returning if the system is not valid
 		if(!runSystemCheck()) return;
@@ -108,9 +100,16 @@ public class Main {
 		//Initializing the UI helper
 		UIHelper.initialize();
 		
-		//Opening the intro window
-		if(PreferencesManager.getPrefAccountConfirmed()) runPermissionCheck();
-		else UIHelper.openIntroWindow(); //The permission check will be run when the user closes the window
+		//Setting up first run
+		if(PreferencesManager.getPrefAccountConfirmed()) {
+			runPermissionCheck();
+		} else {
+			//The permission check will be run when the user closes the window
+			UIHelper.openIntroWindow();
+			
+			//Enabling setup mode
+			setSetupMode(true);
+		}
 		
 		//Setting up the system tray
 		SystemTrayManager.setupSystemTray();
@@ -147,7 +146,7 @@ public class Main {
 		ConnectionManager.assignDataProxy();
 		
 		//Updating the server state
-		setServerState(serverStateStarting);
+		setServerState(ServerState.STARTING);
 		SystemTrayManager.updateStatusMessage();
 		
 		//Loading the credentials
@@ -159,7 +158,7 @@ public class Main {
 			boolean result = DatabaseManager.start(databaseScanFrequency);
 			if(!result) {
 				//Updating the server state
-				setServerState(serverStateFailedDatabase);
+				setServerState(ServerState.ERROR_DATABASE);
 				SystemTrayManager.updateStatusMessage();
 				
 				//Returning
@@ -179,7 +178,7 @@ public class Main {
 		if(DatabaseManager.getInstance() == null) return;
 		
 		//Updating the server state
-		setServerState(serverStateStarting);
+		setServerState(ServerState.STARTING);
 		SystemTrayManager.updateStatusMessage();
 		
 		//Disconnecting the server if it's currently running
@@ -273,11 +272,19 @@ public class Main {
 		return secureRandom;
 	}
 	
-	public static int getServerState() {
+	public static boolean isSetupMode() {
+		return isSetupMode;
+	}
+	
+	public static void setSetupMode(boolean isSetupMode) {
+		Main.isSetupMode = isSetupMode;
+	}
+	
+	public static ServerState getServerState() {
 		return serverState;
 	}
 	
-	public static void setServerState(int value) {
+	public static void setServerState(ServerState value) {
 		serverState = value;
 	}
 	

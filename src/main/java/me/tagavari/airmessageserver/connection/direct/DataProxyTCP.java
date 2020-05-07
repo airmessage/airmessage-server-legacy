@@ -8,6 +8,7 @@ import me.tagavari.airmessageserver.connection.EncryptionHelper;
 import me.tagavari.airmessageserver.server.Constants;
 import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.PreferencesManager;
+import me.tagavari.airmessageserver.server.ServerState;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -38,7 +39,7 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 		
 		//Returning if the requested port is already bound
 		if(!Constants.checkPortAvailability(port)) {
-			notifyStop(createServerResultPort);
+			notifyStop(ServerState.ERROR_TCP_PORT);
 			return;
 		}
 		
@@ -52,7 +53,7 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 		} catch(Exception exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
-			notifyStop(createServerResultInternal);
+			notifyStop(ServerState.ERROR_INTERNAL);
 			return;
 		}
 		
@@ -115,7 +116,7 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 		serverRunning = false;
 		
 		//Notifying the listeners
-		notifyStop(createServerResultOK);
+		notifyStop(ServerState.STOPPED);
 	}
 	
 	@Override
@@ -150,5 +151,10 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 	@Override
 	public Collection<ClientSocket> getConnections() {
 		return connectionList;
+	}
+	
+	@Override
+	public boolean requiresAuthentication() {
+		return true;
 	}
 }

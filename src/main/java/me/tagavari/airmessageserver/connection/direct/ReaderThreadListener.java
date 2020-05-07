@@ -1,6 +1,6 @@
 package me.tagavari.airmessageserver.connection.direct;
 
-public interface ReaderThreadListener {
+interface ReaderThreadListener {
 	/**
 	 * Called when a new message is received
 	 * @param data This message's body content

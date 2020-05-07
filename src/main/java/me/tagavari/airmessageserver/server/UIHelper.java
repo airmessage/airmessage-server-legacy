@@ -117,7 +117,7 @@ public class UIHelper {
 				accountButtonFD.top = new FormAttachment(50, -accountButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
 				accountButton.setLayoutData(accountButtonFD);
 				accountButton.addListener(SWT.Selection, event -> {
-					//TODO open Connect browser
+					ConnectAccountManager.openAccountWindow(shell);
 				});
 				shell.setDefaultButton(accountButton);
 				
@@ -140,6 +140,9 @@ public class UIHelper {
 						
 						//Running the permission check
 						Main.runPermissionCheck();
+						
+						//Disabling setup mode
+						Main.setSetupMode(false);
 						
 						//Starting the server
 						Main.startServer();

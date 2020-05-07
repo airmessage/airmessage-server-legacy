@@ -1,15 +1,23 @@
 package me.tagavari.airmessageserver.connection;
 
-import me.tagavari.airmessageserver.server.Main;
+import me.tagavari.airmessageserver.server.ServerState;
 
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
 public abstract class DataProxy<C extends ClientRegistration> {
+	//Error codes
+	//General
 	public static final int createServerResultOK = 0;
-	public static final int createServerResultPort = 1;
-	public static final int createServerResultInternal = 2;
+	public static final int createServerResultInternal = 1;
+	public static final int createServerResultExternal = 2;
+	//TCP server
+	public static final int createServerResultServerPort = 100;
+	//Connect relay
+	public static final int createServerResultConnectTokenRefresh = 200;
+	public static final int createServerResultConnectNoSubscription = 201;
+	public static final int createServerResultConnectOtherLocation = 202;
 	
 	private final Set<DataProxyListener<C>> messageListenerSet = new HashSet<>(1);
 	
@@ -60,7 +68,7 @@ public abstract class DataProxy<C extends ClientRegistration> {
 		for(DataProxyListener<C> messageListener : messageListenerSet) messageListener.onStart();
 	}
 	
-	protected void notifyStop(int code) {
+	protected void notifyStop(ServerState code) {
 		for(DataProxyListener<C> messageListener : messageListenerSet) messageListener.onStop(code);
 	}
 	
@@ -92,14 +100,9 @@ public abstract class DataProxy<C extends ClientRegistration> {
 		messageListenerSet.remove(messageListener);
 	}
 	
-	public static int createServerErrorToServerState(int value) {
-		switch(value) {
-			default:
-				throw new IllegalArgumentException("Expected a create server result error; instead got " + value);
-			case createServerResultPort:
-				return Main.serverStateFailedServerPort;
-			case createServerResultInternal:
-				return Main.serverStateFailedServerInternal;
-		}
-	}
+	/**
+	 * Called to check whether this data proxy requires authenticating connecting clients
+	 * @return TRUE if this proxy requires authentication
+	 */
+	public abstract boolean requiresAuthentication();
 }

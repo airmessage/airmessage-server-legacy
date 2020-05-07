@@ -47,20 +47,7 @@ public class ConnectionManager {
 	}
 	
 	public static int getConnectionCount() {
-		if(communicationsManager == null) return 0;
+		if(communicationsManager == null || !communicationsManager.isRunning()) return 0;
 		return communicationsManager.getDataProxy().getConnections().size();
-	}
-	
-	static int proxyErrorToServerState(int value) {
-		switch(value) {
-			default:
-				throw new IllegalArgumentException("Expected a create server result error; instead got " + value);
-			case DataProxy.createServerResultOK:
-				return Main.serverStateStarting;
-			case DataProxy.createServerResultPort:
-				return Main.serverStateFailedServerPort;
-			case DataProxy.createServerResultInternal:
-				return Main.serverStateFailedServerInternal;
-		}
 	}
 }

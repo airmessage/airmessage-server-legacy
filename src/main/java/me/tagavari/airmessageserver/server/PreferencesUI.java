@@ -114,7 +114,7 @@ public class PreferencesUI {
 			updateLabel.setText(Main.resources().getString("prefix.preference.updates"));
 			updateLabel.setLayoutData(new GridData(GridData.END, GridData.CENTER, false, false));
 			
-			pwButtonAutoUpdate.setText(Main.resources().getString("message.preference.autoupdate"));
+			pwButtonAutoUpdate.setText(Main.resources().getString("message.preference.auto_update"));
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			pwButtonAutoUpdate.setLayoutData(prefGB);
 			pwButtonAutoUpdate.setSelection(origPreferenceUpdateCheck);

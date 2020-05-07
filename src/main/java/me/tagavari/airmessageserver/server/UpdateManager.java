@@ -548,7 +548,7 @@ class UpdateManager {
 			updateInstallationInProgress.set(false);
 			
 			//Displaying an error
-			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.badupdate")));
+			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.bad_update")));
 			
 			return;
 		}
@@ -568,7 +568,7 @@ class UpdateManager {
 			updateInstallationInProgress.set(false);
 			
 			//Displaying an error
-			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.installlocation")));
+			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.install_location")));
 			
 			return;
 		}
@@ -584,7 +584,7 @@ class UpdateManager {
 			updateInstallationInProgress.set(false);
 			
 			//Displaying an error
-			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.installformat")));
+			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.install_format")));
 			
 			return;
 		}

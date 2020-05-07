@@ -127,48 +127,31 @@ public class SystemTrayManager {
 	}
 	
 	public static void updateStatusMessage() {
-		int state = Main.getServerState();
+		//Getting the state
+		ServerState state = Main.getServerState();
 		
-		//Getting the message
-		switch(state) {
-			case Main.serverStateSetup -> {
-				miStatus.setText(Main.resources().getString("message.status.waiting"));
-				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), 0));
-				miStatusSub.setEnabled(false);
-			}
-			case Main.serverStateStarting -> {
-				miStatus.setText(Main.resources().getString("message.status.starting"));
-				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), 0));
-				miStatusSub.setEnabled(false);
-			}
-			case Main.serverStateRunning -> {
-				miStatus.setText(Main.resources().getString("message.status.running"));
+		//Setting the status text
+		miStatus.setText(Main.resources().getString(state.messageID));
+		
+		//Setting the description text
+		if(state.type == ServerState.Constants.typeStatus) {
+			if(state == ServerState.RUNNING) {
 				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), ConnectionManager.getConnectionCount()));
-				miStatusSub.setEnabled(false);
+			} else {
+				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), 0));
 			}
-			case Main.serverStateFailedDatabase -> {
-				miStatus.setText(Main.resources().getString("message.status.error.database"));
-				miStatusSub.setText(Main.resources().getString("action.retry"));
-				miStatusSub.setEnabled(true);
-			}
-			case Main.serverStateFailedServerPort -> {
-				miStatus.setText(Main.resources().getString("message.status.error.port"));
-				miStatusSub.setText(Main.resources().getString("action.retry"));
-				miStatusSub.setEnabled(true);
-			}
-			case Main.serverStateFailedServerInternal -> {
-				miStatus.setText(Main.resources().getString("message.status.error.internal"));
-				miStatusSub.setText(Main.resources().getString("action.retry"));
-				miStatusSub.setEnabled(true);
-			}
+			miStatusSub.setEnabled(false);
+		} else {
+			miStatusSub.setText(Main.resources().getString("action.retry"));
+			miStatusSub.setEnabled(!Main.isSetupMode());
 		}
 		
-		miPrefs.setEnabled(state != Main.serverStateSetup);
+		miPrefs.setEnabled(!Main.isSetupMode());
 	}
 	
 	public static void updateConnectionsMessage() {
 		//Returning if the state isn't connected
-		if(Main.getServerState() != Main.serverStateRunning) return;
+		if(Main.getServerState() != ServerState.RUNNING) return;
 		
 		//Updating the message
 		miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), ConnectionManager.getConnectionCount()));

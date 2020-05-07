@@ -32,6 +32,7 @@ public class PreferencesManager {
 	private static final String javaPrefAccountConfirmed = "AccountConfirmed";
 	private static final String javaPrefAutoCheckUpdates = "AutomaticUpdateCheck";
 	private static final String javaPrefServerPort = "ServerPort";
+	private static final String javaPrefConnectUserID = "ConnectUserID";
 	
 	private static final Preferences preferencesNode = Preferences.userRoot().node(javaPrefRoot);
 	private static final String keychainService = "AirMessage";
@@ -54,7 +55,7 @@ public class PreferencesManager {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Prompting the user to grant Keychain access
-			UIHelper.displayAlertDialog(Main.resources().getString("message.error.keychainreject"));
+			UIHelper.displayAlertDialog(Main.resources().getString("message.error.keychain_reject"));
 			
 			return false;
 		}
@@ -250,6 +251,7 @@ public class PreferencesManager {
 	}
 	
 	public static boolean getPrefAccountConfirmed() {
+		if(true) return false;
 		return preferencesNode.getBoolean(javaPrefAccountConfirmed, false);
 	}
 	
@@ -271,6 +273,14 @@ public class PreferencesManager {
 	
 	public static void setPrefServerPort(int port) {
 		preferencesNode.putInt(javaPrefServerPort, port);
+	}
+	
+	public static String getPrefConnectUserID() {
+		return preferencesNode.get(javaPrefConnectUserID, null);
+	}
+	
+	public static void setPrefConnectUserID(String userID) {
+		preferencesNode.put(javaPrefConnectUserID, userID);
 	}
 	
 	public static String getPrefPassword() {

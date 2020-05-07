@@ -1,5 +1,7 @@
 package me.tagavari.airmessageserver.connection;
 
+import me.tagavari.airmessageserver.server.ServerState;
+
 public interface DataProxyListener<C> {
 	/**
 	 * Called when the proxy is started successfully
@@ -11,7 +13,7 @@ public interface DataProxyListener<C> {
 	 * (either as directed or due to an exception)
 	 * @param code The error code
 	 */
-	void onStop(int code);
+	void onStop(ServerState code);
 	
 	/**
 	 * Called when a new client is connected

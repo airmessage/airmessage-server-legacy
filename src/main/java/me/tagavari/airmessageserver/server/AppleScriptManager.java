@@ -438,7 +438,7 @@ public class AppleScriptManager {
 	}
 	
 	public static void showDiskAccessWarning() {
-		runBasicAS(ASShowDiskAccessWarning, Main.resources().getString("message.diskaccess_error"), Main.resources().getString("action.ignore"), Main.resources().getString("action.system_preferences"));
+		runBasicAS(ASShowDiskAccessWarning, Main.resources().getString("message.disk_access_error"), Main.resources().getString("action.ignore"), Main.resources().getString("action.system_preferences"));
 	}
 	
 	private static final List<FileUploadRequest> fileUploadRequests = Collections.synchronizedList(new ArrayList<>());
@@ -711,7 +711,7 @@ public class AppleScriptManager {
 		command.add("osascript");
 		for(String line : commandLines) {
 			command.add("-e");
-			command.add(String.format(line, (Object) arguments));
+			command.add(String.format(line, (Object[]) arguments));
 		}
 		
 		try {

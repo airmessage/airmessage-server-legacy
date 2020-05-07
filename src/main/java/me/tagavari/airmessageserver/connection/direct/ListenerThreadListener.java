@@ -1,6 +1,6 @@
 package me.tagavari.airmessageserver.connection.direct;
 
-public interface ListenerThreadListener {
+interface ListenerThreadListener {
 	/**
 	 * Called when a new client connects
 	 * @param client The client that issued this callback
