@@ -134,6 +134,7 @@ public class SystemTrayManager {
 		miStatus.setText(Main.resources().getString(state.messageID));
 		
 		//Setting the description text
+		//if(state.type == ServerState.Constants.typeStatus && state != ServerState.CONNECTING) {
 		if(state.type == ServerState.Constants.typeStatus) {
 			if(state == ServerState.RUNNING) {
 				miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), ConnectionManager.getConnectionCount()));
@@ -172,7 +173,7 @@ public class SystemTrayManager {
 			Process process = Runtime.getRuntime().exec(new String[] {"defaults", "read", "-g", "AppleInterfaceStyle"});
 			process.waitFor(100, TimeUnit.MILLISECONDS);
 			return process.exitValue() == 0;
-		} catch (IOException | InterruptedException | IllegalThreadStateException exception) {
+		} catch(IOException | InterruptedException | IllegalThreadStateException exception) {
 			//Returning false if the value couldn't be read
 			return false;
 		}

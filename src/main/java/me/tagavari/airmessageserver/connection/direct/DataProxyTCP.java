@@ -157,4 +157,9 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 	public boolean requiresAuthentication() {
 		return true;
 	}
+	
+	@Override
+	public boolean requiresPersistence() {
+		return true;
+	}
 }

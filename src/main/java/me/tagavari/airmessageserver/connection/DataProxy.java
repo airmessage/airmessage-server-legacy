@@ -68,6 +68,10 @@ public abstract class DataProxy<C extends ClientRegistration> {
 		for(DataProxyListener<C> messageListener : messageListenerSet) messageListener.onStart();
 	}
 	
+	protected void notifyPause(ServerState code) {
+		for(DataProxyListener<C> messageListener : messageListenerSet) messageListener.onPause(code);
+	}
+	
 	protected void notifyStop(ServerState code) {
 		for(DataProxyListener<C> messageListener : messageListenerSet) messageListener.onStop(code);
 	}
@@ -105,4 +109,10 @@ public abstract class DataProxy<C extends ClientRegistration> {
 	 * @return TRUE if this proxy requires authentication
 	 */
 	public abstract boolean requiresAuthentication();
+	
+	/**
+	 * Checks if this current communications setup should be kept alive
+	 * @return TRUE if persistence should be enabled
+	 */
+	public abstract boolean requiresPersistence();
 }

@@ -1,7 +1,7 @@
 package me.tagavari.airmessageserver.connection.connect;
 
-import com.sun.java.accessibility.util.AccessibilityListenerList;
 import me.tagavari.airmessageserver.connection.DataProxy;
+import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.ServerState;
 import org.java_websocket.framing.CloseFrame;
 
@@ -10,7 +10,9 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 public class DataProxyConnect extends DataProxy<ClientSocket> implements ConnectionListener {
+	private static final Random random = new Random();
 	private static final long handshakeTimeout = 8 * 1000;
+	private static final long disconnectReconnectMaxAttempts = 8; //The max num of attempts before capping the delay time - not before giving up
 	
 	//Creating the state values
 	private final Map<Integer, ClientSocket> connectionList = Collections.synchronizedMap(new HashMap<>());
@@ -21,6 +23,15 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	private final String connectUserID;
 	
 	private Timer handshakeTimeoutTimer;
+	
+	private int disconnectReconnectAttempts = 0;
+	private Timer disconnectReconnectTimer;
+	private final TimerTask disconnectReconnectTimerTask = new TimerTask() {
+		@Override
+		public void run() {
+			connectClient.connect();
+		}
+	};
 	
 	/**
 	 * DataProxyConnect constructor
@@ -142,8 +153,21 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 			default -> ServerState.ERROR_EXTERNAL;
 		};
 		
-		//Notifying of the error
-		notifyStop(localError);
+		//If there was a connection error, just try to reconnect later
+		if(localError == ServerState.ERROR_INTERNET && !Main.isSetupMode()) {
+			//Clearing connected clients
+			connectionList.clear();
+			
+			//Notifying the listeners
+			notifyPause(localError);
+			
+			//Scheduling the reconnection timer
+			startReconnectionTimer();
+		}
+		//Otherwise, fail and let the user deal with the error
+		else {
+			notifyStop(localError);
+		}
 	}
 	
 	@Override
@@ -159,6 +183,9 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 					
 					//Notifying the listeners that the connection is now good
 					notifyStart();
+					
+					//Resetting the failed connection attempt counter
+					disconnectReconnectAttempts = 0;
 				}
 				case NHT.nhtServerOpen -> {
 					//Reading the data
@@ -201,5 +228,44 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	@Override
 	public boolean requiresAuthentication() {
 		return false;
+	}
+	
+	@Override
+	public boolean requiresPersistence() {
+		return false;
+	}
+	
+	private void startReconnectionTimer() {
+		//Checking if there is no timer
+		if(disconnectReconnectTimer == null) {
+			disconnectReconnectTimer = new Timer();
+		}
+		
+		//Wait an exponentially increasing wait period + a random delay
+		int randomDelay = random.nextInt(1000);
+		disconnectReconnectTimer.schedule(disconnectReconnectTimerTask, powerN(2, disconnectReconnectAttempts) * 1000 + randomDelay);
+		
+		//Adding to the attempt counter
+		if(disconnectReconnectAttempts < disconnectReconnectMaxAttempts) {
+			disconnectReconnectAttempts++;
+		}
+	}
+	
+	private void stopReconnectionTimer() {
+		//Returning if there is no timer
+		if(disconnectReconnectTimer == null) return;
+	}
+	
+	private static long powerN(long number, int power) {
+		long res = 1;
+		long sq = number;
+		while(power > 0){
+			if(power % 2 == 1){
+				res *= sq;
+			}
+			sq = sq * sq;
+			power /= 2;
+		}
+		return res;
 	}
 }

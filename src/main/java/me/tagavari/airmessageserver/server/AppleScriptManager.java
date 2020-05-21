@@ -716,7 +716,7 @@ public class AppleScriptManager {
 		
 		try {
 			Runtime.getRuntime().exec(command.toArray(new String[0]));
-		} catch (IOException exception) {
+		} catch(IOException exception) {
 			//Printing the stack trace
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 		}

@@ -483,6 +483,11 @@ public class ConnectAccountManager {
 			}
 			
 			@Override
+			public void onPause(ServerState code) {
+			
+			}
+			
+			@Override
 			public void onOpen(Object client) {
 			
 			}

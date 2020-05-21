@@ -3,6 +3,7 @@ package me.tagavari.airmessageserver.server;
 public enum ServerState {
 	SETUP("message.status.waiting", null, Constants.typeStatus),
 	STARTING("message.status.starting", null, Constants.typeStatus),
+	CONNECTING("message.status.connecting", null, Constants.typeStatus),
 	RUNNING("message.status.running", null, Constants.typeStatus),
 	STOPPED("message.status.stopped", null, Constants.typeStatus),
 	

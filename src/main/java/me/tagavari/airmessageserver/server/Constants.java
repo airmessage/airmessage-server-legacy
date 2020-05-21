@@ -270,11 +270,6 @@ public class Constants {
 		}
 	}
 	
-	static <T> boolean arrayContains(T[] array, T value) {
-		for(T item : array) if(item.equals(value)) return true;
-		return false;
-	}
-	
 	static boolean compareMimeTypes(String one, String two) {
 		if(one.equals("*/*") || two.equals("*/*")) return true;
 		String[] oneComponents = one.split("/");

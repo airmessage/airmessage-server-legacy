@@ -71,22 +71,40 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		});
 		
 		//Starting the keepalive timer
-		keepAliveTimer.scheduleAtFixedRate(new TimerTask() {
-			@Override
-			public void run() {
-				//Sending a ping to all connected clients
-				boolean result = sendMessageHeaderOnly(null, CommConst.nhtPing, false);
-				
-				//Starting ping response timers
-				if(result) {
-					for(ClientRegistration connection : dataProxy.getConnections()) {
-						connection.startPingExpiryTimer(CommConst.pingTimeout, () -> initiateClose(connection));
+		if(dataProxy.requiresPersistence()) {
+			keepAliveTimer.scheduleAtFixedRate(new TimerTask() {
+				@Override
+				public void run() {
+					//Sending a ping to all connected clients
+					boolean result = sendMessageHeaderOnly(null, CommConst.nhtPing, false);
+					
+					//Starting ping response timers
+					if(result) {
+						for(ClientRegistration connection : dataProxy.getConnections()) {
+							connection.startPingExpiryTimer(CommConst.pingTimeout, () -> initiateClose(connection));
+						}
 					}
 				}
-			}
-		}, CommConst.keepAliveMillis, CommConst.keepAliveMillis);
+			}, CommConst.keepAliveMillis, CommConst.keepAliveMillis);
+		}
 		
 		Main.getLogger().info("Server started");
+	}
+	
+	@Override
+	public void onPause(ServerState code) {
+		//Updating the state
+		UIHelper.getDisplay().asyncExec(() -> {
+			Main.setServerState(code);
+			SystemTrayManager.updateStatusMessage();
+		});
+		
+		//Cancelling the keepalive timer
+		if(dataProxy.requiresPersistence()) {
+			keepAliveTimer.cancel();
+		}
+		
+		Main.getLogger().info("Server paused");
 	}
 	
 	@Override
@@ -101,7 +119,9 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		isRunning.set(false);
 		
 		//Cancelling the keepalive timer
-		keepAliveTimer.cancel();
+		if(dataProxy.requiresPersistence()) {
+			keepAliveTimer.cancel();
+		}
 		
 		Main.getLogger().info("Server stopped");
 	}
