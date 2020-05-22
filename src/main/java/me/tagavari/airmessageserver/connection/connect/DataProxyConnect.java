@@ -79,6 +79,9 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	public void stopServer() {
 		//Disconnecting the client
 		connectClient.close();
+		
+		//Stopping the reconnection timer
+		stopReconnectionTimer();
 	}
 	
 	@Override
@@ -236,7 +239,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	}
 	
 	private void startReconnectionTimer() {
-		//Checking if there is no timer
+		//Initializing the timer
 		if(disconnectReconnectTimer == null) {
 			disconnectReconnectTimer = new Timer();
 		}
@@ -254,15 +257,17 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	private void stopReconnectionTimer() {
 		//Returning if there is no timer
 		if(disconnectReconnectTimer == null) return;
+		
+		//Cancelling the timer
+		disconnectReconnectTimer.cancel();
+		disconnectReconnectTimer = null;
 	}
 	
 	private static long powerN(long number, int power) {
 		long res = 1;
 		long sq = number;
-		while(power > 0){
-			if(power % 2 == 1){
-				res *= sq;
-			}
+		while(power > 0) {
+			if(power % 2 == 1) res *= sq;
 			sq = sq * sq;
 			power /= 2;
 		}

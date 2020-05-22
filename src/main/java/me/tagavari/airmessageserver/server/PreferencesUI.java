@@ -1,5 +1,6 @@
 package me.tagavari.airmessageserver.server;
 
+import me.tagavari.airmessageserver.connection.ConnectionManager;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.*;
 import org.eclipse.swt.graphics.Rectangle;
@@ -118,6 +119,71 @@ public class PreferencesUI {
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			pwButtonAutoUpdate.setLayoutData(prefGB);
 			pwButtonAutoUpdate.setSelection(origPreferenceUpdateCheck);
+		}
+		
+		{
+			int accountType = PreferencesManager.getPrefAccountType();
+			
+			Label accessLabel = new Label(prefContainer, SWT.NONE);
+			Composite accessComposite = new Composite(prefContainer, SWT.NONE);
+			Button accessButton = new Button(accessComposite, SWT.PUSH);
+			Label accessDesc = new Label(accessComposite, SWT.WRAP);
+			
+			accessLabel.setText(Main.resources().getString("prefix.preference.account"));
+			GridData accessLabelGD = new GridData(GridData.END, GridData.BEGINNING, false, false);
+			accessLabelGD.verticalIndent = 10;
+			accessLabel.setLayoutData(accessLabelGD);
+			
+			GridLayout compositeLayout = new GridLayout();
+			compositeLayout.numColumns = 1;
+			accessComposite.setLayout(compositeLayout);
+			
+			String stringAction, stringDescription;
+			switch(accountType) {
+				case PreferencesManager.accountTypeDirect -> {
+					stringAction = Main.resources().getString("action.switch_to_account");
+					stringDescription = Main.resources().getString("message.preference.account_manual");
+				}
+				default -> {
+					stringAction = Main.resources().getString("action.sign_out");
+					stringDescription = Main.resources().getString("message.preference.account_connect");
+				}
+			}
+			
+			accessButton.setText(stringAction);
+			GridData prefGD = new GridData();
+			prefGD.horizontalIndent = -8;
+			accessButton.setLayoutData(prefGD);
+			accessButton.addListener(SWT.Selection, event -> {
+				String stringDialogTitle = switch(accountType) {
+					case PreferencesManager.accountTypeDirect -> Main.resources().getString("message.reset.title.direct");
+					default -> Main.resources().getString("message.reset.title.connect");
+				};
+				
+				//Displaying a confirmation dialog
+				UIHelper.getMessageShellDual(windowShell, stringDialogTitle, Main.resources().getString("message.reset.description"), stringAction, () -> {
+					//Closing the window
+					windowShell.close();
+					
+					//Setting the user's account as unconfirmed
+					PreferencesManager.setPrefAccountConfirmed(false);
+					
+					//Enabling setup mode
+					Main.setSetupMode(true);
+					
+					//Disconnecting
+					ConnectionManager.stop();
+					
+					//Showing the intro UI
+					UIHelper.openIntroWindow();
+				}, Main.resources().getString("action.cancel"), null).open();
+			});
+			
+			GridData accessDescRD = new GridData();
+			accessDescRD.widthHint = 300;
+			accessDesc.setLayoutData(accessDescRD);
+			accessDesc.setText(stringDescription);
+			accessDesc.setFont(UIHelper.getFont(accessDesc.getFont(), 10, -1));
 		}
 		
 		//Adding the divider

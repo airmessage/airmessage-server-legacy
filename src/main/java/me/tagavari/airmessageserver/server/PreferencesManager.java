@@ -251,7 +251,6 @@ public class PreferencesManager {
 	}
 	
 	public static boolean getPrefAccountConfirmed() {
-		if(true) return false;
 		return preferencesNode.getBoolean(javaPrefAccountConfirmed, false);
 	}
 	
