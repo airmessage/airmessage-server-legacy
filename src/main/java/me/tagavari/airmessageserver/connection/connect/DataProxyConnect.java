@@ -2,12 +2,17 @@ package me.tagavari.airmessageserver.connection.connect;
 
 import me.tagavari.airmessageserver.connection.DataProxy;
 import me.tagavari.airmessageserver.server.Main;
+import me.tagavari.airmessageserver.server.PreferencesManager;
 import me.tagavari.airmessageserver.server.ServerState;
 import org.java_websocket.framing.CloseFrame;
 
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public class DataProxyConnect extends DataProxy<ClientSocket> implements ConnectionListener {
 	private static final Random random = new Random();
@@ -25,11 +30,12 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	private Timer handshakeTimeoutTimer;
 	
 	private int disconnectReconnectAttempts = 0;
-	private Timer disconnectReconnectTimer;
+	private final ScheduledExecutorService disconnectReconnectService = Executors.newSingleThreadScheduledExecutor();
+	private ScheduledFuture<?> disconnectReconnectFuture = null;
 	private final TimerTask disconnectReconnectTimerTask = new TimerTask() {
 		@Override
 		public void run() {
-			connectClient.connect();
+			startServer();
 		}
 	};
 	
@@ -103,6 +109,15 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 		
 		//Running the sent runnable immediately
 		if(sentRunnable != null) sentRunnable.run();
+	}
+	
+	@Override
+	public void sendPushNotification() {
+		ByteBuffer byteBuffer;
+		byteBuffer = ByteBuffer.allocate(Integer.BYTES);
+		byteBuffer.putInt(NHT.nhtServerNotifyPush);
+		
+		connectClient.send(byteBuffer.array());
 	}
 	
 	@Override
@@ -239,14 +254,9 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	}
 	
 	private void startReconnectionTimer() {
-		//Initializing the timer
-		if(disconnectReconnectTimer == null) {
-			disconnectReconnectTimer = new Timer();
-		}
-		
 		//Wait an exponentially increasing wait period + a random delay
 		int randomDelay = random.nextInt(1000);
-		disconnectReconnectTimer.schedule(disconnectReconnectTimerTask, powerN(2, disconnectReconnectAttempts) * 1000 + randomDelay);
+		disconnectReconnectFuture = disconnectReconnectService.schedule(disconnectReconnectTimerTask, powerN(2, disconnectReconnectAttempts) * 1000 + randomDelay, TimeUnit.MILLISECONDS);
 		
 		//Adding to the attempt counter
 		if(disconnectReconnectAttempts < disconnectReconnectMaxAttempts) {
@@ -255,12 +265,11 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	}
 	
 	private void stopReconnectionTimer() {
-		//Returning if there is no timer
-		if(disconnectReconnectTimer == null) return;
+		//Returning if there is no task
+		if(disconnectReconnectFuture == null) return;
 		
-		//Cancelling the timer
-		disconnectReconnectTimer.cancel();
-		disconnectReconnectTimer = null;
+		//Cancelling the task
+		disconnectReconnectFuture.cancel(false);
 	}
 	
 	private static long powerN(long number, int power) {

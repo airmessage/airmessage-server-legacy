@@ -1,5 +1,6 @@
 package me.tagavari.airmessageserver.connection;
 
+import me.tagavari.airmessageserver.connection.connect.DataProxyConnect;
 import me.tagavari.airmessageserver.connection.direct.DataProxyTCP;
 import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.PreferencesManager;
@@ -17,8 +18,11 @@ public class ConnectionManager {
 	}
 	
 	public static void assignDataProxy() {
-		DataProxyTCP dataProxy = new DataProxyTCP(PreferencesManager.getPrefServerPort());
-		setDataProxy(dataProxy);
+		if(PreferencesManager.getPrefAccountType() == PreferencesManager.accountTypeConnect) {
+			setDataProxy(new DataProxyConnect(false, PreferencesManager.getPrefConnectUserID()));
+		} else {
+			setDataProxy(new DataProxyTCP(PreferencesManager.getPrefServerPort()));
+		}
 	}
 	
 	public static void start() {

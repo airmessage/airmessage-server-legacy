@@ -16,7 +16,7 @@ public class Constants {
 	static final String SENTRY_DSN = "https://4240bd1f5e2f4ecfac822f78dda19fce:00d4dcd23b244f46a4489b5b80811d39@sentry.io/301837";
 	
 	//Creating the version values
-	public static final String SERVER_VERSION = "0.4-dev1";
+	public static final String SERVER_VERSION = "0.4-dev2";
 	public static final int SERVER_VERSION_CODE = 17;
 	
 	//Creating the file values

@@ -557,6 +557,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			for(Blocks.Block item : items) item.writeObject(packer);
 			
 			dataProxy.sendMessage(null, packer.toByteArray(), true);
+			dataProxy.sendPushNotification();
 			
 			return true;
 		} catch(IOException exception) {
@@ -703,6 +704,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			for(Blocks.Block item : items) item.writeObject(packer);
 			
 			dataProxy.sendMessage(null, packer.toByteArray(), true);
+			dataProxy.sendPushNotification();
 			
 			return true;
 		} catch(IOException exception) {

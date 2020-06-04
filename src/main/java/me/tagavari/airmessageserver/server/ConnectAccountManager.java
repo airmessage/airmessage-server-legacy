@@ -17,7 +17,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.text.MessageFormat;
 import java.util.logging.Level;
 
 public class ConnectAccountManager {
@@ -513,6 +512,6 @@ public class ConnectAccountManager {
 		Main.getLogger().log(Level.WARNING, "Failed to authenticate with Firebase Authentication: " + name + ": " + message);
 		
 		//Displaying an error message
-		getMessageShell(parentShell, Main.resources().getString("message.login.error.title"), Main.resources().getString("message.login.error.body")).open();
+		getMessageShell(parentShell, Main.resources().getString("message.signin.error.title"), Main.resources().getString("message.signin.error.body")).open();
 	}
 }

@@ -137,6 +137,11 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 	}
 	
 	@Override
+	public void sendPushNotification() {
+		//Not supported
+	}
+	
+	@Override
 	public void disconnectClient(ClientSocket client) {
 		//Disconnecting the client
 		client.disconnect();

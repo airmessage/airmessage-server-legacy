@@ -841,7 +841,7 @@ public class DatabaseManager {
 						//Checking if the association is a sticker
 						if(associationType >= 1000 && associationType < 2000) {
 							//Retrieving the sticker attachment
-							Result<Record2<String, String>> fileRecord = context.select(DSL.field("attachment.guid", String.class), DSL.field("attachment.filename", String.class))
+							Result<Record3<String, String, String>> fileRecord = context.select(DSL.field("attachment.guid", String.class), DSL.field("attachment.filename", String.class), DSL.field("attachment.mime_type", String.class))
 									.from(DSL.table("message_attachment_join"))
 									.join(DSL.table("attachment")).on(DSL.field("message_attachment_join.attachment_id").eq(DSL.field("attachment.ROWID")))
 									.where(DSL.field("message_attachment_join.message_id").eq(rowID))
@@ -855,6 +855,7 @@ public class DatabaseManager {
 							if(fileName == null) continue;
 							File file = new File(fileName.replaceFirst("~", System.getProperty("user.home")));
 							if(!file.exists()) continue;
+							String fileType = fileRecord.getValue(0, DSL.field("attachment.mime_type", String.class));
 							
 							//Reading the file with GZIP compression
 							byte[] fileBytes = Files.readAllBytes(file.toPath());
@@ -864,7 +865,7 @@ public class DatabaseManager {
 							String fileGuid = fileRecord.getValue(0, DSL.field("attachment.guid", String.class));
 							
 							//Creating the modifier
-							Blocks.StickerModifierInfo modifier = new Blocks.StickerModifierInfo(associatedMessageGUID, associationIndex, fileGuid, sender, date, fileBytes);
+							Blocks.StickerModifierInfo modifier = new Blocks.StickerModifierInfo(associatedMessageGUID, associationIndex, fileGuid, sender, date, fileBytes, fileType);
 							
 							//Finding the associated message in memory
 							Blocks.MessageInfo matchingItem = null;

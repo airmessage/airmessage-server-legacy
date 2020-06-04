@@ -53,6 +53,11 @@ public abstract class DataProxy<C extends ClientRegistration> {
 	public abstract void sendMessage(C client, byte[] content, boolean encrypt, Runnable sentRunnable);
 	
 	/**
+	 * Sends a push notification to notify all disconnected clients of new information
+	 */
+	public abstract void sendPushNotification();
+	
+	/**
 	 * Disconnects a client from this server
 	 * @param client The client to disconnect
 	 */
