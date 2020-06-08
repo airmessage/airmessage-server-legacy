@@ -1,13 +1,12 @@
 package me.tagavari.airmessageserver.common;
 
-import org.msgpack.core.MessageBufferPacker;
-
 import java.io.IOException;
+import java.nio.BufferOverflowException;
 import java.util.List;
 
 public class Blocks {
 	public interface Block {
-		void writeObject(MessageBufferPacker packer) throws IOException;
+		void writeObject(AirPacker packer) throws BufferOverflowException;
 	}
 	
 	public static class ConversationInfo implements Block {
@@ -38,13 +37,13 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(MessageBufferPacker packer) throws IOException {
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
 			//Writing the fields
 			packer.packString(guid);
 			packer.packBoolean(available);
 			if(available) {
 				packer.packString(service);
-				packString(packer, name);
+				packer.packNullableString(name);
 				packer.packArrayHeader(members.length);
 				for(String member : members) packer.packString(member);
 			}
@@ -65,7 +64,7 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(MessageBufferPacker packer) throws IOException {
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
 			packer.packInt(getItemType());
 			
 			packer.packLong(serverID);
@@ -119,20 +118,20 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(MessageBufferPacker packer) throws IOException {
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
 			//Writing the fields
 			super.writeObject(packer);
 			
-			packString(packer, text);
-			packString(packer, subject);
-			packString(packer, sender);
+			packer.packNullableString(text);
+			packer.packNullableString(subject);
+			packer.packNullableString(sender);
 			packer.packArrayHeader(attachments.size());
 			for(AttachmentInfo item : attachments) item.writeObject(packer);
 			packer.packArrayHeader(stickers.size());
 			for(StickerModifierInfo item : stickers) item.writeObject(packer);
 			packer.packArrayHeader(tapbacks.size());
 			for(TapbackModifierInfo item : tapbacks) item.writeObject(packer);
-			packString(packer, sendEffect);
+			packer.packNullableString(sendEffect);
 			packer.packInt(stateCode);
 			packer.packInt(errorCode);
 			packer.packLong(dateRead);
@@ -166,12 +165,12 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(MessageBufferPacker packer) throws IOException {
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
 			//Writing the fields
 			super.writeObject(packer);
 			
-			packString(packer, agent);
-			packString(packer, other);
+			packer.packNullableString(agent);
+			packer.packNullableString(other);
 			packer.packInt(groupActionType);
 		}
 		
@@ -197,12 +196,12 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(MessageBufferPacker packer) throws IOException {
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
 			//Writing the fields
 			super.writeObject(packer);
 			
-			packString(packer, agent);
-			packString(packer, newChatName);
+			packer.packNullableString(agent);
+			packer.packNullableString(newChatName);
 		}
 		
 		@Override
@@ -228,16 +227,12 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(MessageBufferPacker packer) throws IOException {
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
 			packer.packString(guid);
 			packer.packString(name);
-			packString(packer, type);
+			packer.packNullableString(type);
 			packer.packLong(size);
-			if(checksum == null) packer.packNil();
-			else {
-				packer.packBinaryHeader(checksum.length);
-				packer.addPayload(checksum);
-			}
+			packer.packNullablePayload(checksum);
 		}
 	}
 	
@@ -249,7 +244,7 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(MessageBufferPacker packer) throws IOException {
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
 			packer.packInt(getItemType());
 			
 			packer.packString(message);
@@ -273,7 +268,7 @@ public class Blocks {
 			this.dateRead = dateRead;
 		}
 		
-		public void writeObject(MessageBufferPacker packer) throws IOException {
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
 			//Writing the fields
 			super.writeObject(packer);
 			
@@ -311,16 +306,15 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(MessageBufferPacker packer) throws IOException {
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
 			//Writing the fields
 			super.writeObject(packer);
 			
 			packer.packInt(messageIndex);
 			packer.packString(fileGuid);
-			packString(packer, sender);
+			packer.packNullableString(sender);
 			packer.packLong(date);
-			packer.packBinaryHeader(data.length);
-			packer.addPayload(data);
+			packer.packPayload(data);
 			packer.packString(type);
 		}
 		
@@ -358,12 +352,12 @@ public class Blocks {
 		}
 		
 		@Override
-		public void writeObject(MessageBufferPacker packer) throws IOException {
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
 			//Writing the fields
 			super.writeObject(packer);
 			
 			packer.packInt(messageIndex);
-			packString(packer, sender);
+			packer.packNullableString(sender);
 			packer.packInt(code);
 		}
 		
@@ -371,10 +365,5 @@ public class Blocks {
 		int getItemType() {
 			return itemType;
 		}
-	}
-	
-	private static void packString(MessageBufferPacker packer, String string) throws IOException {
-		if(string == null) packer.packNil();
-		else packer.packString(string);
 	}
 }

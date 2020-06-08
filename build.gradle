@@ -34,9 +34,6 @@ dependencies {
     //JavaWebsocket - WebSocket library
     implementation 'org.java-websocket:Java-WebSocket:1.4.1'
 
-    //MessagePack - Serialization library
-    implementation 'org.msgpack:msgpack-core:0.8.20'
-
     implementation fileTree('lib') { include '*.jar' }
 }
 

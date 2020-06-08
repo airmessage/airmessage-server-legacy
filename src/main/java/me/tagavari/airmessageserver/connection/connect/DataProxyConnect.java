@@ -61,11 +61,15 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 		
 		connectionList.put(connectionID, client);
 		notifyOpen(client);
+		
+		Main.getLogger().info("Client connected from Connect proxy" + " (" + connectionID + ")");
 	}
 	
 	private void removeClient(int connectionID) {
 		ClientSocket client = connectionList.remove(connectionID);
 		if(client != null) notifyClose(client);
+		
+		Main.getLogger().info("Client disconnected from Connect proxy" + " (" + connectionID + ")");
 	}
 	
 	@Override

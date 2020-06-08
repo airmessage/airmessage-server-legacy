@@ -2,15 +2,15 @@ package me.tagavari.airmessageserver.connection;
 
 import io.sentry.Sentry;
 import io.sentry.event.BreadcrumbBuilder;
+import me.tagavari.airmessageserver.common.AirPacker;
+import me.tagavari.airmessageserver.common.AirUnpacker;
 import me.tagavari.airmessageserver.common.Blocks;
 import me.tagavari.airmessageserver.server.*;
 import org.jooq.impl.DSL;
-import org.msgpack.core.MessageBufferPacker;
-import org.msgpack.core.MessagePack;
-import org.msgpack.core.MessagePackException;
-import org.msgpack.core.MessageUnpacker;
 
 import java.io.IOException;
+import java.nio.BufferOverflowException;
+import java.nio.BufferUnderflowException;
 import java.security.GeneralSecurityException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -135,23 +135,23 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			client.setTransmissionCheck(transmissionCheck);
 			
 			//Sending this server's information with the transmission check
-			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			try(AirPacker packer = AirPacker.get()) {
 				packer.packInt(CommConst.nhtInformation);
 				
 				packer.packInt(CommConst.mmCommunicationsVersion);
 				packer.packInt(CommConst.mmCommunicationsSubVersion);
 				
 				packer.packBoolean(true); //Transmission check required
-				packer.packBinaryHeader(transmissionCheck.length);
-				packer.addPayload(transmissionCheck);
+				packer.packPayload(transmissionCheck);
 				
-				dataProxy.sendMessage(client, packer.toByteArray(), false);
-			} catch(IOException exception) {
+				byte[] data = packer.toByteArray();
+				dataProxy.sendMessage(client, data, false);
+			} catch(BufferOverflowException exception) {
 				exception.printStackTrace();
 			}
 		} else {
 			//Sending this server's information without the transmission check
-			try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+			try(AirPacker packer = AirPacker.get()) {
 				packer.packInt(CommConst.nhtInformation);
 				
 				packer.packInt(CommConst.mmCommunicationsVersion);
@@ -160,7 +160,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 				packer.packBoolean(false); //Transmission check not required
 				
 				dataProxy.sendMessage(client, packer.toByteArray(), false);
-			} catch(IOException exception) {
+			} catch(BufferOverflowException exception) {
 				exception.printStackTrace();
 			}
 		}
@@ -183,8 +183,8 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		//Resetting the ping timer
 		client.cancelPingExpiryTimer();
 		
-		//Wrapping the data in a MessagePack unpacker
-		MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(data);
+		//Wrapping the data in an unpacker
+		AirUnpacker unpacker = new AirUnpacker(data);
 		try {
 			//Reading the message type
 			int messageType = unpacker.unpackInt();
@@ -204,18 +204,12 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			
 			if(wasEncrypted) processMessageSecure(client, messageType, unpacker);
 			else processMessageInsecure(client, messageType, unpacker);
-		} catch(IOException | MessagePackException exception) {
+		} catch(BufferUnderflowException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-		} finally {
-			try {
-				unpacker.close();
-			} catch(IOException exception) {
-				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			}
 		}
 	}
 	
-	private boolean processMessageInsecure(ClientRegistration client, int messageType, MessageUnpacker unpacker) throws IOException {
+	private boolean processMessageInsecure(ClientRegistration client, int messageType, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Responding to standard requests
 		switch(messageType) {
 			case CommConst.nhtClose -> dataProxy.disconnectClient(client);
@@ -229,7 +223,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		return true;
 	}
 	
-	private boolean processMessageSecure(ClientRegistration client, int messageType, MessageUnpacker unpacker) throws IOException {
+	private boolean processMessageSecure(ClientRegistration client, int messageType, AirUnpacker unpacker) throws BufferUnderflowException {
 		if(processMessageInsecure(client, messageType, unpacker)) return true;
 		
 		//The client can't perform any sensitive tasks unless they are authenticated
@@ -253,7 +247,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		return true;
 	}
 	
-	private void handleMessageAuthentication(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+	private void handleMessageAuthentication(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Stopping the registration timer
 		client.cancelHandshakeExpiryTimer();
 		
@@ -264,37 +258,32 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			byte[] transmissionCheck;
 			try {
 				//Decrypting the message
-				byte[] secureData = unpacker.readPayload(unpacker.unpackBinaryHeader());
-				byte[] data = EncryptionHelper.decrypt(secureData);
+				byte[] secureData = EncryptionHelper.decrypt(unpacker.unpackPayload());
 				
-				MessageUnpacker secureUnpacker = MessagePack.newDefaultUnpacker(data);
-				try {
-					//Reading the data
-					transmissionCheck = secureUnpacker.readPayload(CommConst.transmissionCheckLength);
-					installationID = secureUnpacker.unpackString();
-					clientName = secureUnpacker.unpackString();
-					platformID = secureUnpacker.unpackString();
-				} finally {
-					secureUnpacker.close();
-				}
+				//Reading the data
+				AirUnpacker secureUnpacker = new AirUnpacker(secureData);
+				transmissionCheck = secureUnpacker.unpackPayload();
+				installationID = secureUnpacker.unpackString();
+				clientName = secureUnpacker.unpackString();
+				platformID = secureUnpacker.unpackString();
 			} catch(GeneralSecurityException exception) {
 				//Logging the exception
 				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
 				
 				//Sending a message and closing the connection
-				try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+				try(AirPacker packer = AirPacker.get()) {
 					packer.packInt(CommConst.nhtAuthentication);
 					packer.packInt(CommConst.nstAuthenticationUnauthorized);
 					dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
 				}
 				
 				return;
-			} catch(IOException | MessagePackException exception) {
+			} catch(BufferOverflowException exception) {
 				//Logging the exception
 				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
 				
 				//Sending a message and closing the connection
-				try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+				try(AirPacker packer = AirPacker.get()) {
 					packer.packInt(CommConst.nhtAuthentication);
 					packer.packInt(CommConst.nstAuthenticationBadRequest);
 					dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
@@ -306,7 +295,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			//Checking if the transmission check fails
 			if(!client.checkClearTransmissionCheck(transmissionCheck)) {
 				//Sending a message and closing the connection
-				try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+				try(AirPacker packer = AirPacker.get()) {
 					packer.packInt(CommConst.nhtAuthentication);
 					packer.packInt(CommConst.nstAuthenticationUnauthorized);
 					dataProxy.sendMessage(client, packer.toByteArray(), false, () -> initiateClose(client));
@@ -336,7 +325,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		client.setRegistration(installationID, clientName, platformID);
 		
 		//Sending a message
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtAuthentication);
 			packer.packInt(CommConst.nstAuthenticationOK);
 			packer.packString(PreferencesManager.getInstallationID()); //Installation ID
@@ -348,7 +337,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		}
 	}
 	
-	private void handleMessageTimeRetrieval(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+	private void handleMessageTimeRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Reading the request data
 		long timeLower = unpacker.unpackLong();
 		long timeUpper = unpacker.unpackLong();
@@ -360,7 +349,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 				CommConst.nhtTimeRetrieval));
 	}
 	
-	private void handleMessageMassRetrieval(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+	private void handleMessageMassRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Reading the request data
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		
@@ -395,7 +384,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.MassRetrievalRequest(client, requestID, restrictMessages, timeSinceMessages, downloadAttachments, restrictAttachmentsDate, timeSinceAttachments, restrictAttachmentsSize, attachmentsSizeLimit, attachmentFilterWhitelist, attachmentFilterBlacklist, attachmentFilterDLOther));
 	}
 	
-	private void handleMessageConversationUpdate(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+	private void handleMessageConversationUpdate(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Reading the chat GUID list
 		String[] chatGUIDs = new String[unpacker.unpackArrayHeader()];
 		for(int i = 0; i < chatGUIDs.length; i++) chatGUIDs[i] = unpacker.unpackString();
@@ -404,14 +393,14 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.ConversationInfoRequest(client, chatGUIDs));
 	}
 	
-	private void handleMessageAttachmentRequest(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+	private void handleMessageAttachmentRequest(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		int chunkSize = unpacker.unpackInt(); //How many bytes to upload per packet
 		String fileGUID = unpacker.unpackString(); //The GUID of the file to download
 		
 		//Sending a reply
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtAttachmentReqConfirm);
 			packer.packShort(requestID);
 			
@@ -422,7 +411,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.FileRequest(client, fileGUID, requestID, chunkSize));
 	}
 	
-	private void handleMessageCreateChat(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+	private void handleMessageCreateChat(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		String[] chatMembers = new String[unpacker.unpackArrayHeader()]; //The members of this conversation
@@ -436,7 +425,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		sendMessageRequestResponse(client, CommConst.nhtCreateChat, requestID, result.item1, result.item2);
 	}
 	
-	private void handleMessageSendTextExisting(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+	private void handleMessageSendTextExisting(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		String chatGUID = unpacker.unpackString(); //The GUID of the chat to send a message to
@@ -449,7 +438,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		sendMessageRequestResponse(client, CommConst.nhtSendResult, requestID, result.item1, result.item2);
 	}
 	
-	private void handleMessageSendTextNew(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+	private void handleMessageSendTextNew(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		String[] members = new String[unpacker.unpackArrayHeader()]; //The members of the chat to send the message to
@@ -464,27 +453,27 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		sendMessageRequestResponse(client, CommConst.nhtSendResult, requestID, result.item1, result.item2);
 	}
 	
-	private void handleMessageSendFileExisting(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+	private void handleMessageSendFileExisting(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		int requestIndex = unpacker.unpackInt(); //The index of this request, to ensure that packets are received and written in order
 		boolean isLast = unpacker.unpackBoolean(); //Is this the last packet?
 		String chatGUID = unpacker.unpackString(); //The GUID of the chat to send the message to
-		byte[] compressedBytes = unpacker.readPayload(unpacker.unpackBinaryHeader()); //The file bytes to append
+		byte[] compressedBytes = unpacker.unpackPayload(); //The file bytes to append
 		String fileName = requestIndex == 0 ? unpacker.unpackString() : null; //The name of the file to send
 		
 		//Forwarding the data
 		AppleScriptManager.addFileFragment(client, requestID, chatGUID, fileName, requestIndex, compressedBytes, isLast);
 	}
 	
-	private void handleMessageSendFileNew(ClientRegistration client, MessageUnpacker unpacker) throws IOException {
+	private void handleMessageSendFileNew(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		int requestIndex = unpacker.unpackInt(); //The index of this request, to ensure that packets are received and written in order
 		boolean isLast = unpacker.unpackBoolean(); //Is this the last packet?
 		String[] members = new String[unpacker.unpackArrayHeader()]; //The members of the chat to send the message to
 		for(int i = 0; i < members.length; i++) members[i] = unpacker.unpackString();
-		byte[] compressedBytes = unpacker.readPayload(unpacker.unpackBinaryHeader()); //The file bytes to append
+		byte[] compressedBytes = unpacker.unpackPayload(); //The file bytes to append
 		String fileName = null; //The name of the file to send
 		String service = null; //The service of the conversation
 		if(requestIndex == 0) {
@@ -497,11 +486,11 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	public void initiateClose(ClientRegistration client) {
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtClose);
 			
 			dataProxy.sendMessage(client, packer.toByteArray(), false, () -> dataProxy.disconnectClient(client));
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			
 			//Disconnecting the client anyways
@@ -515,17 +504,16 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		if(!client.isConnected()) return false;
 		
 		//Sending a reply
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(header);
 			packer.packShort(requestID);
 			packer.packInt(resultCode); //Result code
-			if(details == null) packer.packNil();
-			else packer.packString(details);
+			packer.packNullableString(details);
 			
 			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			
 			return true;
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
@@ -535,13 +523,13 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	
 	//Helper function for sending a packet with only a header and an empty body
 	public boolean sendMessageHeaderOnly(ClientRegistration client, int header, boolean encrypt) {
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(header);
 			
 			dataProxy.sendMessage(client, packer.toByteArray(), encrypt);
 			
 			return true;
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
@@ -550,7 +538,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	public boolean sendMessageUpdate(Collection<Blocks.ConversationItem> items) {
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtMessageUpdate);
 			
 			packer.packArrayHeader(items.size());
@@ -560,7 +548,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			dataProxy.sendPushNotification();
 			
 			return true;
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
@@ -569,7 +557,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	public boolean sendMessageUpdate(ClientRegistration client, int header, Collection<Blocks.ConversationItem> items) {
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(header);
 			
 			packer.packArrayHeader(items.size());
@@ -578,7 +566,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			
 			return true;
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
@@ -587,7 +575,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	public boolean sendConversationInfo(ClientRegistration client, Collection<Blocks.ConversationInfo> items) {
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtConversationUpdate);
 			
 			packer.packArrayHeader(items.size());
@@ -596,7 +584,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			
 			return true;
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
@@ -605,7 +593,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	public boolean sendFileChunk(ClientRegistration client, short requestID, int requestIndex, long fileLength, boolean isLast, String fileGUID, byte[] chunkData) {
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtAttachmentReq);
 			
 			packer.packShort(requestID);
@@ -614,13 +602,12 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			packer.packBoolean(isLast);
 			
 			packer.packString(fileGUID);
-			packer.packBinaryHeader(chunkData.length);
-			packer.addPayload(chunkData);
+			packer.packPayload(chunkData);
 			
 			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			
 			return true;
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
@@ -629,7 +616,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	public boolean sendMassRetrievalInitial(ClientRegistration client, short requestID, Collection<Blocks.ConversationInfo> conversations, int messageCount) {
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtMassRetrieval);
 			
 			packer.packShort(requestID);
@@ -643,7 +630,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			
 			return true;
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
@@ -652,7 +639,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	public boolean sendMassRetrievalMessages(ClientRegistration client, short requestID, int packetIndex, Collection<Blocks.ConversationItem> conversationItems) {
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtMassRetrieval);
 			
 			packer.packShort(requestID);
@@ -664,7 +651,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			
 			return true;
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
@@ -673,7 +660,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	public boolean sendMassRetrievalFileChunk(ClientRegistration client, short requestID, int requestIndex, String fileName, boolean isLast, String fileGUID, byte[] chunkData) {
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtMassRetrievalFile);
 			
 			packer.packShort(requestID);
@@ -682,13 +669,12 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			packer.packBoolean(isLast);
 			
 			packer.packString(fileGUID);
-			packer.packBinaryHeader(chunkData.length);
-			packer.addPayload(chunkData);
+			packer.packPayload(chunkData);
 			
 			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			
 			return true;
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
@@ -697,7 +683,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	public boolean sendModifierUpdate(Collection<Blocks.ModifierInfo> items) {
-		try(MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtModifierUpdate);
 			
 			packer.packArrayHeader(items.size());
@@ -707,7 +693,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			dataProxy.sendPushNotification();
 			
 			return true;
-		} catch(IOException exception) {
+		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			Sentry.capture(exception);
 			
