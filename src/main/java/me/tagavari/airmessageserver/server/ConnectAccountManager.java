@@ -511,6 +511,9 @@ public class ConnectAccountManager {
 		//Logging the error
 		Main.getLogger().log(Level.WARNING, "Failed to authenticate with Firebase Authentication: " + name + ": " + message);
 		
+		//Closing the shell (which also stops the server)
+		if(windowShell != null) windowShell.close();
+		
 		//Displaying an error message
 		getMessageShell(parentShell, Main.resources().getString("message.signin.error.title"), Main.resources().getString("message.signin.error.body")).open();
 	}
