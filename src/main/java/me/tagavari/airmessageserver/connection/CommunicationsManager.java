@@ -5,10 +5,10 @@ import io.sentry.event.BreadcrumbBuilder;
 import me.tagavari.airmessageserver.common.AirPacker;
 import me.tagavari.airmessageserver.common.AirUnpacker;
 import me.tagavari.airmessageserver.common.Blocks;
+import me.tagavari.airmessageserver.request.*;
 import me.tagavari.airmessageserver.server.*;
 import org.jooq.impl.DSL;
 
-import java.io.IOException;
 import java.nio.BufferOverflowException;
 import java.nio.BufferUnderflowException;
 import java.security.GeneralSecurityException;
@@ -234,6 +234,10 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			case CommConst.nhtMassRetrieval -> handleMessageMassRetrieval(client, unpacker);
 			case CommConst.nhtConversationUpdate -> handleMessageConversationUpdate(client, unpacker);
 			case CommConst.nhtAttachmentReq -> handleMessageAttachmentRequest(client, unpacker);
+			
+			case CommConst.nhtLiteConversationRetrieval -> handleMessageLiteConversationRetrieval(client, unpacker);
+			case CommConst.nhtLiteThreadRetrieval -> handleMessageLiteThreadRetrieval(client, unpacker);
+			
 			case CommConst.nhtCreateChat -> handleMessageCreateChat(client, unpacker);
 			case CommConst.nhtSendTextExisting -> handleMessageSendTextExisting(client, unpacker);
 			case CommConst.nhtSendTextNew -> handleMessageSendTextNew(client, unpacker);
@@ -343,9 +347,9 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		long timeUpper = unpacker.unpackLong();
 		
 		//Creating a new request and queuing it
-		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.CustomRetrievalRequest(
+		DatabaseManager.getInstance().addClientRequest(new CustomRetrievalRequest(
 				client,
-				() -> DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper))),
+				new DatabaseManager.RetrievalFilter(DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper))), -1, null),
 				CommConst.nhtTimeRetrieval));
 	}
 	
@@ -381,7 +385,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		}
 		
 		//Creating a new request and queuing it
-		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.MassRetrievalRequest(client, requestID, restrictMessages, timeSinceMessages, downloadAttachments, restrictAttachmentsDate, timeSinceAttachments, restrictAttachmentsSize, attachmentsSizeLimit, attachmentFilterWhitelist, attachmentFilterBlacklist, attachmentFilterDLOther));
+		DatabaseManager.getInstance().addClientRequest(new MassRetrievalRequest(client, requestID, restrictMessages, timeSinceMessages, downloadAttachments, restrictAttachmentsDate, timeSinceAttachments, restrictAttachmentsSize, attachmentsSizeLimit, attachmentFilterWhitelist, attachmentFilterBlacklist, attachmentFilterDLOther));
 	}
 	
 	private void handleMessageConversationUpdate(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
@@ -390,7 +394,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		for(int i = 0; i < chatGUIDs.length; i++) chatGUIDs[i] = unpacker.unpackString();
 		
 		//Creating a new request and queuing it
-		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.ConversationInfoRequest(client, chatGUIDs));
+		DatabaseManager.getInstance().addClientRequest(new ConversationInfoRequest(client, chatGUIDs));
 	}
 	
 	private void handleMessageAttachmentRequest(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
@@ -408,7 +412,21 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		}
 		
 		//Adding the request
-		DatabaseManager.getInstance().addClientRequest(new DatabaseManager.FileRequest(client, fileGUID, requestID, chunkSize));
+		DatabaseManager.getInstance().addClientRequest(new FileRequest(client, fileGUID, requestID, chunkSize));
+	}
+	
+	private void handleMessageLiteConversationRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+		//Adding the request
+		DatabaseManager.getInstance().addClientRequest(new LiteConversationRequest(client));
+	}
+	
+	private void handleMessageLiteThreadRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+		//Reading the request information
+		String conversationGUID = unpacker.unpackString();
+		long firstMessageID = unpacker.unpackBoolean() ? unpacker.unpackLong() : -1;
+		
+		//Adding the request
+		DatabaseManager.getInstance().addClientRequest(new LiteThreadRequest(client, conversationGUID, firstMessageID));
 	}
 	
 	private void handleMessageCreateChat(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
@@ -578,6 +596,49 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtConversationUpdate);
 			
+			packer.packArrayHeader(items.size());
+			for(Blocks.Block item : items) item.writeObject(packer);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
+			
+			return true;
+		} catch(BufferOverflowException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendLiteConversationInfo(ClientRegistration client, Collection<Blocks.LiteConversationInfo> items) {
+		try(AirPacker packer = AirPacker.get()) {
+			packer.packInt(CommConst.nhtLiteConversationRetrieval);
+			
+			packer.packArrayHeader(items.size());
+			for(Blocks.Block item : items) item.writeObject(packer);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
+			
+			return true;
+		} catch(BufferOverflowException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendLiteThreadInfo(ClientRegistration client, String conversationGUID, long firstMessageID, Collection<Blocks.ConversationItem> items) {
+		try(AirPacker packer = AirPacker.get()) {
+			packer.packInt(CommConst.nhtLiteThreadRetrieval);
+			
+			packer.packString(conversationGUID);
+			if(firstMessageID != -1) {
+				packer.packBoolean(true);
+				packer.packLong(firstMessageID);
+			} else {
+				packer.packBoolean(false);
+			}
 			packer.packArrayHeader(items.size());
 			for(Blocks.Block item : items) item.writeObject(packer);
 			

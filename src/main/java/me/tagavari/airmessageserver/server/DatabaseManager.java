@@ -2,15 +2,14 @@ package me.tagavari.airmessageserver.server;
 
 import io.sentry.Sentry;
 import me.tagavari.airmessageserver.common.Blocks;
-import me.tagavari.airmessageserver.connection.ClientRegistration;
 import me.tagavari.airmessageserver.connection.CommConst;
-import me.tagavari.airmessageserver.connection.CommunicationsManager;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
+import me.tagavari.airmessageserver.request.*;
+import org.jooq.Record;
 import org.jooq.*;
 import org.jooq.impl.DSL;
 
 import java.io.*;
-import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
@@ -26,7 +25,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
-import java.util.zip.GZIPInputStream;
+
+import static org.jooq.impl.DSL.*;
 
 public class DatabaseManager {
 	//Creating the reference variables
@@ -197,9 +197,9 @@ public class DatabaseManager {
 					
 					//Fetching new messages
 					dataFetchResult = fetchData(connection,
-							latestEntryID == -1 ?
-									() -> DSL.field("message.date").greaterThan(creationTime) :
-									() -> DSL.field("message.ROWID").greaterThan(latestEntryID), null);
+							new RetrievalFilter(latestEntryID == -1 ?
+									field("message.date").greaterThan(creationTime) :
+									field("message.ROWID").greaterThan(latestEntryID), -1, null), null);
 					
 					//Updating the latest entry ID
 					if(dataFetchResult.latestMessageID > latestEntryID) latestEntryID = dataFetchResult.latestMessageID;
@@ -270,7 +270,7 @@ public class DatabaseManager {
 		private final Connection connection;
 		
 		//Creating the lock values
-		private BlockingQueue<Object> databaseRequests = new LinkedBlockingQueue<>();
+		private BlockingQueue<DBRequest> databaseRequests = new LinkedBlockingQueue<>();
 		
 		private RequestThread(Connection connection) {
 			this.connection = connection;
@@ -287,6 +287,8 @@ public class DatabaseManager {
 					//Processing the request
 					if(request instanceof ConversationInfoRequest) fulfillConversationRequest(connection, (ConversationInfoRequest) request);
 					else if(request instanceof FileRequest) fulfillFileRequest(connection, (FileRequest) request);
+					else if(request instanceof LiteConversationRequest) fulfillLiteConversationRequest(connection, (LiteConversationRequest) request);
+					else if(request instanceof LiteThreadRequest) fulfillLiteThreadRequest(connection, (LiteThreadRequest) request);
 					else if(request instanceof CustomRetrievalRequest) fulfillCustomRetrievalRequest(connection, (CustomRetrievalRequest) request);
 					else if(request instanceof MassRetrievalRequest) fulfillMassRetrievalRequest(connection, (MassRetrievalRequest) request);
 				}
@@ -298,7 +300,7 @@ public class DatabaseManager {
 			}
 		}
 		
-		void addRequest(Object request) {
+		void addRequest(DBRequest request) {
 			databaseRequests.add(request);
 			/* //Adding the data struct
 			dbRequestsLock.lock();
@@ -311,7 +313,7 @@ public class DatabaseManager {
 		}
 	}
 	
-	public void addClientRequest(Object request) {
+	public void addClientRequest(DBRequest request) {
 		requestThread.addRequest(request);
 	}
 	
@@ -329,9 +331,9 @@ public class DatabaseManager {
 			String conversationService;
 			{
 				//Running the SQL
-				Result<org.jooq.Record2<String, String>> results = create.select(DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
+				Result<org.jooq.Record2<String, String>> results = create.select(field("chat.display_name", String.class), field("chat.service_name", String.class))
 						.from(DSL.table("chat"))
-						.where(DSL.field("chat.guid").equal(conversationGUID))
+						.where(field("chat.guid").equal(conversationGUID))
 						.fetch();
 				
 				//Checking if there are no results
@@ -344,19 +346,19 @@ public class DatabaseManager {
 				}
 				
 				//Setting the conversation information
-				conversationTitle = results.getValue(0, DSL.field("chat.display_name", String.class));
-				conversationService = results.getValue(0, DSL.field("chat.service_name", String.class));
+				conversationTitle = results.getValue(0, field("chat.display_name", String.class));
+				conversationService = results.getValue(0, field("chat.service_name", String.class));
 			}
 			
 			//Fetching the conversation members
 			ArrayList<String> conversationMembers = new ArrayList<>();
 			{
 				//Running the SQL
-				Result<org.jooq.Record1<String>> results = create.select(DSL.field("handle.id", String.class))
+				Result<org.jooq.Record1<String>> results = create.select(field("handle.id", String.class))
 						.from(DSL.table("handle"))
-						.innerJoin(DSL.table("chat_handle_join")).on(DSL.field("handle.ROWID").equal(DSL.field("chat_handle_join.handle_id")))
-						.innerJoin(DSL.table("chat")).on(DSL.field("chat_handle_join.chat_id").equal(DSL.field("chat.ROWID")))
-						.where(DSL.field("chat.guid").equal(conversationGUID))
+						.innerJoin(DSL.table("chat_handle_join")).on(field("handle.ROWID").equal(field("chat_handle_join.handle_id")))
+						.innerJoin(DSL.table("chat")).on(field("chat_handle_join.chat_id").equal(field("chat.ROWID")))
+						.where(field("chat.guid").equal(conversationGUID))
 						.fetch();
 				
 				//Checking if there are no results
@@ -369,7 +371,7 @@ public class DatabaseManager {
 				}
 				
 				//Adding the members
-				for(Record1<String> result : results) conversationMembers.add(result.getValue(DSL.field("handle.id", String.class)));
+				for(Record1<String> result : results) conversationMembers.add(result.getValue(field("handle.id", String.class)));
 			}
 			
 			//Adding the conversation info
@@ -390,9 +392,9 @@ public class DatabaseManager {
 		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
 		
 		//Fetching information from the database
-		Result<org.jooq.Record1<String>> results = create.select(DSL.field("filename", String.class))
+		Result<org.jooq.Record1<String>> results = create.select(field("filename", String.class))
 				.from(DSL.table("attachment"))
-				.where(DSL.field("guid").equal(request.fileGuid))
+				.where(field("guid").equal(request.fileGuid))
 				.fetch();
 		
 		//Creating the result variables
@@ -406,7 +408,7 @@ public class DatabaseManager {
 			errorCode = CommConst.nstAttachmentReqNotFound;
 		} else {
 			//Getting the file
-			String filePath = results.getValue(0, DSL.field("filename", String.class));
+			String filePath = results.getValue(0, field("filename", String.class));
 			
 			//Failing the file check if the path is invalid
 			if(filePath == null) {
@@ -484,9 +486,80 @@ public class DatabaseManager {
 		}
 	}
 	
+	private void fulfillLiteConversationRequest(Connection connection, LiteConversationRequest request) {
+		//Creating the result list
+		Collection<Blocks.LiteConversationInfo> resultList = new ArrayList<>();
+		
+		//Querying the database
+		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
+		Result<Record8<String, String, String, String, Long, String, String, String>> results = create.select(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class), field("message.text", String.class), field("message.date", Long.class), field("message.expressive_send_style_id", String.class), field("sub2.participant_list", String.class).as("participant_list"), field("GROUP_CONCAT(attachment.mime_type)", String.class).as("attachment_list"))
+				.from(select(field("sub1.*"), field("GROUP_CONCAT(handle.id)", String.class).as("participant_list"))
+						.from(select(field("chat.ROWID", Long.class).as("chat_id"), field("message.ROWID", Long.class).as("message_id"), field("MAX(message.date)", Long.class))
+								.from(table("chat"))
+								.leftJoin(table("chat_message_join")).on(field("chat_message_join.chat_id").eq(field("chat.ROWID")))
+								.leftJoin(table("message")).on(field("chat_message_join.message_id").eq(field("message.ROWID")))
+								.groupBy(field("chat.ROWID"))
+								.asTable("sub1")
+						)
+						.leftJoin(table("chat_handle_join")).on(field("chat_handle_join.chat_id", Long.class).eq(field("sub1.chat_id", Long.class)))
+						.leftJoin(table("handle")).on(field("chat_handle_join.handle_id", Long.class).eq(field("handle.ROWID", Long.class)))
+						.groupBy(field("sub1.chat_id"))
+						.asTable("sub2")
+				)
+				.leftJoin(table("chat")).on(field("chat.ROWID", Long.class).eq(field("sub2.chat_id", Long.class)))
+				.leftJoin(table("message")).on(field("message.ROWID", Long.class).eq(field("sub2.message_id", Long.class)))
+				.leftJoin(table("message_attachment_join")).on(field("message_attachment_join.message_id", Long.class).eq(field("sub2.message_id", Long.class)))
+				.leftJoin(table("attachment")).on(field("message_attachment_join.attachment_id", Long.class).eq(field("attachment.ROWID", Long.class)))
+				.groupBy(field("chat.ROWID", Long.class))
+				.orderBy(field("message.date", Long.class).desc())
+				.fetch();
+		
+		for(Record result : results) {
+			String guid = result.get("chat.guid", String.class);
+			String service = result.get("chat.service_name", String.class);
+			String name = result.get("chat.display_name", String.class);
+			String membersRaw = result.get("participant_list", String.class);
+			String[] members = membersRaw == null ? null : membersRaw.split(",");
+			Long date = result.get("message.date", Long.class);
+			String text = result.get("message.text", String.class);
+			if(text != null) {
+				text = text.replace(Character.toString('\uFFFC'), "");
+				text = text.replace(Character.toString('\uFFFD'), "");
+				if(text.isEmpty()) text = null;
+			}
+			String sendStyle = result.get("message.expressive_send_style_id", String.class);
+			String attachmentListRaw = result.get("attachment_list", String.class);
+			String[] attachmentList = attachmentListRaw == null ? null : attachmentListRaw.split(",");
+			
+			resultList.add(new Blocks.LiteConversationInfo(guid, service, name, members, date != null ? Main.getTimeHelper().toUnixTime(date) : -1, text, sendStyle, attachmentList));
+		}
+		
+		//Checking if the connection is registered and is still open
+		if(request.connection.isConnected()) {
+			//Sending the conversation info
+			ConnectionManager.getCommunicationsManager().sendLiteConversationInfo(request.connection, resultList);
+		} else {
+			Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
+		}
+	}
+	
+	private void fulfillLiteThreadRequest(Connection connection, LiteThreadRequest request) {
+		try {
+			Condition condition = field("chat.guid").eq(request.conversationGUID);
+			if(request.firstMessageID != -1) condition = condition.and(field("message.ROWID").lessThan(request.firstMessageID));
+			DataFetchResult result = fetchData(connection, new RetrievalFilter(condition, 24, DSL.field("message.ROWID", Long.class).desc()), null);
+			if(request.connection.isConnected()) {
+				ConnectionManager.getCommunicationsManager().sendLiteThreadInfo(request.connection, request.conversationGUID, request.firstMessageID, result.conversationItems);
+			}
+		} catch(IOException | GeneralSecurityException | SQLException | OutOfMemoryError | RuntimeException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			Sentry.capture(exception);
+		}
+	}
+	
 	private void fulfillCustomRetrievalRequest(Connection connection, CustomRetrievalRequest request) {
 		try {
-			//Returning their data
+			//Returning the data
 			DataFetchResult result = fetchData(connection, request.filter, null);
 			if(request.connection.isConnected()) {
 				ConnectionManager.getCommunicationsManager().sendMessageUpdate(request.connection, CommConst.nhtMessageUpdate, result.conversationItems);
@@ -512,15 +585,15 @@ public class DatabaseManager {
 			//Fetching the chat info
 			Result<org.jooq.Record3<String, String, String>> conversationResults;
 			if(request.restrictMessages) {
-				conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
+				conversationResults = create.select(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class))
 											.from(DSL.table("chat"))
-											.join(DSL.table("chat_message_join")).on(DSL.field("chat.ROWID").eq(DSL.field("chat_message_join.chat_id")))
-											.join(DSL.table("message")).on(DSL.field("chat_message_join.message_id").eq(DSL.field("message.ROWID")))
-											.where(DSL.field("message.date").greaterOrEqual(lTimeSinceMessages))
-											.groupBy(DSL.field("chat.ROWID"))
+											.join(DSL.table("chat_message_join")).on(field("chat.ROWID").eq(field("chat_message_join.chat_id")))
+											.join(DSL.table("message")).on(field("chat_message_join.message_id").eq(field("message.ROWID")))
+											.where(field("message.date").greaterOrEqual(lTimeSinceMessages))
+											.groupBy(field("chat.ROWID"))
 											.fetch();
 			} else {
-				conversationResults = create.select(DSL.field("chat.guid", String.class), DSL.field("chat.display_name", String.class), DSL.field("chat.service_name", String.class))
+				conversationResults = create.select(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class))
 											.from(DSL.table("chat"))
 											.fetch();
 			}
@@ -528,23 +601,23 @@ public class DatabaseManager {
 			//Iterating over the results
 			for(int i = 0; i < conversationResults.size(); i++) {
 				//Setting the conversation information
-				String conversationGUID = conversationResults.getValue(i, DSL.field("chat.guid", String.class));
-				String conversationTitle = conversationResults.getValue(i, DSL.field("chat.display_name", String.class));
-				String conversationService = conversationResults.getValue(i, DSL.field("chat.service_name", String.class));
+				String conversationGUID = conversationResults.getValue(i, field("chat.guid", String.class));
+				String conversationTitle = conversationResults.getValue(i, field("chat.display_name", String.class));
+				String conversationService = conversationResults.getValue(i, field("chat.service_name", String.class));
 				
 				//Fetching the conversation members
 				ArrayList<String> conversationMembers = new ArrayList<>();
 				{
 					//Running the SQL
-					Result<org.jooq.Record1<String>> results = create.select(DSL.field("handle.id", String.class))
+					Result<org.jooq.Record1<String>> results = create.select(field("handle.id", String.class))
 							.from(DSL.table("handle"))
-							.innerJoin(DSL.table("chat_handle_join")).on(DSL.field("handle.ROWID").equal(DSL.field("chat_handle_join.handle_id")))
-							.innerJoin(DSL.table("chat")).on(DSL.field("chat_handle_join.chat_id").equal(DSL.field("chat.ROWID")))
-							.where(DSL.field("chat.guid").equal(conversationGUID))
+							.innerJoin(DSL.table("chat_handle_join")).on(field("handle.ROWID").equal(field("chat_handle_join.handle_id")))
+							.innerJoin(DSL.table("chat")).on(field("chat_handle_join.chat_id").equal(field("chat.ROWID")))
+							.where(field("chat.guid").equal(conversationGUID))
 							.fetch();
 					
 					//Adding the members
-					for(Record1<String> result : results) conversationMembers.add(result.getValue(DSL.field("handle.id", String.class)));
+					for(Record1<String> result : results) conversationMembers.add(result.getValue(field("handle.id", String.class)));
 				}
 				
 				//Adding the conversation info
@@ -553,7 +626,7 @@ public class DatabaseManager {
 			
 			//Finding the amount of message entries in the database (roughly, because not all entries are messages)
 			int messagesCount;
-			if(request.restrictMessages) messagesCount = create.selectCount().from(DSL.table("message")).where(DSL.field("date").greaterOrEqual(lTimeSinceMessages)).fetchOne(0, int.class);
+			if(request.restrictMessages) messagesCount = create.selectCount().from(DSL.table("message")).where(field("date").greaterOrEqual(lTimeSinceMessages)).fetchOne(0, int.class);
 			else messagesCount = create.selectCount().from(DSL.table("message")).fetchOne(0, int.class);
 			
 			//Returning if the connection is no longer open
@@ -563,7 +636,7 @@ public class DatabaseManager {
 			ConnectionManager.getCommunicationsManager().sendMassRetrievalInitial(request.connection, request.requestID, conversationInfoList, messagesCount);
 			
 			//Reading the message data
-			fetchData(connection, request.restrictMessages ? () -> DSL.field("message.date").greaterOrEqual(lTimeSinceMessages) : null, new DataFetchListener(request.downloadAttachments) {
+			fetchData(connection, request.restrictMessages ? new RetrievalFilter(field("message.date").greaterOrEqual(lTimeSinceMessages), -1, null) : null, new DataFetchListener(request.downloadAttachments) {
 				//Creating the packet index value
 				int packetIndex = 1;
 				
@@ -669,27 +742,27 @@ public class DatabaseManager {
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
 		//Building the base query
-		List<SelectField<?>> fields = new ArrayList<>(Arrays.asList(DSL.field("message.ROWID", Long.class), DSL.field("message.guid", String.class), DSL.field("message.date", Long.class), DSL.field("message.item_type", Integer.class), DSL.field("message.group_action_type", Integer.class), DSL.field("message.text", String.class), DSL.field("message.subject", String.class), DSL.field("message.error", Integer.class), DSL.field("message.date_read", Long.class), DSL.field("message.is_from_me", Boolean.class), DSL.field("message.group_title", String.class),
-				DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.is_delivered", Boolean.class),
-				DSL.field("sender_handle.id", String.class), DSL.field("other_handle.id", String.class),
-				DSL.field("chat.guid", String.class)));
+		List<SelectField<?>> fields = new ArrayList<>(Arrays.asList(field("message.ROWID", Long.class), field("message.guid", String.class), field("message.date", Long.class), field("message.item_type", Integer.class), field("message.group_action_type", Integer.class), field("message.text", String.class), field("message.subject", String.class), field("message.error", Integer.class), field("message.date_read", Long.class), field("message.is_from_me", Boolean.class), field("message.group_title", String.class),
+				field("message.is_sent", Boolean.class), field("message.is_read", Boolean.class), field("message.is_delivered", Boolean.class),
+				field("sender_handle.id", String.class), field("other_handle.id", String.class),
+				field("chat.guid", String.class)));
 		
 		//Adding the extras (if applicable)
-		if(dbSupportsSendStyle) fields.add(DSL.field("message.expressive_send_style_id", String.class));
+		if(dbSupportsSendStyle) fields.add(field("message.expressive_send_style_id", String.class));
 		if(dbSupportsAssociation) {
-			fields.add(DSL.field("message.associated_message_guid", String.class));
-			fields.add(DSL.field("message.associated_message_type", Integer.class));
-			fields.add(DSL.field("message.associated_message_range_location", Integer.class));
+			fields.add(field("message.associated_message_guid", String.class));
+			fields.add(field("message.associated_message_type", Integer.class));
+			fields.add(field("message.associated_message_range_location", Integer.class));
 		}
 		
 		//Compiling the selection into a build step
-		SelectOnConditionStep<?> buildStep
+		SelectWhereStep<?> buildStep
 				= context.select(fields)
 				.from(DSL.table("message"))
-				.innerJoin(DSL.table("chat_message_join")).on(DSL.field("message.ROWID").eq(DSL.field("chat_message_join.message_id")))
-				.innerJoin(DSL.table("chat")).on(DSL.field("chat_message_join.chat_id").eq(DSL.field("chat.ROWID")))
-				.leftJoin(DSL.table("handle").as("sender_handle")).on(DSL.field("message.handle_id").eq(DSL.field("sender_handle.ROWID")))
-				.leftJoin(DSL.table("handle").as("other_handle")).on(DSL.field("message.other_handle").eq(DSL.field("other_handle.ROWID")));
+				.innerJoin(DSL.table("chat_message_join")).on(field("message.ROWID").eq(field("chat_message_join.message_id")))
+				.innerJoin(DSL.table("chat")).on(field("chat_message_join.chat_id").eq(field("chat.ROWID")))
+				.leftJoin(DSL.table("handle").as("sender_handle")).on(field("message.handle_id").eq(field("sender_handle.ROWID")))
+				.leftJoin(DSL.table("handle").as("other_handle")).on(field("message.other_handle").eq(field("other_handle.ROWID")));
 		
 		//Fetching the basic message info
 		/* SelectOnConditionStep<Record16<Long, String, Long, Integer, Integer, String, String, Integer, Boolean, String, Boolean, Boolean, Boolean, String, String, String>> buildStep
@@ -708,10 +781,23 @@ public class DatabaseManager {
 		ArrayList<Blocks.ConversationItem> conversationItems = new ArrayList<>();
 		ArrayList<Blocks.ModifierInfo> isolatedModifiers = new ArrayList<>();
 		
+		//Completing the query
+		ResultQuery<?> resultQuery;
+		if(filter != null) {
+			//Applying the condition (must be given)
+			SelectConditionStep<?> selectConditionStep = buildStep.where(filter.condition);
+			
+			if(filter.limit != -1 && filter.orderField != null) resultQuery = selectConditionStep.orderBy(filter.orderField).limit(filter.limit);
+			else if(filter.limit != -1) resultQuery = buildStep.limit(filter.limit);
+			else if(filter.orderField != null) resultQuery = buildStep.orderBy(filter.orderField);
+			else resultQuery = buildStep;
+		} else {
+			resultQuery = buildStep;
+		}
+		
 		//Checking if the data should be streamed
 		if(streamingListener != null) {
-			//Completing the query
-			Cursor<?> cursor = filter == null ? buildStep.fetchLazy() : buildStep.where(filter.filter()).fetchLazy();
+			Cursor<?> cursor = resultQuery.fetchLazy();
 			Result<?> records;
 			
 			while(cursor.hasNext()) {
@@ -744,7 +830,7 @@ public class DatabaseManager {
 		}
 		
 		//Completing the query
-		Result<?> records = filter != null ? buildStep.where(filter.filter()).fetch() : buildStep.fetch();
+		Result<?> records = resultQuery.fetch();
 		
 		//Processing the data
 		long latestMessageID = processFetchDataResult(context, records, conversationItems, isolatedModifiers, null);
@@ -802,16 +888,16 @@ public class DatabaseManager {
 		//Iterating over the results
 		for(int i = 0; i < generalMessageRecords.size(); i++) {
 			//Getting the other parameters
-			long rowID = generalMessageRecords.getValue(i, DSL.field("message.ROWID", Long.class));
-			String guid = generalMessageRecords.getValue(i, DSL.field("message.guid", String.class));
-			String chatGUID = generalMessageRecords.getValue(i, DSL.field("chat.guid", String.class));
-			long date = generalMessageRecords.getValue(i, DSL.field("message.date", Long.class));
+			long rowID = generalMessageRecords.getValue(i, field("message.ROWID", Long.class));
+			String guid = generalMessageRecords.getValue(i, field("message.guid", String.class));
+			String chatGUID = generalMessageRecords.getValue(i, field("chat.guid", String.class));
+			long date = generalMessageRecords.getValue(i, field("message.date", Long.class));
 			/* Object dateObject = generalMessageRecords.getValue(i, "message.date");
 			if(Long.class.isInstance(dateObject)) date = (long) dateObject;
 			else date = (int) dateObject; */
 			
-			String sender = generalMessageRecords.getValue(i, DSL.field("message.is_from_me", Boolean.class)) ? null : generalMessageRecords.getValue(i, DSL.field("sender_handle.id", String.class));
-			int itemType = generalMessageRecords.getValue(i, DSL.field("message.item_type", Integer.class));
+			String sender = generalMessageRecords.getValue(i, field("message.is_from_me", Boolean.class)) ? null : generalMessageRecords.getValue(i, field("sender_handle.id", String.class));
+			int itemType = generalMessageRecords.getValue(i, field("message.item_type", Integer.class));
 			
 			//Updating the latest message ID
 			if(rowID > latestMessageID) latestMessageID = rowID;
@@ -821,9 +907,9 @@ public class DatabaseManager {
 				//Checking if the database supports association
 				if(dbSupportsAssociation) {
 					//Getting the association info
-					String associatedMessage = generalMessageRecords.getValue(i, DSL.field("message.associated_message_guid", String.class));
-					int associationType = generalMessageRecords.getValue(i, DSL.field("message.associated_message_type", Integer.class));
-					int associationIndex = generalMessageRecords.getValue(i, DSL.field("message.associated_message_range_location", Integer.class));
+					String associatedMessage = generalMessageRecords.getValue(i, field("message.associated_message_guid", String.class));
+					int associationType = generalMessageRecords.getValue(i, field("message.associated_message_type", Integer.class));
+					int associationIndex = generalMessageRecords.getValue(i, field("message.associated_message_range_location", Integer.class));
 					
 					//Checking if there is an association
 					if(associationType != 0) {
@@ -841,28 +927,28 @@ public class DatabaseManager {
 						//Checking if the association is a sticker
 						if(associationType >= 1000 && associationType < 2000) {
 							//Retrieving the sticker attachment
-							Result<Record3<String, String, String>> fileRecord = context.select(DSL.field("attachment.guid", String.class), DSL.field("attachment.filename", String.class), DSL.field("attachment.mime_type", String.class))
+							Result<Record3<String, String, String>> fileRecord = context.select(field("attachment.guid", String.class), field("attachment.filename", String.class), field("attachment.mime_type", String.class))
 									.from(DSL.table("message_attachment_join"))
-									.join(DSL.table("attachment")).on(DSL.field("message_attachment_join.attachment_id").eq(DSL.field("attachment.ROWID")))
-									.where(DSL.field("message_attachment_join.message_id").eq(rowID))
+									.join(DSL.table("attachment")).on(field("message_attachment_join.attachment_id").eq(field("attachment.ROWID")))
+									.where(field("message_attachment_join.message_id").eq(rowID))
 									.fetch();
 							
 							//Skipping the remainder of the iteration if there are no records
 							if(fileRecord.isEmpty()) continue;
 							
 							//Getting the file (and skipping the remainder of the iteration if the file is invalid)
-							String fileName = fileRecord.getValue(0, DSL.field("attachment.filename", String.class));
+							String fileName = fileRecord.getValue(0, field("attachment.filename", String.class));
 							if(fileName == null) continue;
 							File file = new File(fileName.replaceFirst("~", System.getProperty("user.home")));
 							if(!file.exists()) continue;
-							String fileType = fileRecord.getValue(0, DSL.field("attachment.mime_type", String.class));
+							String fileType = fileRecord.getValue(0, field("attachment.mime_type", String.class));
 							
 							//Reading the file with GZIP compression
 							byte[] fileBytes = Files.readAllBytes(file.toPath());
 							fileBytes = Constants.compressGZIP(fileBytes, fileBytes.length);
 							
 							//Getting the file guid
-							String fileGuid = fileRecord.getValue(0, DSL.field("attachment.guid", String.class));
+							String fileGuid = fileRecord.getValue(0, field("attachment.guid", String.class));
 							
 							//Creating the modifier
 							Blocks.StickerModifierInfo modifier = new Blocks.StickerModifierInfo(associatedMessageGUID, associationIndex, fileGuid, sender, date, fileBytes, fileType);
@@ -884,8 +970,12 @@ public class DatabaseManager {
 						}
 						//Otherwise checking if the association is a tapback response
 						else if(associationType < 4000) { //2000 - 2999 = tapback added / 3000 - 3999 = tapback removed
+							//Getting the association data
+							boolean tapbackAdded = associationType >= 2000 && associationType < 3000;
+							int tapbackType = associationType % 1000;
+							
 							//Creating the modifier
-							Blocks.TapbackModifierInfo modifier = new Blocks.TapbackModifierInfo(associatedMessageGUID, associationIndex, sender, associationType);
+							Blocks.TapbackModifierInfo modifier = new Blocks.TapbackModifierInfo(associatedMessageGUID, associationIndex, sender, tapbackAdded, tapbackType);
 							
 							//Finding the associated message in memory
 							Blocks.MessageInfo matchingItem = null;
@@ -909,30 +999,30 @@ public class DatabaseManager {
 				}
 				
 				//Getting the detail parameters
-				String text = generalMessageRecords.getValue(i, DSL.field("message.text", String.class));
+				String text = generalMessageRecords.getValue(i, field("message.text", String.class));
 				//if(text != null) text = text.replace("", "");
 				if(text != null) {
 					text = text.replace(Character.toString('\uFFFC'), "");
 					text = text.replace(Character.toString('\uFFFD'), "");
 					if(text.isEmpty()) text = null;
 				}
-				String subject = generalMessageRecords.getValue(i, DSL.field("message.subject", String.class));
-				String sendStyle = dbSupportsSendStyle ? generalMessageRecords.getValue(i, DSL.field("message.expressive_send_style_id", String.class)) : null;
-				int stateCode = determineMessageState(generalMessageRecords.getValue(i, DSL.field("message.is_sent", Boolean.class)),
-						generalMessageRecords.getValue(i, DSL.field("message.is_delivered", Boolean.class)),
-						generalMessageRecords.getValue(i, DSL.field("message.is_read", Boolean.class)));
-				int errorCode = convertDBErrorCode(generalMessageRecords.getValue(i, DSL.field("message.error", Integer.class)));
-				long dateRead = generalMessageRecords.getValue(i, DSL.field("message.date_read", Long.class));
+				String subject = generalMessageRecords.getValue(i, field("message.subject", String.class));
+				String sendStyle = dbSupportsSendStyle ? generalMessageRecords.getValue(i, field("message.expressive_send_style_id", String.class)) : null;
+				int stateCode = determineMessageState(generalMessageRecords.getValue(i, field("message.is_sent", Boolean.class)),
+						generalMessageRecords.getValue(i, field("message.is_delivered", Boolean.class)),
+						generalMessageRecords.getValue(i, field("message.is_read", Boolean.class)));
+				int errorCode = convertDBErrorCode(generalMessageRecords.getValue(i, field("message.error", Integer.class)));
+				long dateRead = generalMessageRecords.getValue(i, field("message.date_read", Long.class));
 				
 				//Fetching the attachments
-				List<SelectField<?>> attachmentFields = new ArrayList<>(Arrays.asList(new SelectField<?>[]{DSL.field("attachment.guid", String.class), DSL.field("attachment.filename", String.class), DSL.field("attachment.transfer_name", String.class), DSL.field("attachment.mime_type", String.class), DSL.field("attachment.total_bytes", Long.class)}));
+				List<SelectField<?>> attachmentFields = new ArrayList<>(Arrays.asList(new SelectField<?>[]{field("attachment.guid", String.class), field("attachment.filename", String.class), field("attachment.transfer_name", String.class), field("attachment.mime_type", String.class), field("attachment.total_bytes", Long.class)}));
 				//if(dbSupportsAssociation) attachmentFields.add(DSL.field("attachment.is_sticker", Boolean.class));
 				
-				Condition filter = DSL.field("message_attachment_join.message_id").eq(rowID);
-				if(dbSupportsHiddenAttachments) filter = filter.and(DSL.field("attachment.hide_attachment").isFalse());
+				Condition filter = field("message_attachment_join.message_id").eq(rowID);
+				if(dbSupportsHiddenAttachments) filter = filter.and(field("attachment.hide_attachment").isFalse());
 				Result<?> fileRecords = context.select(attachmentFields)
 						.from(DSL.table("message_attachment_join"))
-						.join(DSL.table("attachment")).on(DSL.field("message_attachment_join.attachment_id").eq(DSL.field("attachment.ROWID")))
+						.join(DSL.table("attachment")).on(field("message_attachment_join.attachment_id").eq(field("attachment.ROWID")))
 						.where(filter)
 						.fetch();
 				
@@ -943,12 +1033,12 @@ public class DatabaseManager {
 					//if(dbSupportsAssociation && fileRecords.getValue(f, DSL.field("attachment.is_sticker", Boolean.class))) continue;
 					
 					//Adding the file
-					String fileGUID = fileRecords.getValue(f, DSL.field("attachment.guid", String.class));
-					String fileType = fileRecords.getValue(f, DSL.field("attachment.mime_type", String.class));
-					String fileName = fileRecords.getValue(f, DSL.field("attachment.transfer_name", String.class));
-					String filePath = fileRecords.getValue(f, DSL.field("attachment.filename", String.class));
+					String fileGUID = fileRecords.getValue(f, field("attachment.guid", String.class));
+					String fileType = fileRecords.getValue(f, field("attachment.mime_type", String.class));
+					String fileName = fileRecords.getValue(f, field("attachment.transfer_name", String.class));
+					String filePath = fileRecords.getValue(f, field("attachment.filename", String.class));
 					File file = filePath == null ? null : new File(filePath.replaceFirst("~", System.getProperty("user.home")));
-					long fileSize = fileRecords.getValue(f, DSL.field("attachment.total_bytes", Long.class));
+					long fileSize = fileRecords.getValue(f, field("attachment.total_bytes", Long.class));
 					
 					//Updating the file name
 					if(fileName == null) {
@@ -973,8 +1063,8 @@ public class DatabaseManager {
 			//Otherwise checking if the item is a group action
 			else if(itemType == 1) {
 				//Getting the detail parameters
-				String other = generalMessageRecords.getValue(i, DSL.field("other_handle.id", String.class));
-				int groupActionType = convertDBGroupSubtype(generalMessageRecords.getValue(i, DSL.field("message.group_action_type", Integer.class)));
+				String other = generalMessageRecords.getValue(i, field("other_handle.id", String.class));
+				int groupActionType = convertDBGroupSubtype(generalMessageRecords.getValue(i, field("message.group_action_type", Integer.class)));
 				
 				//Adding the conversation item
 				conversationItems.add(new Blocks.GroupActionInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, other, groupActionType));
@@ -982,7 +1072,7 @@ public class DatabaseManager {
 			//Otherwise checking if the item is a chat rename
 			else if(itemType == 2) {
 				//Getting the detail parameters
-				String newChatName = generalMessageRecords.getValue(i, DSL.field("message.group_title", String.class));
+				String newChatName = generalMessageRecords.getValue(i, field("message.group_title", String.class));
 				
 				//Adding the conversation item
 				conversationItems.add(new Blocks.ChatRenameActionInfo(rowID, guid, chatGUID, Main.getTimeHelper().toUnixTime(date), sender, newChatName));
@@ -1013,12 +1103,12 @@ public class DatabaseManager {
 				.where(DSL.field("message.is_from_me").isTrue())
 				.groupBy(DSL.field("chat.ROWID")).fetch(); */
 		
-		Result<Record6<Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.max(DSL.field("message.ROWID", Long.class)), DSL.field("message.guid", String.class), DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_delivered", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.date_read", Long.class))
+		Result<Record6<Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.max(field("message.ROWID", Long.class)), field("message.guid", String.class), field("message.is_sent", Boolean.class), field("message.is_delivered", Boolean.class), field("message.is_read", Boolean.class), field("message.date_read", Long.class))
 				.from(DSL.table("message"))
-				.join(DSL.table("chat_message_join")).on(DSL.field("message.ROWID").eq(DSL.field("chat_message_join.message_id")))
-				.join(DSL.table("chat")).on(DSL.field("chat_message_join.chat_id").eq(DSL.field("chat.ROWID")))
-				.where(DSL.field("message.is_from_me").isTrue())
-				.groupBy(DSL.field("chat.ROWID")).fetch();
+				.join(DSL.table("chat_message_join")).on(field("message.ROWID").eq(field("chat_message_join.message_id")))
+				.join(DSL.table("chat")).on(field("chat_message_join.chat_id").eq(field("chat.ROWID")))
+				.where(field("message.is_from_me").isTrue())
+				.groupBy(field("chat.ROWID")).fetch();
 		
 		/* Result<Record8<String, Long, Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.field("message.text", String.class), DSL.field("message.date", Long.class), DSL.field("message.date", Long.class).max(), DSL.field("message.guid", String.class), DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_delivered", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.date_read", Long.class))
 				.from(DSL.table("message"))
@@ -1039,10 +1129,10 @@ public class DatabaseManager {
 		//messageStates = new HashMap<>();
 		for(int i = 0; i < results.size(); i++) {
 			//Getting the result information
-			String resultGuid = results.getValue(i, DSL.field("message.guid", String.class));
-			int resultState = determineMessageState(results.getValue(i, DSL.field("message.is_sent", Boolean.class)),
-					results.getValue(i, DSL.field("message.is_delivered", Boolean.class)),
-					results.getValue(i, DSL.field("message.is_read", Boolean.class)));
+			String resultGuid = results.getValue(i, field("message.guid", String.class));
+			int resultState = determineMessageState(results.getValue(i, field("message.is_sent", Boolean.class)),
+					results.getValue(i, field("message.is_delivered", Boolean.class)),
+					results.getValue(i, field("message.is_read", Boolean.class)));
 			
 			//Getting the item
 			MessageState messageState;
@@ -1068,7 +1158,7 @@ public class DatabaseManager {
 				//Main.getLogger().finest("New activity status for message " + results.getValue(i, DSL.field("message.text", String.class)) + ": " + cacheState + " -> " + resultState);
 				
 				//Adding the modifier to the list
-				modifierList.add(new Blocks.ActivityStatusModifierInfo(resultGuid, resultState, Main.getTimeHelper().toUnixTime(results.getValue(i, DSL.field("message.date_read", Long.class)))));
+				modifierList.add(new Blocks.ActivityStatusModifierInfo(resultGuid, resultState, Main.getTimeHelper().toUnixTime(results.getValue(i, field("message.date_read", Long.class)))));
 			}
 		}
 		
@@ -1087,20 +1177,20 @@ public class DatabaseManager {
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
 		//Building the query
-		Result<Record3<String, String, String>> queryResult = context.select(DSL.field("chat.guid", String.class), DSL.field("chat.service_name", String.class), DSL.field("handle.id", String.class))
+		Result<Record3<String, String, String>> queryResult = context.select(field("chat.guid", String.class), field("chat.service_name", String.class), field("handle.id", String.class))
 				.from(DSL.table("chat"))
-				.join(DSL.table("chat_handle_join")).on(DSL.field("chat.ROWID").eq(DSL.field("chat_handle_join.chat_id")))
-				.join(DSL.table("handle")).on(DSL.field("chat_handle_join.handle_id").eq(DSL.field("handle.ROWID")))
-				.groupBy(DSL.field("chat.guid"))
-				.having(DSL.count(DSL.field("handle.id")).eq(1))
+				.join(DSL.table("chat_handle_join")).on(field("chat.ROWID").eq(field("chat_handle_join.chat_id")))
+				.join(DSL.table("handle")).on(field("chat_handle_join.handle_id").eq(field("handle.ROWID")))
+				.groupBy(field("chat.guid"))
+				.having(DSL.count(field("handle.id")).eq(1))
 				.fetch();
 		
 		//Creating the results
 		HashMap<String, CreationTargetingChat> resultList = new HashMap<>();
 		for(int i = 0; i < queryResult.size(); i++) {
-			String guid = queryResult.getValue(i, DSL.field("chat.guid", String.class));
-			String service = queryResult.getValue(i, DSL.field("chat.service_name", String.class));
-			String address = queryResult.getValue(i, DSL.field("handle.id", String.class));
+			String guid = queryResult.getValue(i, field("chat.guid", String.class));
+			String service = queryResult.getValue(i, field("chat.service_name", String.class));
+			String address = queryResult.getValue(i, field("handle.id", String.class));
 			
 			resultList.put(guid, new CreationTargetingChat(address, service));
 		}
@@ -1130,27 +1220,20 @@ public class DatabaseManager {
 	}
 	
 	private static int convertDBErrorCode(int code) {
-		switch(code) {
-			case 0:
-				return Blocks.MessageInfo.errorCodeOK;
-			case 3:
-				return Blocks.MessageInfo.errorCodeNetwork;
-			case 22:
-				return Blocks.MessageInfo.errorCodeUnregistered;
-			default:
-				return Blocks.MessageInfo.errorCodeUnknown;
-		}
+		return switch(code) {
+			case 0 -> Blocks.MessageInfo.errorCodeOK;
+			case 3 -> Blocks.MessageInfo.errorCodeNetwork;
+			case 22 -> Blocks.MessageInfo.errorCodeUnregistered;
+			default -> Blocks.MessageInfo.errorCodeUnknown;
+		};
 	}
 	
 	private static int convertDBGroupSubtype(int code) {
-		switch(code) {
-			default:
-				return Blocks.GroupActionInfo.subtypeUnknown;
-			case 0:
-				return Blocks.GroupActionInfo.subtypeJoin;
-			case 1:
-				return Blocks.GroupActionInfo.subtypeLeave;
-		}
+		return switch(code) {
+			default -> Blocks.GroupActionInfo.subtypeUnknown;
+			case 0 -> Blocks.GroupActionInfo.subtypeJoin;
+			case 1 -> Blocks.GroupActionInfo.subtypeLeave;
+		};
 	}
 	
 	private static byte[] calculateChecksum(File file) throws IOException, NoSuchAlgorithmException {
@@ -1171,7 +1254,7 @@ public class DatabaseManager {
 		}
 	}
 	
-	private class DataFetchResult {
+	private static class DataFetchResult {
 		final ArrayList<Blocks.ConversationItem> conversationItems;
 		final ArrayList<Blocks.ModifierInfo> isolatedModifiers;
 		final long latestMessageID;
@@ -1183,75 +1266,15 @@ public class DatabaseManager {
 		}
 	}
 	
-	public static class ConversationInfoRequest {
-		final ClientRegistration connection;
-		final String[] conversationsGUIDs;
+	public static class RetrievalFilter {
+		final Condition condition;
+		final int limit;
+		final OrderField<?> orderField;
 		
-		public ConversationInfoRequest(ClientRegistration connection, String[] conversationsGUIDs) {
-			//Setting the values
-			this.connection = connection;
-			this.conversationsGUIDs = conversationsGUIDs;
-		}
-	}
-	
-	public interface RetrievalFilter {
-		Condition filter();
-	}
-	
-	public static class CustomRetrievalRequest {
-		final ClientRegistration connection;
-		final RetrievalFilter filter;
-		final int messageResponseType;
-		
-		public CustomRetrievalRequest(ClientRegistration connection, RetrievalFilter filter, int messageResponseType) {
-			//Setting the values
-			this.connection = connection;
-			this.filter = filter;
-			this.messageResponseType = messageResponseType;
-		}
-	}
-	
-	public static class MassRetrievalRequest {
-		final ClientRegistration connection;
-		final short requestID;
-		final boolean restrictMessages;
-		final long timeSinceMessages;
-		final boolean downloadAttachments;
-		final boolean restrictAttachments;
-		final long timeSinceAttachments;
-		final boolean restrictAttachmentsSizes;
-		final long attachmentSizeLimit;
-		String[] attachmentFilterWhitelist;
-		String[] attachmentFilterBlacklist;
-		boolean attachmentFilterDLOutside;
-		
-		public MassRetrievalRequest(ClientRegistration connection, short requestID, boolean restrictMessages, long timeSinceMessages, boolean downloadAttachments, boolean restrictAttachments, long timeSinceAttachments, boolean restrictAttachmentsSizes, long attachmentSizeLimit, String[] attachmentFilterWhitelist, String[] attachmentFilterBlacklist, boolean attachmentFilterDLOutside) {
-			this.connection = connection;
-			this.requestID = requestID;
-			this.restrictMessages = restrictMessages;
-			this.timeSinceMessages = timeSinceMessages;
-			this.downloadAttachments = downloadAttachments;
-			this.restrictAttachments = restrictAttachments;
-			this.timeSinceAttachments = timeSinceAttachments;
-			this.restrictAttachmentsSizes = restrictAttachmentsSizes;
-			this.attachmentSizeLimit = attachmentSizeLimit;
-			this.attachmentFilterWhitelist = attachmentFilterWhitelist;
-			this.attachmentFilterBlacklist = attachmentFilterBlacklist;
-			this.attachmentFilterDLOutside = attachmentFilterDLOutside;
-		}
-	}
-	
-	public static class FileRequest {
-		final ClientRegistration connection;
-		final String fileGuid;
-		final short requestID;
-		final int chunkSize;
-		
-		public FileRequest(ClientRegistration connection, String fileGuid, short requestID, int chunkSize) {
-			this.connection = connection;
-			this.fileGuid = fileGuid;
-			this.requestID = requestID;
-			this.chunkSize = chunkSize;
+		public RetrievalFilter(Condition condition, int limit, OrderField<?> orderField) {
+			this.condition = condition;
+			this.limit = limit;
+			this.orderField = orderField;
 		}
 	}
 	

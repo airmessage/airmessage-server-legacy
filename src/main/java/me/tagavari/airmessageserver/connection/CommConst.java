@@ -6,29 +6,33 @@ public class CommConst {
 	public static final int mmCommunicationsSubVersion = 1;
 	
 	//NHT - Net header type
-	public static final int nhtClose = -1;
-	public static final int nhtPing = -2;
-	public static final int nhtPong = -3;
+	public static final int nhtClose = 0;
+	public static final int nhtPing = 1;
+	public static final int nhtPong = 2;
 	
-	public static final int nhtInformation = 0;
-	public static final int nhtAuthentication = 1;
-	public static final int nhtMessageUpdate = 2;
-	public static final int nhtTimeRetrieval = 3;
-	public static final int nhtMassRetrieval = 4;
-	public static final int nhtMassRetrievalFile = 5;
-	public static final int nhtMassRetrievalFinish = 6;
-	public static final int nhtConversationUpdate = 7;
-	public static final int nhtModifierUpdate = 8;
-	public static final int nhtAttachmentReq = 9;
-	public static final int nhtAttachmentReqConfirm = 10;
-	public static final int nhtAttachmentReqFail = 11;
-	public static final int nhtCreateChat = 12;
+	public static final int nhtInformation = 100;
+	public static final int nhtAuthentication = 101;
 	
-	public static final int nhtSendResult = 100;
-	public static final int nhtSendTextExisting = 101;
-	public static final int nhtSendTextNew = 102;
-	public static final int nhtSendFileExisting = 103;
-	public static final int nhtSendFileNew = 104;
+	public static final int nhtMessageUpdate = 200;
+	public static final int nhtTimeRetrieval = 201;
+	public static final int nhtMassRetrieval = 202;
+	public static final int nhtMassRetrievalFile = 203;
+	public static final int nhtMassRetrievalFinish = 204;
+	public static final int nhtConversationUpdate = 205;
+	public static final int nhtModifierUpdate = 206;
+	public static final int nhtAttachmentReq = 207;
+	public static final int nhtAttachmentReqConfirm = 208;
+	public static final int nhtAttachmentReqFail = 209;
+	
+	public static final int nhtLiteConversationRetrieval = 300;
+	public static final int nhtLiteThreadRetrieval = 301;
+	
+	public static final int nhtSendResult = 400;
+	public static final int nhtSendTextExisting = 401;
+	public static final int nhtSendTextNew = 402;
+	public static final int nhtSendFileExisting = 403;
+	public static final int nhtSendFileNew = 404;
+	public static final int nhtCreateChat = 405;
 	
 	public static final String hashAlgorithm = "MD5";
 	

@@ -1,6 +1,5 @@
 package me.tagavari.airmessageserver.common;
 
-import java.io.IOException;
 import java.nio.BufferOverflowException;
 import java.util.List;
 
@@ -46,6 +45,47 @@ public class Blocks {
 				packer.packNullableString(name);
 				packer.packArrayHeader(members.length);
 				for(String member : members) packer.packString(member);
+			}
+		}
+	}
+	
+	public static class LiteConversationInfo implements Block {
+		public final String guid;
+		public final String service;
+		public final String name;
+		public final String[] members;
+		public final long previewDate;
+		public final String previewText;
+		public final String previewSendStyle;
+		public final String[] previewAttachments;
+		
+		public LiteConversationInfo(String guid, String service, String name, String[] members, long previewDate, String previewText, String previewSendStyle, String[] previewAttachments) {
+			this.guid = guid;
+			this.service = service;
+			this.name = name;
+			this.members = members;
+			this.previewDate = previewDate;
+			this.previewText = previewText;
+			this.previewSendStyle = previewSendStyle;
+			this.previewAttachments = previewAttachments;
+		}
+		
+		@Override
+		public void writeObject(AirPacker packer) throws BufferOverflowException {
+			//Writing the fields
+			packer.packString(guid);
+			packer.packString(service);
+			packer.packNullableString(name);
+			packer.packArrayHeader(members.length);
+			for(String member : members) packer.packString(member);
+			packer.packLong(previewDate);
+			packer.packNullableString(previewText);
+			packer.packNullableString(previewSendStyle);
+			if(previewAttachments != null) {
+				packer.packArrayHeader(previewAttachments.length);
+				for(String attachment : previewAttachments) packer.packString(attachment);
+			} else {
+				packer.packArrayHeader(0);
 			}
 		}
 	}
@@ -339,16 +379,18 @@ public class Blocks {
 		
 		public int messageIndex;
 		public String sender;
-		public int code;
+		public boolean isAddition;
+		public int tapbackType;
 		
-		public TapbackModifierInfo(String message, int messageIndex, String sender, int code) {
+		public TapbackModifierInfo(String message, int messageIndex, String sender, boolean isAddition, int tapbackType) {
 			//Calling the super constructor
 			super(message);
 			
 			//Setting the values
 			this.messageIndex = messageIndex;
 			this.sender = sender;
-			this.code = code;
+			this.isAddition = isAddition;
+			this.tapbackType = tapbackType;
 		}
 		
 		@Override
@@ -358,7 +400,8 @@ public class Blocks {
 			
 			packer.packInt(messageIndex);
 			packer.packNullableString(sender);
-			packer.packInt(code);
+			packer.packBoolean(isAddition);
+			packer.packInt(tapbackType);
 		}
 		
 		@Override
