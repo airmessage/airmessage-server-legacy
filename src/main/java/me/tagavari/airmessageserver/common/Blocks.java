@@ -55,16 +55,18 @@ public class Blocks {
 		public final String name;
 		public final String[] members;
 		public final long previewDate;
+		public final String previewSender;
 		public final String previewText;
 		public final String previewSendStyle;
 		public final String[] previewAttachments;
 		
-		public LiteConversationInfo(String guid, String service, String name, String[] members, long previewDate, String previewText, String previewSendStyle, String[] previewAttachments) {
+		public LiteConversationInfo(String guid, String service, String name, String[] members, long previewDate, String previewSender, String previewText, String previewSendStyle, String[] previewAttachments) {
 			this.guid = guid;
 			this.service = service;
 			this.name = name;
 			this.members = members;
 			this.previewDate = previewDate;
+			this.previewSender = previewSender;
 			this.previewText = previewText;
 			this.previewSendStyle = previewSendStyle;
 			this.previewAttachments = previewAttachments;
@@ -79,6 +81,7 @@ public class Blocks {
 			packer.packArrayHeader(members.length);
 			for(String member : members) packer.packString(member);
 			packer.packLong(previewDate);
+			packer.packNullableString(previewSender);
 			packer.packNullableString(previewText);
 			packer.packNullableString(previewSendStyle);
 			if(previewAttachments != null) {

@@ -492,7 +492,7 @@ public class DatabaseManager {
 		
 		//Querying the database
 		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
-		Result<Record8<String, String, String, String, Long, String, String, String>> results = create.select(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class), field("message.text", String.class), field("message.date", Long.class), field("message.expressive_send_style_id", String.class), field("sub2.participant_list", String.class).as("participant_list"), field("GROUP_CONCAT(attachment.mime_type)", String.class).as("attachment_list"))
+		Result<Record9<String, String, String, String, Long, String, String, String, String>> results = create.select(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class), field("message.text", String.class), field("message.date", Long.class), field("message.expressive_send_style_id", String.class), field("handle.id", String.class), field("sub2.participant_list", String.class).as("participant_list"), field("GROUP_CONCAT(attachment.mime_type)", String.class).as("attachment_list"))
 				.from(select(field("sub1.*"), field("GROUP_CONCAT(handle.id)", String.class).as("participant_list"))
 						.from(select(field("chat.ROWID", Long.class).as("chat_id"), field("message.ROWID", Long.class).as("message_id"), field("MAX(message.date)", Long.class))
 								.from(table("chat"))
@@ -510,6 +510,7 @@ public class DatabaseManager {
 				.leftJoin(table("message")).on(field("message.ROWID", Long.class).eq(field("sub2.message_id", Long.class)))
 				.leftJoin(table("message_attachment_join")).on(field("message_attachment_join.message_id", Long.class).eq(field("sub2.message_id", Long.class)))
 				.leftJoin(table("attachment")).on(field("message_attachment_join.attachment_id", Long.class).eq(field("attachment.ROWID", Long.class)))
+				.leftJoin(table("handle")).on(field("message.handle_id", Long.class).eq(field("handle.ROWID", Long.class)))
 				.groupBy(field("chat.ROWID", Long.class))
 				.orderBy(field("message.date", Long.class).desc())
 				.fetch();
@@ -528,10 +529,11 @@ public class DatabaseManager {
 				if(text.isEmpty()) text = null;
 			}
 			String sendStyle = result.get("message.expressive_send_style_id", String.class);
+			String sender = result.get("handle.id", String.class);
 			String attachmentListRaw = result.get("attachment_list", String.class);
 			String[] attachmentList = attachmentListRaw == null ? null : attachmentListRaw.split(",");
 			
-			resultList.add(new Blocks.LiteConversationInfo(guid, service, name, members, date != null ? Main.getTimeHelper().toUnixTime(date) : -1, text, sendStyle, attachmentList));
+			resultList.add(new Blocks.LiteConversationInfo(guid, service, name, members, date != null ? Main.getTimeHelper().toUnixTime(date) : -1, sender, text, sendStyle, attachmentList));
 		}
 		
 		//Checking if the connection is registered and is still open
