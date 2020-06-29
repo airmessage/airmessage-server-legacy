@@ -498,6 +498,7 @@ public class DatabaseManager {
 								.from(table("chat"))
 								.leftJoin(table("chat_message_join")).on(field("chat_message_join.chat_id").eq(field("chat.ROWID")))
 								.leftJoin(table("message")).on(field("chat_message_join.message_id").eq(field("message.ROWID")))
+								.where(field("message.item_type", Integer.class).eq(0))
 								.groupBy(field("chat.ROWID"))
 								.asTable("sub1")
 						)
