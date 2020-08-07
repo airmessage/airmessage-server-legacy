@@ -550,7 +550,7 @@ public class DatabaseManager {
 		try {
 			Condition condition = field("chat.guid").eq(request.conversationGUID);
 			if(request.firstMessageID != -1) condition = condition.and(field("message.ROWID").lessThan(request.firstMessageID));
-			DataFetchResult result = fetchData(connection, new RetrievalFilter(condition, 24, DSL.field("message.ROWID", Long.class).desc()), null);
+			DataFetchResult result = fetchData(connection, new RetrievalFilter(condition, 24, DSL.field("message.ROWID", Long.class).desc()), null, true);
 			if(request.connection.isConnected()) {
 				ConnectionManager.getCommunicationsManager().sendLiteThreadInfo(request.connection, request.conversationGUID, request.firstMessageID, result.conversationItems);
 			}
@@ -741,6 +741,10 @@ public class DatabaseManager {
 	}
 	
 	private DataFetchResult fetchData(Connection connection, RetrievalFilter filter, DataFetchListener streamingListener) throws IOException, NoSuchAlgorithmException, SQLException {
+		return fetchData(connection, filter, streamingListener, false);
+	}
+	
+	private DataFetchResult fetchData(Connection connection, RetrievalFilter filter, DataFetchListener streamingListener, boolean reverseProcess) throws IOException, NoSuchAlgorithmException, SQLException {
 		//Creating the DSL context
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
@@ -813,7 +817,7 @@ public class DatabaseManager {
 				
 				//Processing the data
 				List<TransientAttachmentInfo> attachmentFiles = streamingListener.acceptFileData ? new ArrayList<>() : null;
-				processFetchDataResult(context, records, conversationItems, isolatedModifiers, attachmentFiles);
+				processFetchDataResult(context, records, conversationItems, isolatedModifiers, attachmentFiles, reverseProcess);
 				
 				//Sending the data
 				streamingListener.onChunkLoaded(conversationItems, isolatedModifiers);
@@ -836,7 +840,7 @@ public class DatabaseManager {
 		Result<?> records = resultQuery.fetch();
 		
 		//Processing the data
-		long latestMessageID = processFetchDataResult(context, records, conversationItems, isolatedModifiers, null);
+		long latestMessageID = processFetchDataResult(context, records, conversationItems, isolatedModifiers, null, reverseProcess);
 		
 		//Returning null if the item list is empty
 		//if(conversationItems.isEmpty()) return null;
@@ -885,11 +889,14 @@ public class DatabaseManager {
 	 * @param attachmentFiles the list to add found attachment files to (null if no attachment files wanted)
 	 * @return the latest found message ID
 	 */
-	private long processFetchDataResult(DSLContext context, Result<?> generalMessageRecords, List<Blocks.ConversationItem> conversationItems, List<Blocks.ModifierInfo> isolatedModifiers, List<TransientAttachmentInfo> attachmentFiles) throws IOException, NoSuchAlgorithmException {
+	private long processFetchDataResult(DSLContext context, Result<?> generalMessageRecords, List<Blocks.ConversationItem> conversationItems, List<Blocks.ModifierInfo> isolatedModifiers, List<TransientAttachmentInfo> attachmentFiles, boolean reverseProcess) throws IOException, NoSuchAlgorithmException {
 		long latestMessageID = -1;
 		
 		//Iterating over the results
-		for(int i = 0; i < generalMessageRecords.size(); i++) {
+		int recordCount = generalMessageRecords.size();
+		for(int i2 = 0; i2 < recordCount; i2++) {
+			int i = reverseProcess ? (recordCount - 1) - i2 : i2;
+			
 			//Getting the other parameters
 			long rowID = generalMessageRecords.getValue(i, field("message.ROWID", Long.class));
 			String guid = generalMessageRecords.getValue(i, field("message.guid", String.class));
