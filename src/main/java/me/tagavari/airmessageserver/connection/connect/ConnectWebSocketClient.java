@@ -2,11 +2,20 @@ package me.tagavari.airmessageserver.connection.connect;
 
 import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.PreferencesManager;
+import org.java_websocket.WebSocket;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.drafts.Draft_6455;
+import org.java_websocket.exceptions.InvalidDataException;
+import org.java_websocket.framing.CloseFrame;
+import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.handshake.ServerHandshake;
 
+import javax.net.ssl.*;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.Socket;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -14,8 +23,7 @@ import java.util.logging.Level;
 
 class ConnectWebSocketClient extends WebSocketClient {
 	//Creating the constants
-	//private static final URI connectHostname = URI.create("wss://connect.airmessage.org");
-	private static final URI connectHostname = URI.create("ws://localhost:1259");
+	private static final URI connectHostname = URI.create("wss://connect.airmessage.org");
 	private static final int connectTimeout = 8 * 1000; //8 seconds
 	
 	//Creating the callbacks

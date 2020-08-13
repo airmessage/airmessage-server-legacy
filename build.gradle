@@ -14,10 +14,10 @@ dependencies {
     testImplementation group: 'junit', name: 'junit', version: '4.12'
 
     //SQLite JDBC - Database library
-    implementation 'org.xerial:sqlite-jdbc:3.30.1'
+    implementation 'org.xerial:sqlite-jdbc:3.32.3.2'
 
     //jOOQ - Database library
-    implementation 'org.jooq:jooq:3.13.1'
+    implementation 'org.jooq:jooq:3.13.4'
 
     //Sentry - Crash reporting library
     implementation 'io.sentry:sentry:1.7.30'
@@ -26,13 +26,13 @@ dependencies {
     implementation 'org.slf4j:slf4j-nop:1.7.30'
 
     //JSON in Java - JSON library
-    implementation 'org.json:json:20190722'
+    implementation 'org.json:json:20200518'
 
     //Commonmark Java - Markdown parser
-    implementation 'com.atlassian.commonmark:commonmark:0.14.0'
+    implementation 'com.atlassian.commonmark:commonmark:0.15.2'
 
     //JavaWebsocket - WebSocket library
-    implementation 'org.java-websocket:Java-WebSocket:1.4.1'
+    implementation 'org.java-websocket:Java-WebSocket:1.5.1'
 
     implementation fileTree('lib') { include '*.jar' }
 }
