@@ -7,6 +7,7 @@ import me.tagavari.airmessageserver.common.AirUnpacker;
 import me.tagavari.airmessageserver.common.Blocks;
 import me.tagavari.airmessageserver.request.*;
 import me.tagavari.airmessageserver.server.*;
+import org.eclipse.swt.widgets.Display;
 import org.jooq.impl.DSL;
 
 import java.nio.BufferOverflowException;
@@ -54,8 +55,11 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		//Disconnecting the proxy
 		dataProxy.stopServer();
 		
-		//Unregistering a listener
+		//Unregistering the listener
 		dataProxy.removeMessageListener(this);
+		
+		//Calling the stop procedure
+		onStop(ServerState.STOPPED);
 	}
 	
 	public boolean isRunning() {
@@ -110,10 +114,15 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	@Override
 	public void onStop(ServerState code) {
 		//Updating the state
-		UIHelper.getDisplay().asyncExec(() -> {
+		if(Thread.currentThread() == Display.getDefault().getThread()) {
 			Main.setServerState(code);
 			SystemTrayManager.updateStatusMessage();
-		});
+		} else {
+			UIHelper.getDisplay().asyncExec(() -> {
+				Main.setServerState(code);
+				SystemTrayManager.updateStatusMessage();
+			});
+		}
 		
 		//Setting the server as not running
 		isRunning.set(false);

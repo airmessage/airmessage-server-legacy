@@ -139,15 +139,12 @@ public class PreferencesUI {
 			accessComposite.setLayout(compositeLayout);
 			
 			String stringAction, stringDescription;
-			switch(accountType) {
-				case PreferencesManager.accountTypeDirect -> {
-					stringAction = Main.resources().getString("action.switch_to_account");
-					stringDescription = Main.resources().getString("message.preference.account_manual");
-				}
-				default -> {
-					stringAction = Main.resources().getString("action.sign_out");
-					stringDescription = Main.resources().getString("message.preference.account_connect");
-				}
+			if(accountType == PreferencesManager.accountTypeDirect) {
+				stringAction = Main.resources().getString("action.switch_to_account");
+				stringDescription = Main.resources().getString("message.preference.account_manual");
+			} else {
+				stringAction = Main.resources().getString("action.sign_out");
+				stringDescription = Main.resources().getString("message.preference.account_connect");
 			}
 			
 			accessButton.setText(stringAction);
@@ -176,6 +173,12 @@ public class PreferencesUI {
 					
 					//Showing the intro UI
 					UIHelper.openIntroWindow();
+					
+					//Updating the state
+					Main.setServerState(ServerState.SETUP);
+					
+					//Updating the UI
+					SystemTrayManager.updateStatusMessage();
 				}, Main.resources().getString("action.cancel"), null).open();
 			});
 			

@@ -2,7 +2,6 @@ package me.tagavari.airmessageserver.connection.connect;
 
 import me.tagavari.airmessageserver.connection.DataProxy;
 import me.tagavari.airmessageserver.server.Main;
-import me.tagavari.airmessageserver.server.PreferencesManager;
 import me.tagavari.airmessageserver.server.ServerState;
 import org.java_websocket.framing.CloseFrame;
 

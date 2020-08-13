@@ -49,7 +49,7 @@ public class ConnectAccountManager {
 		//Creating the UI components
 		{
 			Browser browser = new Browser(shell, SWT.NONE);
-			browser.setMenu(new Menu(browser));
+			//browser.setMenu(new Menu(browser));
 			browser.setUrl(getServerURL());
 			
 			new AccountFunctionCallback(browser, "accountFunctionCallback", parentShell);
@@ -448,8 +448,9 @@ public class ConnectAccountManager {
 							if(!result) {
 								//Updating the server state
 								Main.setServerState(ServerState.ERROR_DATABASE);
-								SystemTrayManager.updateStatusMessage();
 							}
+							
+							SystemTrayManager.updateStatusMessage();
 						}
 					});
 					shell.open();
