@@ -59,6 +59,8 @@ class ConnectWebSocketClient extends WebSocketClient {
 		super(serverUri, new Draft_6455(), httpHeaders, connectTimeout);
 		
 		this.connectionListener = connectionListener;
+		
+		setConnectionLostTimeout(0);
 	}
 	
 	@Override
