@@ -116,8 +116,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	
 	@Override
 	public void sendPushNotification() {
-		ByteBuffer byteBuffer;
-		byteBuffer = ByteBuffer.allocate(Integer.BYTES);
+		ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
 		byteBuffer.putInt(NHT.nhtServerNotifyPush);
 		
 		connectClient.send(byteBuffer.array());
@@ -134,7 +133,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 		byteBuffer.putInt(NHT.nhtServerClose);
 		byteBuffer.putInt(connectionID);
 		
-		connectClient.send(byteBuffer);
+		connectClient.send(byteBuffer.array());
 		
 		//Removing the client
 		removeClient(connectionID);
