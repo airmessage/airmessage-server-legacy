@@ -142,6 +142,9 @@ public class Main {
 	}
 	
 	static void startServer() {
+		//Disconnecting the server if it's currently running
+		ConnectionManager.stop();
+		
 		//Setting the data proxy
 		ConnectionManager.assignDataProxy();
 		

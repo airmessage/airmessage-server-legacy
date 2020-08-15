@@ -73,6 +73,9 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	
 	@Override
 	public void startServer() {
+		//Ignoring if there is an existing connection
+		if(connectClient != null && !connectClient.isClosed()) return;
+		
 		//Getting the client
 		if(connectRegistration) {
 			connectClient = ConnectWebSocketClient.createInstanceRegister(connectIDToken, this);

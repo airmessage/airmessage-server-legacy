@@ -38,6 +38,7 @@ class ConnectWebSocketClient extends WebSocketClient {
 				.with("idToken", idToken)
 				.toString()
 		);
+		headers.put("Origin", "app");
 		
 		return new ConnectWebSocketClient(connectHostname, headers, connectTimeout, connectionListener);
 	}
@@ -51,6 +52,7 @@ class ConnectWebSocketClient extends WebSocketClient {
 				.with("userID", userID)
 				.toString()
 		);
+		headers.put("Origin", "app");
 		
 		return new ConnectWebSocketClient(connectHostname, headers, connectTimeout, connectionListener);
 	}
