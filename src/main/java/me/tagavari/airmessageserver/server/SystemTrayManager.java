@@ -44,7 +44,16 @@ public class SystemTrayManager {
 		miStatusSub = new MenuItem(menu, SWT.PUSH);
 		miStatusSub.setText(MessageFormat.format(Main.resources().getString("message.status.connected_count"), 0));
 		miStatusSub.setEnabled(false);
-		miStatusSub.addListener(SWT.Selection, event -> Main.startServer());
+		miStatusSub.addListener(SWT.Selection, event -> {
+			ServerState state = Main.getServerState();
+			if(state == ServerState.ERROR_CONN_VALIDATION || state == ServerState.ERROR_CONN_TOKEN) {
+				//Sign out
+				PreferencesUI.signOutUser();
+			} else {
+				//Restart the server
+				Main.startServer();
+			}
+		});
 		
 		//Divider
 		new MenuItem(menu, SWT.SEPARATOR);
@@ -143,7 +152,11 @@ public class SystemTrayManager {
 			}
 			miStatusSub.setEnabled(false);
 		} else {
-			miStatusSub.setText(Main.resources().getString("action.retry"));
+			if(state == ServerState.ERROR_CONN_VALIDATION || state == ServerState.ERROR_CONN_TOKEN) {
+				miStatusSub.setText(Main.resources().getString("action.reauthenticate"));
+			} else {
+				miStatusSub.setText(Main.resources().getString("action.retry"));
+			}
 			miStatusSub.setEnabled(!Main.isSetupMode());
 		}
 		

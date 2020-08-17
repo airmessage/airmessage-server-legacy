@@ -20,6 +20,8 @@ public class PreferencesUI {
 	}
 	
 	private static void openPrefsWindow() {
+		int accountType = PreferencesManager.getPrefAccountType();
+		
 		//Getting the preferences
 		int origPreferencePort = PreferencesManager.getPrefServerPort();
 		boolean origPreferenceUpdateCheck = PreferencesManager.getPrefAutoCheckUpdates();
@@ -48,7 +50,7 @@ public class PreferencesUI {
 		prefContainerGL.verticalSpacing = 5;
 		prefContainer.setLayout(prefContainerGL);
 		
-		{
+		if(accountType == PreferencesManager.accountTypeDirect) {
 			Label portLabel = new Label(prefContainer, SWT.NONE);
 			pwTextPort = new Text(prefContainer, SWT.BORDER);
 			
@@ -92,9 +94,9 @@ public class PreferencesUI {
 			/* GridData textWarningGD = new GridData();
 			textWarningGD.widthHint = 250;
 			textWarning.setLayoutData(textWarningGD); */
-		}
+		} else pwTextPort = null;
 		
-		{
+		if(accountType == PreferencesManager.accountTypeDirect) {
 			Label securityLabel = new Label(prefContainer, SWT.NONE);
 			Button prefsButton = new Button(prefContainer, SWT.PUSH);
 			
@@ -122,8 +124,6 @@ public class PreferencesUI {
 		}
 		
 		{
-			int accountType = PreferencesManager.getPrefAccountType();
-			
 			Label accessLabel = new Label(prefContainer, SWT.NONE);
 			Composite accessComposite = new Composite(prefContainer, SWT.NONE);
 			Button accessButton = new Button(accessComposite, SWT.PUSH);
@@ -162,23 +162,8 @@ public class PreferencesUI {
 					//Closing the window
 					windowShell.close();
 					
-					//Setting the user's account as unconfirmed
-					PreferencesManager.setPrefAccountConfirmed(false);
-					
-					//Enabling setup mode
-					Main.setSetupMode(true);
-					
-					//Disconnecting
-					ConnectionManager.stop();
-					
-					//Showing the intro UI
-					UIHelper.openIntroWindow();
-					
-					//Updating the state
-					Main.setServerState(ServerState.SETUP);
-					
-					//Updating the UI
-					SystemTrayManager.updateStatusMessage();
+					//Signing out
+					signOutUser();
 				}, Main.resources().getString("action.cancel"), null).open();
 			});
 			
@@ -215,18 +200,19 @@ public class PreferencesUI {
 			acceptButtonFD.top = new FormAttachment(50, -acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
 			acceptButton.setLayoutData(acceptButtonFD);
 			acceptButton.addListener(SWT.Selection, event -> {
-				//Reading the new preferences
-				String portStr = pwTextPort.getText();
-				int port = portStr.isEmpty() ? PreferencesManager.defaultPort : Integer.parseInt(portStr);
-				boolean updateCheck = pwButtonAutoUpdate.getSelection();
-				
-				//Applying changes
-				if(origPreferencePort != port) {
-					PreferencesManager.setPrefServerPort(port);
+				//Updating the port
+				if(accountType == PreferencesManager.accountTypeDirect) {
+					String portStr = pwTextPort.getText();
+					int port = portStr.isEmpty() ? PreferencesManager.defaultPort : Integer.parseInt(portStr);
 					
-					Main.reinitializeServer();
+					if(origPreferencePort != port) {
+						PreferencesManager.setPrefServerPort(port);
+						Main.reinitializeServer();
+					}
 				}
 				
+				//Updating the update checker
+				boolean updateCheck = pwButtonAutoUpdate.getSelection();
 				if(origPreferenceUpdateCheck != updateCheck) {
 					PreferencesManager.setPrefAutoCheckUpdates(updateCheck);
 					
@@ -472,5 +458,25 @@ public class PreferencesUI {
 		}
 		
 		return false;
+	}
+	
+	public static void signOutUser() {
+		//Setting the user's account as unconfirmed
+		PreferencesManager.setPrefAccountConfirmed(false);
+		
+		//Enabling setup mode
+		Main.setSetupMode(true);
+		
+		//Disconnecting
+		ConnectionManager.stop();
+		
+		//Showing the intro UI
+		UIHelper.openIntroWindow();
+		
+		//Updating the state
+		Main.setServerState(ServerState.SETUP);
+		
+		//Updating the UI
+		SystemTrayManager.updateStatusMessage();
 	}
 }

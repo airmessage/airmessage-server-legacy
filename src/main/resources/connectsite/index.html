@@ -103,7 +103,13 @@
                 },
 				signInOptions: [
 					// Leave the lines as is for the providers you want to offer your users.
-					firebase.auth.GoogleAuthProvider.PROVIDER_ID
+					{
+					    provider: firebase.auth.GoogleAuthProvider.PROVIDER_ID,
+                        customParameters: {
+                            // Forces account selection even when one account is available.
+                            prompt: 'select_account'
+                        }
+                    }
 					// firebase.auth.EmailAuthProvider.PROVIDER_ID
 				]
 			});
