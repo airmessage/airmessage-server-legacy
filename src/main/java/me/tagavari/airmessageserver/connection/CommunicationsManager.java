@@ -572,7 +572,8 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			for(Blocks.Block item : items) item.writeObject(packer);
 			
 			dataProxy.sendMessage(null, packer.toByteArray(), true);
-			dataProxy.sendPushNotification();
+			//Only send a push notification for incoming items
+			if(items.stream().anyMatch(item -> item instanceof Blocks.MessageInfo && ((Blocks.MessageInfo) item).sender != null)) dataProxy.sendPushNotification();
 			
 			return true;
 		} catch(BufferOverflowException exception) {
@@ -760,7 +761,10 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			for(Blocks.Block item : items) item.writeObject(packer);
 			
 			dataProxy.sendMessage(null, packer.toByteArray(), true);
-			dataProxy.sendPushNotification();
+			//Only send a push notification for incoming items
+			if(items.stream().anyMatch(item ->
+					(item instanceof Blocks.TapbackModifierInfo && ((Blocks.TapbackModifierInfo) item).sender != null) ||
+					(item instanceof Blocks.StickerModifierInfo && ((Blocks.StickerModifierInfo) item).sender != null))) dataProxy.sendPushNotification();
 			
 			return true;
 		} catch(BufferOverflowException exception) {
