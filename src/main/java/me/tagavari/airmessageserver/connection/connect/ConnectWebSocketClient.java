@@ -62,7 +62,7 @@ class ConnectWebSocketClient extends WebSocketClient {
 		
 		this.connectionListener = connectionListener;
 		
-		setConnectionLostTimeout(0);
+		setConnectionLostTimeout(10 * 60); //Every 10 mins
 	}
 	
 	@Override
