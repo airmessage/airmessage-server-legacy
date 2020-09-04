@@ -1,5 +1,6 @@
 package me.tagavari.airmessageserver.connection.connect;
 
+import io.sentry.Sentry;
 import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.PreferencesManager;
 import org.java_websocket.WebSocket;
@@ -12,10 +13,7 @@ import org.java_websocket.handshake.ServerHandshake;
 
 import javax.net.ssl.*;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.Socket;
-import java.net.URI;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -23,7 +21,8 @@ import java.util.logging.Level;
 
 class ConnectWebSocketClient extends WebSocketClient {
 	//Creating the constants
-	private static final URI connectHostname = URI.create("wss://connect.airmessage.org");
+	private static final String connectHostname = "wss://connect.airmessage.org";
+	//private static final String connectHostname = "ws://localhost:1259";
 	private static final int connectTimeout = 8 * 1000; //8 seconds
 	
 	//Creating the callbacks
@@ -31,30 +30,42 @@ class ConnectWebSocketClient extends WebSocketClient {
 	
 	static ConnectWebSocketClient createInstanceRegister(String idToken, ConnectionListener connectionListener) {
 		Map<String, String> headers = new HashMap<>();
-		headers.put("Cookie", new CookieBuilder()
-				.with("communications", NHT.commVer)
-				.with("isServer", true)
-				.with("installationID", PreferencesManager.getInstallationID())
-				.with("idToken", idToken)
-				.toString()
-		);
 		headers.put("Origin", "app");
 		
-		return new ConnectWebSocketClient(connectHostname, headers, connectTimeout, connectionListener);
+		String query = new QueryBuilder()
+				.with("communications", NHT.commVer)
+				.with("is_server", true)
+				.with("installation_id", PreferencesManager.getInstallationID())
+				.with("id_token", idToken)
+				.toString();
+		
+		try {
+			return new ConnectWebSocketClient(new URI(connectHostname + "?" + query), headers, connectTimeout, connectionListener);
+		} catch(URISyntaxException exception) {
+			Sentry.capture(exception);
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			return null;
+		}
 	}
 	
 	static ConnectWebSocketClient createInstanceExisting(String userID, ConnectionListener connectionListener) {
 		Map<String, String> headers = new HashMap<>();
-		headers.put("Cookie", new CookieBuilder()
-				.with("communications", NHT.commVer)
-				.with("isServer", true)
-				.with("installationID", PreferencesManager.getInstallationID())
-				.with("userID", userID)
-				.toString()
-		);
 		headers.put("Origin", "app");
 		
-		return new ConnectWebSocketClient(connectHostname, headers, connectTimeout, connectionListener);
+		String query = new QueryBuilder()
+				.with("communications", NHT.commVer)
+				.with("is_server", true)
+				.with("installation_id", PreferencesManager.getInstallationID())
+				.with("user_id", userID)
+				.toString();
+		
+		try {
+			return new ConnectWebSocketClient(new URI(connectHostname + "?" + query), headers, connectTimeout, connectionListener);
+		} catch(URISyntaxException exception) {
+			Sentry.capture(exception);
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			return null;
+		}
 	}
 	
 	public ConnectWebSocketClient(URI serverUri, Map<String, String> httpHeaders, int connectTimeout, ConnectionListener connectionListener) {
