@@ -248,7 +248,7 @@ public class Main {
 	
 	private static Formatter getLoggerFormatter() {
 		return new Formatter() {
-			private final DateFormat dateFormat = new SimpleDateFormat("dd/MM/yy HH:mm:ss");
+			private final DateFormat dateFormat = new SimpleDateFormat("yy-MM-dd HH:mm:ss");
 			
 			@Override
 			public String format(LogRecord record) {
