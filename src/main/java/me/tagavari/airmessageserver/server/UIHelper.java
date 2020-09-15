@@ -245,6 +245,52 @@ public class UIHelper {
 		return maxSize;
 	}
 	
+	public static Shell getMessageShell(Shell parentShell, String titleText, String bodyText) {
+		//Creating the shell
+		Shell shell = new Shell(parentShell, SWT.SHEET);
+		shell.setMinimumSize(300, 0);
+		
+		GridLayout shellGL = new GridLayout();
+		shellGL.numColumns = 1;
+		shellGL.marginTop = shellGL.marginBottom = shellGL.marginLeft = shellGL.marginRight = UIHelper.sheetMargin;
+		shellGL.verticalSpacing = UIHelper.windowMargin;
+		shell.setLayout(shellGL);
+		
+		//Adding the title
+		Label labelTitle = new Label(shell, SWT.WRAP);
+		labelTitle.setText(titleText);
+		labelTitle.setFont(UIHelper.getFont(labelTitle.getFont(), 14, SWT.BOLD));
+		GridData labelTitleGD = new GridData();
+		labelTitleGD.grabExcessHorizontalSpace = true;
+		labelTitleGD.horizontalAlignment = GridData.FILL;
+		labelTitle.setLayoutData(labelTitleGD);
+		
+		//Adding the description
+		Label labelDescription = new Label(shell, SWT.WRAP);
+		labelDescription.setText(bodyText);
+		GridData labelDescriptionGD = new GridData();
+		labelDescriptionGD.grabExcessHorizontalSpace = true;
+		labelDescriptionGD.horizontalAlignment = GridData.FILL;
+		labelDescription.setLayoutData(labelDescriptionGD);
+		
+		//Adding the button
+		Button closeButton = new Button(shell, SWT.PUSH);
+		closeButton.setText(Main.resources().getString("action.ok"));
+		GridData closeButtonGD = new GridData();
+		closeButtonGD.horizontalAlignment = GridData.END;
+		closeButtonGD.widthHint = UIHelper.minButtonWidth;
+		closeButton.setLayoutData(closeButtonGD);
+		closeButton.addListener(SWT.Selection, event -> shell.close());
+		shell.setDefaultButton(closeButton);
+		
+		//Packing the shell
+		shell.pack();
+		if(shell.getSize().x > 500) shell.setSize(500, shell.getSize().y);
+		
+		//Returning the shell
+		return shell;
+	}
+	
 	public static Shell getMessageShellDual(Shell parentShell, String titleText, String bodyText, String buttonMainText, Runnable buttonMainCallback, String buttonSecondaryText, Runnable buttonSecondaryCallback) {
 		//Creating the shell
 		Shell shell = new Shell(parentShell, SWT.SHEET);

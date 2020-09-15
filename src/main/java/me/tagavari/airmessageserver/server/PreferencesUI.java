@@ -25,10 +25,12 @@ public class PreferencesUI {
 		//Getting the preferences
 		int origPreferencePort = PreferencesManager.getPrefServerPort();
 		boolean origPreferenceUpdateCheck = PreferencesManager.getPrefAutoCheckUpdates();
+		boolean origPreferenceGetBetaUpdates = PreferencesManager.getPrefGetBetaUpdates();
 		
 		//Creating the widget values
 		Text pwTextPort;
 		Button pwButtonAutoUpdate;
+		Button pwButtonBetaUpdate;
 		
 		//Creating the shell
 		windowShell = new Shell(UIHelper.getDisplay(), SWT.TITLE);
@@ -112,15 +114,57 @@ public class PreferencesUI {
 		
 		{
 			Label updateLabel = new Label(prefContainer, SWT.NONE);
-			pwButtonAutoUpdate = new Button(prefContainer, SWT.CHECK);
+			Composite updateComposite = new Composite(prefContainer, SWT.NONE);
+			pwButtonAutoUpdate = new Button(updateComposite, SWT.CHECK);
+			pwButtonBetaUpdate = new Button(updateComposite, SWT.CHECK);
 			
 			updateLabel.setText(Main.resources().getString("prefix.preference.updates"));
-			updateLabel.setLayoutData(new GridData(GridData.END, GridData.CENTER, false, false));
+			GridData updateLabelGD = new GridData(GridData.END, GridData.BEGINNING, false, false);
+			updateLabelGD.verticalIndent = 5;
+			updateLabel.setLayoutData(updateLabelGD);
 			
-			pwButtonAutoUpdate.setText(Main.resources().getString("message.preference.auto_update"));
-			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
-			pwButtonAutoUpdate.setLayoutData(prefGB);
-			pwButtonAutoUpdate.setSelection(origPreferenceUpdateCheck);
+			GridLayout compositeLayout = new GridLayout();
+			compositeLayout.numColumns = 1;
+			updateComposite.setLayout(compositeLayout);
+			
+			{
+				pwButtonAutoUpdate.setText(Main.resources().getString("message.preference.auto_update"));
+				GridData prefGD = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
+				pwButtonAutoUpdate.setLayoutData(prefGD);
+				pwButtonAutoUpdate.setSelection(origPreferenceUpdateCheck);
+			}
+			
+			{
+				pwButtonBetaUpdate.setText(Main.resources().getString("message.preference.beta_update"));
+				GridData prefGD = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
+				pwButtonBetaUpdate.setLayoutData(prefGD);
+				pwButtonBetaUpdate.setSelection(origPreferenceGetBetaUpdates);
+				pwButtonBetaUpdate.addListener(SWT.Selection, event -> {
+					//Getting the widget information
+					Button widget = (Button) event.widget;
+					boolean selected = widget.getSelection();
+					
+					if(selected) {
+						//Cancelling the event
+						widget.setSelection(false);
+						event.doit = false;
+						
+						//Displaying a confirmation dialog
+						UIHelper.getMessageShellDual(windowShell,
+								Main.resources().getString("message.beta_enrollment.title"),
+								Main.resources().getString("message.beta_enrollment.description"),
+								Main.resources().getString("action.receive_beta_updates"), () -> {
+									//Enabling the checkbox
+									widget.setSelection(true);
+						}, Main.resources().getString("action.cancel"), null).open();
+					} else {
+						//Displaying a message
+						UIHelper.getMessageShell(windowShell,
+								Main.resources().getString("message.beta_unenrollment.title"),
+								Main.resources().getString("message.beta_unenrollment.description")).open();
+					}
+				});
+			}
 		}
 		
 		{
@@ -218,6 +262,12 @@ public class PreferencesUI {
 					
 					if(updateCheck) UpdateManager.startUpdateChecker();
 					else UpdateManager.stopUpdateChecker();
+				}
+				
+				//Updating the update channel
+				boolean getBetaUpdates = pwButtonBetaUpdate.getSelection();
+				if(origPreferenceGetBetaUpdates != getBetaUpdates) {
+					PreferencesManager.setPrefGetBetaUpdates(getBetaUpdates);
 				}
 				
 				windowShell.close();

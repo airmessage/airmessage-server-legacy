@@ -121,122 +121,6 @@ public class ConnectAccountManager {
 		return shell;
 	}
 	
-	private static Shell getMessageShell(Shell parentShell, String titleText, String bodyText) {
-		//Creating the shell
-		Shell shell = new Shell(parentShell, SWT.SHEET);
-		shell.setMinimumSize(300, 0);
-		
-		GridLayout shellGL = new GridLayout();
-		shellGL.numColumns = 1;
-		shellGL.marginTop = shellGL.marginBottom = shellGL.marginLeft = shellGL.marginRight = UIHelper.sheetMargin;
-		shellGL.verticalSpacing = UIHelper.windowMargin;
-		shell.setLayout(shellGL);
-		
-		//Adding the title
-		Label labelTitle = new Label(shell, SWT.WRAP);
-		labelTitle.setText(titleText);
-		labelTitle.setFont(UIHelper.getFont(labelTitle.getFont(), 14, SWT.BOLD));
-		GridData labelTitleGD = new GridData();
-		labelTitleGD.grabExcessHorizontalSpace = true;
-		labelTitleGD.horizontalAlignment = GridData.FILL;
-		labelTitle.setLayoutData(labelTitleGD);
-		
-		//Adding the description
-		Label labelDescription = new Label(shell, SWT.WRAP);
-		labelDescription.setText(bodyText);
-		GridData labelDescriptionGD = new GridData();
-		labelDescriptionGD.grabExcessHorizontalSpace = true;
-		labelDescriptionGD.horizontalAlignment = GridData.FILL;
-		labelDescription.setLayoutData(labelDescriptionGD);
-		
-		//Adding the button
-		Button closeButton = new Button(shell, SWT.PUSH);
-		closeButton.setText(Main.resources().getString("action.ok"));
-		GridData closeButtonGD = new GridData();
-		closeButtonGD.horizontalAlignment = GridData.END;
-		closeButtonGD.widthHint = UIHelper.minButtonWidth;
-		closeButton.setLayoutData(closeButtonGD);
-		closeButton.addListener(SWT.Selection, event -> shell.close());
-		shell.setDefaultButton(closeButton);
-		
-		//Packing the shell
-		shell.pack();
-		if(shell.getSize().x > 500) shell.setSize(500, shell.getSize().y);
-		
-		//Returning the shell
-		return shell;
-	}
-	
-	private static Shell getMessageShellDual(Shell parentShell, String titleText, String bodyText, String buttonMainText, Runnable buttonMainCallback, String buttonSecondaryText, Runnable buttonSecondaryCallback) {
-		//Creating the shell
-		Shell shell = new Shell(parentShell, SWT.SHEET);
-		shell.setMinimumSize(300, 0);
-		
-		GridLayout shellGL = new GridLayout();
-		shellGL.numColumns = 1;
-		shellGL.marginTop = shellGL.marginBottom = shellGL.marginLeft = shellGL.marginRight = UIHelper.sheetMargin;
-		shellGL.verticalSpacing = UIHelper.windowMargin;
-		shell.setLayout(shellGL);
-		
-		//Adding the title
-		Label labelTitle = new Label(shell, SWT.WRAP);
-		labelTitle.setText(titleText);
-		labelTitle.setFont(UIHelper.getFont(labelTitle.getFont(), 14, SWT.BOLD));
-		GridData labelTitleGD = new GridData();
-		labelTitleGD.grabExcessHorizontalSpace = true;
-		labelTitleGD.horizontalAlignment = GridData.FILL;
-		labelTitle.setLayoutData(labelTitleGD);
-		
-		//Adding the description
-		Label labelDescription = new Label(shell, SWT.WRAP);
-		labelDescription.setText(bodyText);
-		GridData labelDescriptionGD = new GridData();
-		labelDescriptionGD.grabExcessHorizontalSpace = true;
-		labelDescriptionGD.horizontalAlignment = GridData.FILL;
-		labelDescription.setLayoutData(labelDescriptionGD);
-		
-		//Configuring the buttons
-		{
-			Composite buttonContainer = new Composite(shell, SWT.NONE);
-			buttonContainer.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
-			
-			FormLayout buttonContainerFL = new FormLayout();
-			buttonContainer.setLayout(buttonContainerFL);
-			
-			Button mainButton = new Button(buttonContainer, SWT.PUSH);
-			mainButton.setText(buttonMainText);
-			FormData acceptButtonFD = new FormData();
-			if(mainButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) acceptButtonFD.width = UIHelper.minButtonWidth;
-			acceptButtonFD.right = new FormAttachment(100);
-			acceptButtonFD.top = new FormAttachment(50, -mainButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).y / 2);
-			mainButton.setLayoutData(acceptButtonFD);
-			mainButton.addListener(SWT.Selection, event -> {
-				shell.close();
-				if(buttonMainCallback != null) buttonMainCallback.run();
-			});
-			shell.setDefaultButton(mainButton);
-			
-			Button secondaryButton = new Button(buttonContainer, SWT.PUSH);
-			secondaryButton.setText(buttonSecondaryText);
-			FormData discardButtonFD = new FormData();
-			if(secondaryButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) discardButtonFD.width = UIHelper.minButtonWidth;
-			discardButtonFD.right = new FormAttachment(mainButton);
-			discardButtonFD.top = new FormAttachment(mainButton, 0, SWT.CENTER);
-			secondaryButton.setLayoutData(discardButtonFD);
-			secondaryButton.addListener(SWT.Selection, event -> {
-				shell.close();
-				if(buttonSecondaryCallback != null) buttonSecondaryCallback.run();
-			});
-		}
-		
-		//Packing the shell
-		shell.pack();
-		if(shell.getSize().x > 500) shell.setSize(500, shell.getSize().y);
-		
-		//Returning the shell
-		return shell;
-	}
-	
 	private static boolean startServer() {
 		//Returning if the server is already running
 		if(serverRunning) return true;
@@ -425,7 +309,7 @@ public class ConnectAccountManager {
 					connectingShell.close();
 					
 					//Showing a message
-					Shell shell = getMessageShell(parentShell, Main.resources().getString("message.connect.title"), Main.resources().getString("message.connect.body"));
+					Shell shell = UIHelper.getMessageShell(parentShell, Main.resources().getString("message.connect.title"), Main.resources().getString("message.connect.body"));
 					shell.addShellListener(new ShellAdapter() {
 						@Override
 						public void shellClosed(ShellEvent e) {
@@ -469,13 +353,13 @@ public class ConnectAccountManager {
 					//Showing a message
 					Shell shell;
 					if(code.type == ServerState.Constants.typeErrorRecoverable) {
-						shell = getMessageShellDual(parentShell, Main.resources().getString("message.connect.error"), Main.resources().getString(code.messageIDLong),
+						shell = UIHelper.getMessageShellDual(parentShell, Main.resources().getString("message.connect.error"), Main.resources().getString(code.messageIDLong),
 								Main.resources().getString("action.retry"), () -> {
 									//Connecting again
 									handleAccountResponse(idToken, userID, parentShell);
 								}, Main.resources().getString("action.cancel"), null);
 					} else {
-						shell = getMessageShell(parentShell, Main.resources().getString("message.connect.error"), Main.resources().getString(code.messageIDLong));
+						shell = UIHelper.getMessageShell(parentShell, Main.resources().getString("message.connect.error"), Main.resources().getString(code.messageIDLong));
 					}
 					
 					shell.open();
@@ -516,6 +400,6 @@ public class ConnectAccountManager {
 		if(windowShell != null) windowShell.close();
 		
 		//Displaying an error message
-		getMessageShell(parentShell, Main.resources().getString("message.signin.error.title"), Main.resources().getString("message.signin.error.body")).open();
+		UIHelper.getMessageShell(parentShell, Main.resources().getString("message.signin.error.title"), Main.resources().getString("message.signin.error.body")).open();
 	}
 }

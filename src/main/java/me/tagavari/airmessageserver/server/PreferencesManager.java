@@ -31,6 +31,7 @@ public class PreferencesManager {
 	private static final String javaPrefAccountType = "AccountType";
 	private static final String javaPrefAccountConfirmed = "AccountConfirmed";
 	private static final String javaPrefAutoCheckUpdates = "AutomaticUpdateCheck";
+	private static final String javaPrefGetBetaUpdates = "GetBetaUpdates";
 	private static final String javaPrefServerPort = "ServerPort";
 	private static final String javaPrefConnectUserID = "ConnectUserID";
 	
@@ -264,6 +265,14 @@ public class PreferencesManager {
 	
 	public static void setPrefAutoCheckUpdates(boolean autoCheckUpdates) {
 		preferencesNode.putBoolean(javaPrefAutoCheckUpdates, autoCheckUpdates);
+	}
+	
+	public static boolean getPrefGetBetaUpdates() {
+		return preferencesNode.getBoolean(javaPrefGetBetaUpdates, false);
+	}
+	
+	public static void setPrefGetBetaUpdates(boolean getBetaUpdates) {
+		preferencesNode.putBoolean(javaPrefGetBetaUpdates, getBetaUpdates);
 	}
 	
 	public static int getPrefServerPort() {

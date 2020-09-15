@@ -37,7 +37,8 @@ import java.util.zip.ZipInputStream;
 
 class UpdateManager {
 	//Creating the reference values
-	private static final URL updateURL = makeURL("https://airmessage.org/update/server/1/");
+	private static final URL stableUpdateURL = makeURL("https://airmessage.org/update/server/1");
+	private static final URL betaUpdateURL = makeURL("https://airmessage.org/update/server-beta/1");
 	//private static final URL updateURL = makeURL(new File(System.getProperty("user.home") + "/Downloads/update.json"));
 	
 	//Creating the state values
@@ -53,6 +54,10 @@ class UpdateManager {
 	private static final Runnable runUpdateCheck = () -> {
 		updateCheckInProgress.set(true);
 		boolean shouldShowNoUpdateWindow = false;
+		
+		URL updateURL;
+		if(PreferencesManager.getPrefGetBetaUpdates()) updateURL = betaUpdateURL;
+		else updateURL = stableUpdateURL;
 		
 		try {
 			//Getting the object

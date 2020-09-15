@@ -167,8 +167,8 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 		//Mapping the code
 		ServerState localError = switch(code) {
 			case CloseFrame.NEVER_CONNECTED, CloseFrame.BUGGYCLOSE, CloseFrame.FLASHPOLICY, CloseFrame.ABNORMAL_CLOSE, CloseFrame.NORMAL -> ServerState.ERROR_INTERNET;
-			case CloseFrame.PROTOCOL_ERROR -> ServerState.ERROR_CONN_BADREQUEST;
-			case CloseFrame.POLICY_VALIDATION -> ServerState.ERROR_CONN_OUTDATED;
+			case CloseFrame.PROTOCOL_ERROR, CloseFrame.POLICY_VALIDATION -> ServerState.ERROR_CONN_BADREQUEST;
+			case NHT.closeCodeIncompatibleProtocol -> ServerState.ERROR_CONN_OUTDATED;
 			case NHT.closeCodeAccountValidation -> ServerState.ERROR_CONN_VALIDATION;
 			case NHT.closeCodeServerTokenRefresh -> ServerState.ERROR_CONN_TOKEN;
 			case NHT.closeCodeNoSubscription -> ServerState.ERROR_CONN_SUBSCRIPTION;

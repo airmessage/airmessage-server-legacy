@@ -72,10 +72,11 @@ class NHT {
 	static final int nhtServerNotifyPush = 212;
 	
 	//Disconnection codes
-	static final int closeCodeNoGroup = 4000; //There is no active group with a matching ID
-	static final int closeCodeNoCapacity = 4001; //The client's group is at capacity
-	static final int closeCodeAccountValidation = 4002; //This account couldn't be validated
-	static final int closeCodeServerTokenRefresh = 4003; //The server's provided installation ID is out of date; log in again to re-link this device
-	static final int closeCodeNoSubscription = 4004; //This user does not have an active subscription
-	static final int closeCodeOtherLocation = 4005; //Logged in from another location
+	static final int closeCodeIncompatibleProtocol = 4000; //No protocol version matching the one requested
+	static final int closeCodeNoGroup = 4001; //There is no active group with a matching ID
+	static final int closeCodeNoCapacity = 4002; //The client's group is at capacity
+	static final int closeCodeAccountValidation = 4003; //This account couldn't be validated
+	static final int closeCodeServerTokenRefresh = 4004; //The server's provided installation ID is out of date; log in again to re-link this device
+	static final int closeCodeNoSubscription = 4005; //This user does not have an active subscription
+	static final int closeCodeOtherLocation = 4006; //Logged in from another location
 }
