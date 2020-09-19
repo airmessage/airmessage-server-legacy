@@ -19,7 +19,7 @@ public enum ServerState {
 	ERROR_CONN_OUTDATED("message.status.error.outdated", "message.error.connect.outdated", Constants.typeError), //Client out of date
 	ERROR_CONN_VALIDATION("message.status.error.account_validation", "message.error.connect.account_validation", Constants.typeError), //Account access not valid
 	ERROR_CONN_TOKEN("message.status.error.token_refresh", "message.error.connect.token_refresh", Constants.typeError), //Token refresh
-	ERROR_CONN_SUBSCRIPTION("message.status.error.no_subscription", "message.error.connect.no_subscription", Constants.typeError), //Not subscribed
+	ERROR_CONN_SUBSCRIPTION("message.status.error.no_enrollment", "message.error.connect.no_enrollment", Constants.typeError), //Not subscribed (not enrolled)
 	ERROR_CONN_CONFLICT("message.status.error.account_conflict", "message.error.connect.account_conflict", Constants.typeError); //Logged in from another location
 	
 	public final String messageID;

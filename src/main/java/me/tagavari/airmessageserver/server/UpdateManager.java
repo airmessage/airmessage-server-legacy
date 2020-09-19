@@ -37,9 +37,9 @@ import java.util.zip.ZipInputStream;
 
 class UpdateManager {
 	//Creating the reference values
-	private static final URL stableUpdateURL = makeURL("https://airmessage.org/update/server/1");
-	private static final URL betaUpdateURL = makeURL("https://airmessage.org/update/server-beta/1");
-	//private static final URL updateURL = makeURL(new File(System.getProperty("user.home") + "/Downloads/update.json"));
+	private static final String updateBaseURL = "https://airmessage.org";
+	private static final URL stableUpdateURL = makeURL(updateBaseURL + "/update/server/1");
+	private static final URL betaUpdateURL = makeURL(updateBaseURL + "/update/server-beta/1");
 	
 	//Creating the state values
 	private static final AtomicBoolean updateCheckInProgress = new AtomicBoolean(false);
@@ -65,10 +65,13 @@ class UpdateManager {
 			try(Scanner scanner = new Scanner(updateURL.openStream())) {
 				scanner.useDelimiter("\\A");
 				
-				if(!scanner.hasNext()) return;
+				if(!scanner.hasNext()) {
+					Main.getLogger().log(Level.WARNING, "Tried to fetch update data, received empty string");
+					return;
+				}
 				String result = scanner.next();
 				jRoot = new JSONObject(result);
-			} catch(IOException exception) {
+			} catch(IOException | JSONException exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				return;
 			}
@@ -116,9 +119,10 @@ class UpdateManager {
 				final String relTargetLink = jLatestRelease.getString("download-url");
 				String relMessage = new String(Base64.getDecoder().decode(releaseNotes.get(targetLocale)));
 				final String relMessageHTML = HtmlRenderer.builder().build().render(Parser.builder().build().parse(relMessage));
+				final boolean relExternalDownload = "true".equals(jLatestRelease.getString("download-url"));
 				
 				//Showing the update window
-				UIHelper.getDisplay().asyncExec(() -> openUpdateWindow(relVerName, relMessageHTML, relTargetLink));
+				UIHelper.getDisplay().asyncExec(() -> openUpdateWindow(relVerName, relMessageHTML, relTargetLink, relExternalDownload));
 			} catch(Exception exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.capture(exception);
@@ -179,7 +183,7 @@ class UpdateManager {
 		}
 	}
 	
-	private static void openUpdateWindow(String newVer, String releaseNotes, String downloadURL) {
+	private static void openUpdateWindow(String newVer, String releaseNotes, String downloadURL, boolean external) {
 		//Closing the current update result shell
 		if(updateResultShell != null && !updateResultShell.isDisposed()) updateResultShell.close();
 		
@@ -255,7 +259,7 @@ class UpdateManager {
 			buttonContainer.setLayout(buttonContainerFL);
 			
 			Button acceptButton = new Button(buttonContainer, SWT.PUSH);
-			acceptButton.setText(Main.resources().getString("action.install_update"));
+			acceptButton.setText(Main.resources().getString(external ? "action.download_update" : "action.install_update"));
 			FormData acceptButtonFD = new FormData();
 			//if(acceptButton.computeSize(SWT.DEFAULT, SWT.DEFAULT).x < UIHelper.minButtonWidth) acceptButtonFD.width = UIHelper.minButtonWidth;
 			acceptButtonFD.right = new FormAttachment(100);
@@ -266,7 +270,7 @@ class UpdateManager {
 				if(!shell.isDisposed()) shell.close();
 				
 				//Starting the update
-				startUpdateInstallation(downloadURL);
+				startUpdateInstallation(downloadURL, external);
 			});
 			shell.setDefaultButton(acceptButton);
 			
@@ -408,15 +412,20 @@ class UpdateManager {
 		shell.forceActive();
 	}
 	
-	private static void startUpdateInstallation(String downloadURL) {
+	private static void startUpdateInstallation(String downloadURL, boolean external) {
 		//Returning if there is already an installation in progress
 		if(updateInstallationInProgress.get()) return;
 		
-		//Showing the installation window
-		showInstallationWindow();
-		
-		//Downloading and installing the update
-		new Thread(() -> installUpdate(downloadURL)).start();
+		if(external) {
+			//Launch the link in the browser
+			Program.launch(downloadURL);
+		} else {
+			//Showing the installation window
+			showInstallationWindow();
+			
+			//Downloading and installing the update
+			new Thread(() -> installUpdate(downloadURL)).start();
+		}
 	}
 	
 	private static void installUpdate(String downloadURL) {
@@ -445,9 +454,22 @@ class UpdateManager {
 			int contentLength = conn.getHeaderFieldInt("content-length", -1);
 			
 			//Checking if this content type can't be handled by the app
-			if(contentType == null || !contentType.equals("application/zip")) {
+			if(contentType == null || !contentType.split(";")[0].equals("application/zip")) {
+				Main.getLogger().log(Level.INFO, "Unknown update MIME type " + contentType + ", opening in browser");
+				
 				//Passing the request on to the system to handle
 				Program.launch(downloadURL);
+				
+				//Updating the state
+				updateInstallationInProgress.set(false);
+				
+				UIHelper.getDisplay().asyncExec(() -> {
+					//Closing the installation progress window
+					if(updateInstallationShell != null && !updateInstallationShell.isDisposed()) {
+						updateInstallationShell.close();
+					}
+				});
+				
 				return;
 			}
 			

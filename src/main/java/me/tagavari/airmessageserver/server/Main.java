@@ -94,11 +94,11 @@ public class Main {
 			} while(!result);
 		}
 		
-		//Starting the update checker
-		if(PreferencesManager.getPrefAutoCheckUpdates()) UpdateManager.startUpdateChecker();
-		
 		//Initializing the UI helper
 		UIHelper.initialize();
+		
+		//Starting the update checker
+		if(PreferencesManager.getPrefAutoCheckUpdates()) UpdateManager.startUpdateChecker();
 		
 		//Setting up first run
 		if(PreferencesManager.getPrefAccountConfirmed()) {
