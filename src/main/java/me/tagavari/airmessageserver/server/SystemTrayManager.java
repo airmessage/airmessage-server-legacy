@@ -152,7 +152,7 @@ public class SystemTrayManager {
 			}
 			miStatusSub.setEnabled(false);
 		} else {
-			if(state == ServerState.ERROR_CONN_VALIDATION || state == ServerState.ERROR_CONN_TOKEN) {
+			if(state == ServerState.ERROR_CONN_VALIDATION || state == ServerState.ERROR_CONN_TOKEN || state == ServerState.ERROR_CONN_CONFLICT) {
 				miStatusSub.setText(Main.resources().getString("action.reauthenticate"));
 			} else {
 				miStatusSub.setText(Main.resources().getString("action.retry"));
