@@ -78,7 +78,7 @@ public class Main {
 					return new SingletonContextManager();
 				}
 			});
-			client.setRelease(Constants.SERVER_VERSION);
+			client.setRelease("airmessage-server@" + Constants.SERVER_VERSION);
 			client.addTag("system_version", System.getProperty("os.version"));
 			
 			//Marking the user's ID
