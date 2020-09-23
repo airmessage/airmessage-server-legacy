@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'me.tagavari'
-version '0.4'
+version '2.0'
 
 repositories {
     mavenCentral()
@@ -23,7 +23,7 @@ dependencies {
     implementation 'io.sentry:sentry:1.7.30'
 
     //SLF4J - Logging library
-    implementation 'org.slf4j:slf4j-nop:1.7.30'
+    //implementation 'org.slf4j:slf4j-nop:1.7.30'
 
     //JSON in Java - JSON library
     implementation 'org.json:json:20200518'
@@ -42,7 +42,7 @@ task copyToLib(type: Copy) {
     into jar.destinationDirectory.asFile.get()
 }
 
-task jlink(type: Exec) {
+/* task jlink(type: Exec) {
     final String jDeps = 'java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver'
 
     inputs.property("jlink.jdeps", jDeps)
@@ -59,13 +59,15 @@ task jlink(type: Exec) {
             '--compress=2',
             '--add-modules', jDeps,
             '--output', "${buildDir}/java-runtime"
-}
+} */
 
 task jpackage(type: Exec) {
-    dependsOn ordered('build', 'copyToLib', 'jlink')
+    dependsOn ordered('clean', 'build', 'copyToLib')
+
+    final String jDeps = 'java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver'
 
     inputs.dir(jar.destinationDirectory.asFile.get())
-    inputs.dir("${buildDir}/java-runtime")
+    //inputs.dir("${buildDir}/java-runtime")
     outputs.dir("AirMessage.app")
 
     doFirst {
@@ -80,7 +82,7 @@ task jpackage(type: Exec) {
             '--main-class', 'me.tagavari.airmessageserver.server.Main',
             '--type', 'app-image',
             '--java-options', '-XstartOnFirstThread',
-            '--runtime-image', "${buildDir}/java-runtime",
+            '--add-modules', jDeps,
             '--mac-package-identifier', 'me.tagavari.airmessageserver',
             '--mac-package-name', 'AirMessage',
             '--mac-package-signing-prefix', 'airmessage',
@@ -123,9 +125,21 @@ run {
 }
 
 def ordered(String... dependencyPaths) {
-    def dependencies = dependencyPaths.collect { tasks.getByPath(it) }
-    for (int i = 0; i < dependencies.size() - 1; i++) {
+    def dependencies = dependencyPaths.collect{ tasks.getByPath(it) }
+    for(int i = 0; i < dependencies.size() - 1; i++) {
         dependencies[i + 1].mustRunAfter(dependencies[i])
     }
     return dependencies
+}
+
+task printVersionName {
+    doLast {
+        println version
+    }
+}
+
+task printJarName {
+    doLast {
+        println jar.archiveFileName.get()
+    }
 }

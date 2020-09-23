@@ -1,6 +1,7 @@
 package me.tagavari.airmessageserver.server;
 
 import io.sentry.Sentry;
+import io.sentry.SentryClient;
 import io.sentry.event.UserBuilder;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
 import me.tagavari.airmessageserver.connection.DataProxy;
@@ -70,14 +71,12 @@ public class Main {
 			getLogger().log(Level.INFO, "Server running in debug mode");
 		} else {
 			//Initializing Sentry
-			//Sentry.init(Constants.SENTRY_DSN + "?release=" + Constants.SERVER_VERSION);
+			SentryClient client = Sentry.init();
+			client.setRelease(Constants.SERVER_VERSION);
+			client.addTag("system_version", System.getProperty("os.version"));
 			
-			//Marking the user's ID (with their MAC address)
-			//String macAddress = Constants.getMACAddress();
-			//if(macAddress != null) Sentry.getContext().setUser(new UserBuilder().setId(macAddress).build());
-			
-			//Recording the system version
-			Sentry.getContext().addTag("system_version", System.getProperty("os.version"));
+			//Marking the user's ID
+			Sentry.getContext().setUser(new UserBuilder().setId(PreferencesManager.getInstallationID()).build());
 		}
 		
 		//Logging the startup messages
