@@ -167,4 +167,9 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 	public boolean requiresPersistence() {
 		return true;
 	}
+	
+	@Override
+	public String getDisplayName() {
+		return "Direct";
+	}
 }

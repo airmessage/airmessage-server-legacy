@@ -1,13 +1,13 @@
 package me.tagavari.airmessageserver.server;
 
+import io.sentry.DefaultSentryClientFactory;
 import io.sentry.Sentry;
 import io.sentry.SentryClient;
+import io.sentry.context.ContextManager;
+import io.sentry.context.SingletonContextManager;
+import io.sentry.dsn.Dsn;
 import io.sentry.event.UserBuilder;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
-import me.tagavari.airmessageserver.connection.DataProxy;
-import me.tagavari.airmessageserver.connection.direct.DataProxyTCP;
-import me.tagavari.airmessageserver.exception.KeychainPermissionException;
-import org.java_websocket.framing.CloseFrame;
 
 import javax.swing.*;
 import java.io.*;
@@ -71,7 +71,13 @@ public class Main {
 			getLogger().log(Level.INFO, "Server running in debug mode");
 		} else {
 			//Initializing Sentry
-			SentryClient client = Sentry.init();
+			SentryClient client = Sentry.init(new DefaultSentryClientFactory() {
+				@Override
+				protected ContextManager getContextManager(Dsn dsn) {
+					//Include context data on every thread
+					return new SingletonContextManager();
+				}
+			});
 			client.setRelease(Constants.SERVER_VERSION);
 			client.addTag("system_version", System.getProperty("os.version"));
 			

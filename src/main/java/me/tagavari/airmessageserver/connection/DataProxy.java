@@ -120,4 +120,10 @@ public abstract class DataProxy<C extends ClientRegistration> {
 	 * @return TRUE if persistence should be enabled
 	 */
 	public abstract boolean requiresPersistence();
+	
+	/**
+	 * Gets the non-localized display name of this proxy
+	 * @return The display name
+	 */
+	public abstract String getDisplayName();
 }

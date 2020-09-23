@@ -1,8 +1,10 @@
 package me.tagavari.airmessageserver.connection.connect;
 
+import io.sentry.Sentry;
 import me.tagavari.airmessageserver.connection.DataProxy;
 import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.ServerState;
+import org.java_websocket.exceptions.WebsocketNotConnectedException;
 import org.java_websocket.framing.CloseFrame;
 
 import java.nio.BufferUnderflowException;
@@ -12,6 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 
 public class DataProxyConnect extends DataProxy<ClientSocket> implements ConnectionListener {
 	private static final Random random = new Random();
@@ -111,7 +114,11 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 		byteBuffer.put(content);
 		
 		//Sending the data
-		connectClient.send(byteBuffer.array());
+		try {
+			connectClient.send(byteBuffer.array());
+		} catch(WebsocketNotConnectedException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+		}
 		
 		//Running the sent runnable immediately
 		if(sentRunnable != null) sentRunnable.run();
@@ -256,6 +263,11 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	@Override
 	public boolean requiresPersistence() {
 		return false;
+	}
+	
+	@Override
+	public String getDisplayName() {
+		return "Connect";
 	}
 	
 	private void startReconnectionTimer() {

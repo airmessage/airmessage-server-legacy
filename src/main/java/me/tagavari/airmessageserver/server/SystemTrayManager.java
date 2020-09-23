@@ -46,7 +46,7 @@ public class SystemTrayManager {
 		miStatusSub.setEnabled(false);
 		miStatusSub.addListener(SWT.Selection, event -> {
 			ServerState state = Main.getServerState();
-			if(state == ServerState.ERROR_CONN_VALIDATION || state == ServerState.ERROR_CONN_TOKEN) {
+			if(state == ServerState.ERROR_CONN_VALIDATION || state == ServerState.ERROR_CONN_TOKEN || state == ServerState.ERROR_CONN_CONFLICT) {
 				//Sign out
 				PreferencesUI.signOutUser();
 			} else {

@@ -19,6 +19,11 @@ public class PreferencesUI {
 		else windowShell.forceActive();
 	}
 	
+	static void closeWindow() {
+		if(windowShell == null || windowShell.isDisposed()) return;
+		windowShell.close();
+	}
+	
 	private static void openPrefsWindow() {
 		int accountType = PreferencesManager.getPrefAccountType();
 		
@@ -511,6 +516,9 @@ public class PreferencesUI {
 	}
 	
 	public static void signOutUser() {
+		//Closing the preferences window if it's open
+		closeWindow();
+		
 		//Setting the user's account as unconfirmed
 		PreferencesManager.setPrefAccountConfirmed(false);
 		

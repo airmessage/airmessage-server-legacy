@@ -1,5 +1,7 @@
 JDEPS="java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver"
 OUTPUT_DIR="build/app"
+APP_FILE="$OUTPUT_DIR/AirMessage.app"
+PACKAGE_FILE="$OUTPUT_DIR/server-v$VERSION.zip"
 
 JAVA_HOME=$(/usr/libexec/java_home -v 15)
 VERSION=$(./gradlew -q printVersionName)
@@ -39,9 +41,6 @@ rm -rf build/libs/tmp
 
 #Create app directory
 mkdir $OUTPUT_DIR
-
-APP_FILE="$OUTPUT_DIR/AirMessage.app"
-PACKAGE_FILE="$OUTPUT_DIR/server-v$VERSION.zip"
 
 #Package app
 echo "Packaging app"
@@ -86,7 +85,7 @@ REQUEST_UUID=$(xcrun altool --notarize-app \
 rm "$PACKAGE_FILE"
 
 #Wait for notarization to finish
-echo "Waiting for notarization ID $REQUEST_UUID to finish"
+echo "Waiting for completion of notarization request $REQUEST_UUID"
 while true; do
 	NOTARIZATION_STATUS=$(xcrun altool --notarization-info "$REQUEST_UUID" --username "$NOTARIZATION_USERNAME" --password "@keychain:$NOTARIZATION_PASSKEY")
 	if echo "$NOTARIZATION_STATUS" | grep -q "Status: in progress"; then sleep 20

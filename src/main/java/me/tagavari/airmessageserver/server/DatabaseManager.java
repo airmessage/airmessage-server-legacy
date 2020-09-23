@@ -240,11 +240,12 @@ public class DatabaseManager {
 						//Reindexing
 						try {
 							indexTargetAvailability(connection);
+							
+							Main.getLogger().log(Level.FINEST, "Updated chat creation target index");
 						} catch(SQLException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 							Sentry.capture(exception);
 						}
-						Main.getLogger().finest("Updated creation target chat index");
 					}
 				}
 			}
