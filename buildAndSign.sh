@@ -1,14 +1,14 @@
-JDEPS="java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver"
-OUTPUT_DIR="build/app"
-APP_FILE="$OUTPUT_DIR/AirMessage.app"
-PACKAGE_FILE="$OUTPUT_DIR/server-v$VERSION.zip"
+SIGNATURE=$1 # Apple signing ID: "Developer ID Application: Developer Name (DUCNFCN445)"
+NOTARIZATION_USERNAME=$2 # Apple ID username: "developer@example.com"
+NOTARIZATION_PASSKEY=$3 # Apple ID password Keychain listing: "AC_PASSWORD"
 
 JAVA_HOME=$(/usr/libexec/java_home -v 15)
 VERSION=$(./gradlew -q printVersionName)
 
-SIGNATURE=$1 # Apple signing ID: "Developer ID Application: Developer Name (DUCNFCN445)"
-NOTARIZATION_USERNAME=$2 # Apple ID username: "developer@example.com"
-NOTARIZATION_PASSKEY=$3 # Apple ID password Keychain listing: "AC_PASSWORD"
+JDEPS="java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver"
+OUTPUT_DIR="build/app"
+APP_FILE="$OUTPUT_DIR/AirMessage.app"
+PACKAGE_FILE="$OUTPUT_DIR/server-v$VERSION.zip"
 
 echo "Preparing AirMessage Server v$VERSION"
 
