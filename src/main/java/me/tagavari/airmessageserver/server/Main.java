@@ -80,9 +80,6 @@ public class Main {
 			});
 			client.setRelease("airmessage-server@" + Constants.SERVER_VERSION);
 			client.addTag("system_version", System.getProperty("os.version"));
-			
-			//Marking the user's ID
-			Sentry.getContext().setUser(new UserBuilder().setId(PreferencesManager.getInstallationID()).build());
 		}
 		
 		//Logging the startup messages
@@ -98,6 +95,9 @@ public class Main {
 				result = PreferencesManager.initializePreferences();
 			} while(!result);
 		}
+		
+		//Marking the user's ID for Sentry
+		Sentry.getContext().setUser(new UserBuilder().setId(PreferencesManager.getInstallationID()).build());
 		
 		//Initializing the UI helper
 		UIHelper.initialize();
