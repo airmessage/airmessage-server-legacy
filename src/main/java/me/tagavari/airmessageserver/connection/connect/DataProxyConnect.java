@@ -114,11 +114,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 		byteBuffer.put(content);
 		
 		//Sending the data
-		try {
-			connectClient.send(byteBuffer.array());
-		} catch(WebsocketNotConnectedException exception) {
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-		}
+		connectClient.sendSafe(byteBuffer.array());
 		
 		//Running the sent runnable immediately
 		if(sentRunnable != null) sentRunnable.run();
@@ -129,7 +125,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 		ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
 		byteBuffer.putInt(NHT.nhtServerNotifyPush);
 		
-		connectClient.send(byteBuffer.array());
+		connectClient.sendSafe(byteBuffer.array());
 	}
 	
 	@Override
@@ -143,7 +139,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 		byteBuffer.putInt(NHT.nhtServerClose);
 		byteBuffer.putInt(connectionID);
 		
-		connectClient.send(byteBuffer.array());
+		connectClient.sendSafe(byteBuffer.array());
 		
 		//Removing the client
 		removeClient(connectionID);

@@ -7,6 +7,7 @@ import org.java_websocket.WebSocket;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.drafts.Draft_6455;
 import org.java_websocket.exceptions.InvalidDataException;
+import org.java_websocket.exceptions.WebsocketNotConnectedException;
 import org.java_websocket.framing.CloseFrame;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.handshake.ServerHandshake;
@@ -74,6 +75,23 @@ class ConnectWebSocketClient extends WebSocketClient {
 		this.connectionListener = connectionListener;
 		
 		setConnectionLostTimeout(10 * 60); //Every 10 mins
+	}
+	
+	/**
+	 * Attempts to send data to this client,
+	 * and returns instead of throwing an exception
+	 * @param data The data to send
+	 * @return TRUE if this message was sent
+	 */
+	public boolean sendSafe(byte[] data) {
+		try {
+			send(data);
+		} catch(WebsocketNotConnectedException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			return false;
+		}
+		
+		return true;
 	}
 	
 	@Override
