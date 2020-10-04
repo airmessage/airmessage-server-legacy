@@ -105,8 +105,12 @@ public class Main {
 		//Starting the update checker
 		if(PreferencesManager.getPrefAutoCheckUpdates()) UpdateManager.startUpdateChecker();
 		
+		boolean setupNeeded = PreferencesManager.getPrefAccountConfirmed() &&
+							  //If the user deleted their password from Keychain, ask them to set it up again
+							  (PreferencesManager.getPrefAccountType() != PreferencesManager.accountTypeDirect || PreferencesManager.getPrefPassword() != null);
+		
 		//Setting up first run
-		if(PreferencesManager.getPrefAccountConfirmed()) {
+		if(setupNeeded) {
 			runPermissionCheck();
 		} else {
 			//The permission check will be run when the user closes the window
@@ -126,7 +130,7 @@ public class Main {
 		//Hiding JOOQ's splash
 		System.setProperty("org.jooq.no-logo", "true");
 		
-		if(PreferencesManager.getPrefAccountConfirmed()) {
+		if(setupNeeded) {
 			//Starting the server
 			startServer();
 		}

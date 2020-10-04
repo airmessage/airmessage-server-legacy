@@ -342,6 +342,7 @@ public class PreferencesUI {
 		{
 			//Getting the password
 			String currentPassword = PreferencesManager.getPrefPassword();
+			if(currentPassword == null) currentPassword = "";
 			int passwordStrength = calculatePasswordStrength(currentPassword);
 			
 			//Creating the list label
