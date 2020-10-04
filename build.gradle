@@ -1,40 +1,40 @@
 plugins {
-    id 'java'
-    id 'application'
+    id "java"
+    id "application"
 }
 
-group 'me.tagavari'
-version '2.0'
+group "me.tagavari"
+version "2.0"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    testImplementation group: 'junit', name: 'junit', version: '4.12'
+    testImplementation group: "junit", name: "junit", version: "4.12"
 
     //SQLite JDBC - Database library
-    implementation 'org.xerial:sqlite-jdbc:3.32.3.2'
+    implementation "org.xerial:sqlite-jdbc:3.32.3.2"
 
     //jOOQ - Database library
-    implementation 'org.jooq:jooq:3.13.4'
+    implementation "org.jooq:jooq:3.13.5"
 
     //Sentry - Crash reporting library
-    implementation 'io.sentry:sentry:1.7.30'
+    implementation "io.sentry:sentry:1.7.30"
 
     //SLF4J - Logging library
-    //implementation 'org.slf4j:slf4j-nop:1.7.30'
+    //implementation "org.slf4j:slf4j-nop:1.7.30"
 
     //JSON in Java - JSON library
-    implementation 'org.json:json:20200518'
+    implementation "org.json:json:20200518"
 
     //Commonmark Java - Markdown parser
-    implementation 'com.atlassian.commonmark:commonmark:0.15.2'
+    implementation "com.atlassian.commonmark:commonmark:0.15.2"
 
     //JavaWebsocket - WebSocket library
-    implementation 'org.java-websocket:Java-WebSocket:1.5.1'
+    implementation "org.java-websocket:Java-WebSocket:1.5.1"
 
-    implementation fileTree('lib') { include '*.jar' }
+    implementation fileTree("lib") { include "*.jar" }
 }
 
 task copyToLib(type: Copy) {
@@ -43,7 +43,7 @@ task copyToLib(type: Copy) {
 }
 
 /* task jlink(type: Exec) {
-    final String jDeps = 'java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver'
+    final String jDeps = "java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver"
 
     inputs.property("jlink.jdeps", jDeps)
     outputs.dir("${buildDir}/java-runtime")
@@ -52,19 +52,19 @@ task copyToLib(type: Copy) {
         delete "${buildDir}/java-runtime"
     }
 
-    commandLine "${System.properties.'java.home'}/bin/jlink",
-            '--no-header-files',
-            '--no-man-pages',
-            '--strip-debug',
-            '--compress=2',
-            '--add-modules', jDeps,
-            '--output', "${buildDir}/java-runtime"
+    commandLine "${System.properties."java.home"}/bin/jlink",
+            "--no-header-files",
+            "--no-man-pages",
+            "--strip-debug",
+            "--compress=2",
+            "--add-modules", jDeps,
+            "--output", "${buildDir}/java-runtime"
 } */
 
 task jpackage(type: Exec) {
-    dependsOn ordered('clean', 'build', 'copyToLib')
+    dependsOn ordered("clean", "build", "copyToLib")
 
-    final String jDeps = 'java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver'
+    final String jDeps = "java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver"
 
     inputs.dir(jar.destinationDirectory.asFile.get())
     //inputs.dir("${buildDir}/java-runtime")
@@ -74,50 +74,50 @@ task jpackage(type: Exec) {
         delete "AirMessage.app"
     }
 
-    commandLine "${System.properties.'java.home'}/bin/jpackage",
-            '--name', 'AirMessage',
-            '--app-version', version,
-            '--input', jar.destinationDirectory.asFile.get(),
-            '--main-jar', jar.archiveFileName.get(),
-            '--main-class', 'me.tagavari.airmessageserver.server.Main',
-            '--type', 'app-image',
-            '--java-options', '-XstartOnFirstThread',
-            '--add-modules', jDeps,
-            '--mac-package-identifier', 'me.tagavari.airmessageserver',
-            '--mac-package-name', 'AirMessage',
-            '--mac-package-signing-prefix', 'airmessage',
-//            '--mac-sign',
-//            '--mac-signing-key-user-name', 'Mac Developer: Developer Name (DUCNFCN445)',
-            '--icon', 'AirMessage.icns'
+    commandLine "${System.properties."java.home"}/bin/jpackage",
+            "--name", "AirMessage",
+            "--app-version", version,
+            "--input", jar.destinationDirectory.asFile.get(),
+            "--main-jar", jar.archiveFileName.get(),
+            "--main-class", "me.tagavari.airmessageserver.server.Main",
+            "--type", "app-image",
+            "--java-options", "-XstartOnFirstThread",
+            "--add-modules", jDeps,
+            "--mac-package-identifier", "me.tagavari.airmessageserver",
+            "--mac-package-name", "AirMessage",
+            "--mac-package-signing-prefix", "airmessage",
+//            "--mac-sign",
+//            "--mac-signing-key-user-name", "Mac Developer: Developer Name (DUCNFCN445)",
+            "--icon", "AirMessage.icns"
 }
 
 task configurePlist(type: Exec) {
     mustRunAfter jpackage
     inputs.dir("AirMessage.app")
-    outputs.file('AirMessage.app/Contents/Info.plist')
+    outputs.file("AirMessage.app/Contents/Info.plist")
 
-    commandLine 'plutil', '-insert', 'LSUIElement', '-string', 'True', 'AirMessage.app/Contents/Info.plist'
+    commandLine "plutil", "-insert", "LSUIElement", "-string", "True", "AirMessage.app/Contents/Info.plist"
 
     doLast {
         exec {
-            commandLine 'plutil', '-insert', 'NSAppTransportSecurity', '-xml', '<dict><key>NSAllowsLocalNetworking</key><true/></dict>', 'AirMessage.app/Contents/Info.plist'
+            commandLine "plutil", "-insert", "NSAppTransportSecurity", "-xml", "<dict><key>NSAllowsLocalNetworking</key><true/></dict>", "AirMessage.app/Contents/Info.plist"
         }
     }
 }
 
 task publish {
-    dependsOn ordered('jpackage', 'configurePlist')
+    dependsOn ordered("jpackage", "configurePlist")
 }
 
 task buildAndRun(type: Exec) {
     dependsOn publish
 
-    commandLine 'AirMessage.app/Contents/MacOS/AirMessage'
+    commandLine "AirMessage.app/Contents/MacOS/AirMessage"
 }
 
 application {
-    mainClassName = 'me.tagavari.airmessageserver.server.Main'
-    applicationDefaultJvmArgs = ['-XstartOnFirstThread']
+    mainClassName = "me.tagavari.airmessageserver.server.Main"
+    applicationDefaultJvmArgs = ["-XstartOnFirstThread"]
 }
 
 run {
