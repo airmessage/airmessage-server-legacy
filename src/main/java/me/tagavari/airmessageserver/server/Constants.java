@@ -28,6 +28,8 @@ public class Constants {
 	static final int[] macOSSierraVersion = {10, 12};
 	static final int[] macOSHighSierraVersion = {10, 13};
 	static final int[] macOSMojaveVersion = {10, 14};
+	static final int[] macOSCatalinaVersion = {10, 15};
+	static final int[] macOSBigSurVersion = {10, 16};
 	
 	//Creating the AppleScript error values
 	static final int asErrorCodeMessagesUnauthorized = -1743;

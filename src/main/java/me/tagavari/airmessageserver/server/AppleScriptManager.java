@@ -16,8 +16,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class AppleScriptManager {
-	//Creating the AppleScript commands
-	private static final String[] ASTextExisting = { //ARGS: Chat GUID / Message
+	//macOS 10
+	//ARGS: Chat GUID / Message
+	private static final String[] ASTextExisting = {
 			"tell application \"Messages\"",
 			
 			//Getting target chat
@@ -28,7 +29,21 @@ public class AppleScriptManager {
 			
 			"end tell"
 	};
-	private static final String[] ASTextNew = { //ARGS: Recipients / Message / Service
+	//macOS 11+
+	//ARGS: Chat GUID / Message
+	private static final String[] ASTextExisting11 = {
+		"tell application \"Messages\"",
+		
+		//Getting target chat
+		"set targetChat to chat id \"%1$s\"",
+		
+		//Sending the message
+		"send \"%2$s\" to targetChat",
+		
+		"end tell"
+	};
+	//ARGS: Recipients / Message / Service
+	private static final String[] ASTextNew = {
 			"tell application \"Messages\"",
 			
 			//Getting the iMessage service
@@ -63,7 +78,9 @@ public class AppleScriptManager {
 			
 			"end tell"
 	};
-	private static final String[] ASFileExisting = { //ARGS: Chat GUID / File
+	//macOS 10
+	//ARGS: Chat GUID / File
+	private static final String[] ASFileExisting = {
 			//Getting the file
 			"set message to POSIX file \"%2$s\"",
 			
@@ -77,7 +94,24 @@ public class AppleScriptManager {
 			
 			"end tell"
 	};
-	private static final String[] ASFileNew = { //ARGS: Recipients / File / Service
+	//macOS 11+
+	//ARGS: Chat GUID / File
+	private static final String[] ASFileExisting11 = {
+			//Getting the file
+			"set message to POSIX file \"%2$s\"",
+	
+			"tell application \"Messages\"",
+	
+			//Getting target chat
+			"set targetChat to chat id \"%1$s\"",
+	
+			//Sending the message
+			"send message to targetChat",
+	
+			"end tell"
+	};
+	//ARGS: Recipients / File / Service
+	private static final String[] ASFileNew = {
 			//Getting the file
 			"set message to POSIX file \"%2$s\"",
 			
@@ -115,7 +149,8 @@ public class AppleScriptManager {
 			
 			"end tell"
 	};
-	private static final String[] ASCreateChat = { //ARGS: Recipients / Service
+	//ARGS: Recipients / Service
+	private static final String[] ASCreateChat = {
 			"tell application \"Messages\"",
 			
 			//Getting the service
@@ -138,7 +173,8 @@ public class AppleScriptManager {
 			"get first text chat",
 			"end tell"
 	};
-	private static final String[] ASShowAutomationWarning = { //ARGS: Message / Positive button / Negative button
+	//ARGS: Message / Positive button / Negative button
+	private static final String[] ASShowAutomationWarning = {
 			"display dialog \"%1$s\" buttons {\"%2$s\", \"%3$s\"} cancel button \"%2$s\" default button \"%3$s\" with icon caution",
 			
 			"if button returned of result = \"%3$s\" then",
@@ -148,7 +184,8 @@ public class AppleScriptManager {
 			"end tell",
 			"end if"
 	};
-	private static final String[] ASShowDiskAccessWarning = { //ARGS: Message / Positive button / Negative button
+	//ARGS: Message / Positive button / Negative button
+	private static final String[] ASShowDiskAccessWarning = {
 			"display dialog \"%1$s\" buttons {\"%2$s\", \"%3$s\"} cancel button \"%2$s\" default button \"%3$s\" with icon caution",
 			
 			"if button returned of result = \"%3$s\" then",
@@ -255,7 +292,7 @@ public class AppleScriptManager {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
-		for(String line : ASTextExisting) {
+		for(String line : Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSBigSurVersion) >= 0 ? ASTextExisting11 : ASTextExisting) {
 			command.add("-e");
 			command.add(String.format(line, chatGUID, escapeAppleScriptString(message)));
 		}
@@ -309,7 +346,7 @@ public class AppleScriptManager {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
-		for(String line : ASFileExisting) {
+		for(String line : Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSBigSurVersion) >= 0 ? ASFileExisting11 : ASFileExisting) {
 			command.add("-e");
 			command.add(String.format(line, chatGUID, escapeAppleScriptString(file.getAbsolutePath())));
 		}
