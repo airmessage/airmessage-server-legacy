@@ -14,7 +14,7 @@ import java.util.zip.GZIPOutputStream;
 
 public class Constants {
 	//Creating the version values
-	public static final String SERVER_VERSION = "2.0";
+	public static final String SERVER_VERSION = "3.0";
 	public static final int SERVER_VERSION_CODE = 16;
 	
 	//Creating the file values
