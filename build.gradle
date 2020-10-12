@@ -100,7 +100,7 @@ task configurePlist(type: Exec) {
 
     doLast {
         exec {
-            commandLine "plutil", "-insert", "NSAppTransportSecurity", "-xml", "<dict><key>NSAllowsLocalNetworking</key><true/></dict>", "AirMessage.app/Contents/Info.plist"
+            commandLine "plutil", "-insert", "NSAppTransportSecurity", "-xml", "<dict><key>NSAllowsLocalNetworking</key><true/><key>NSAllowsArbitraryLoads</key><true/></dict>", "AirMessage.app/Contents/Info.plist"
         }
     }
 }
