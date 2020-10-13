@@ -542,6 +542,8 @@ public class DatabaseManager {
 			
 			//Checking if the connection is registered and is still open
 			if(request.connection.isConnected()) {
+				Main.getLogger().log(Level.INFO, "Fulfilled lite conversation request, returning " + resultList.size() + " conversations");
+				
 				//Sending the conversation info
 				ConnectionManager.getCommunicationsManager().sendLiteConversationInfo(request.connection, resultList);
 			} else {
