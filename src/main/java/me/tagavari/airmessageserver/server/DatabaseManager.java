@@ -524,7 +524,7 @@ public class DatabaseManager {
 				String service = result.get("chat.service_name", String.class);
 				String name = result.get("chat.display_name", String.class);
 				String membersRaw = result.get("participant_list", String.class);
-				String[] members = membersRaw == null ? null : membersRaw.split(",");
+				String[] members = membersRaw == null ? new String[0] : membersRaw.split(",");
 				Long date = result.get("message.date", Long.class);
 				String text = result.get("message.text", String.class);
 				if(text != null) {
