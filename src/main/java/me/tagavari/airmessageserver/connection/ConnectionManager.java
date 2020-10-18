@@ -22,7 +22,7 @@ public class ConnectionManager {
 	
 	public static void assignDataProxy() {
 		if(PreferencesManager.getPrefAccountType() == PreferencesManager.accountTypeConnect) {
-			setDataProxy(new DataProxyConnect(false, PreferencesManager.getPrefConnectUserID()));
+			setDataProxy(new DataProxyConnect(PreferencesManager.getPrefConnectUserID()));
 		} else {
 			setDataProxy(new DataProxyTCP(PreferencesManager.getPrefServerPort()));
 		}

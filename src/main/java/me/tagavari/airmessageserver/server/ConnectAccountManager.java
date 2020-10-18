@@ -297,7 +297,7 @@ public class ConnectAccountManager {
 		connectingShell.open();
 		
 		//Creating the data proxy
-		DataProxyConnect dataProxy = new DataProxyConnect(true, idToken);
+		DataProxyConnect dataProxy = new DataProxyConnect(userID, idToken);
 		dataProxy.addMessageListener(new DataProxyListener() {
 			@Override
 			public void onStart() {
@@ -326,6 +326,9 @@ public class ConnectAccountManager {
 							
 							//Disabling setup mode
 							Main.setSetupMode(false);
+							
+							//Switching the proxy to registered mode (so that we no longer try and connect with our ID token)
+							dataProxy.setRegistered();
 							
 							//Starting the database manager
 							boolean result = DatabaseManager.start(Main.databaseScanFrequency);
