@@ -297,6 +297,9 @@ public class DatabaseManager {
 			} catch(RuntimeException exception) {
 				//Logging the message
 				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+				
+				//Capturing the exception
+				Sentry.capture(exception);
 			} catch(InterruptedException exception) {
 				//Logging the message
 				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
