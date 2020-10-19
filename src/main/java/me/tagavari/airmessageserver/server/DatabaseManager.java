@@ -493,9 +493,12 @@ public class DatabaseManager {
 		Collection<Blocks.LiteConversationInfo> resultList = new ArrayList<>();
 		
 		try {
+			Collection<Field<?>> fields = Arrays.asList(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class), field("message.text", String.class), field("message.date", Long.class), field("handle.id", String.class), field("sub2.participant_list", String.class).as("participant_list"), field("GROUP_CONCAT(attachment.mime_type)", String.class).as("attachment_list"));
+			if(dbSupportsSendStyle) fields.add(field("message.expressive_send_style_id", String.class));
+			
 			//Querying the database
 			DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
-			Result<Record9<String, String, String, String, Long, String, String, String, String>> results = create.select(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class), field("message.text", String.class), field("message.date", Long.class), field("message.expressive_send_style_id", String.class), field("handle.id", String.class), field("sub2.participant_list", String.class).as("participant_list"), field("GROUP_CONCAT(attachment.mime_type)", String.class).as("attachment_list"))
+			Result<Record> results = create.select(fields)
 				.from(select(field("sub1.*"), field("GROUP_CONCAT(handle.id)", String.class).as("participant_list"))
 					.from(select(field("chat.ROWID", Long.class).as("chat_id"), field("message.ROWID", Long.class).as("message_id"), field("MAX(message.date)", Long.class))
 						.from(table("chat"))
@@ -532,7 +535,7 @@ public class DatabaseManager {
 					text = text.replace(Character.toString('\uFFFD'), "");
 					if(text.isEmpty()) text = null;
 				}
-				String sendStyle = result.get("message.expressive_send_style_id", String.class);
+				String sendStyle = dbSupportsSendStyle ? result.get("message.expressive_send_style_id", String.class) : null;
 				String sender = result.get("handle.id", String.class);
 				String attachmentListRaw = result.get("attachment_list", String.class);
 				String[] attachmentList = attachmentListRaw == null ? null : attachmentListRaw.split(",");
