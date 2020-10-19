@@ -294,11 +294,12 @@ public class DatabaseManager {
 					else if(request instanceof CustomRetrievalRequest) fulfillCustomRetrievalRequest(connection, (CustomRetrievalRequest) request);
 					else if(request instanceof MassRetrievalRequest) fulfillMassRetrievalRequest(connection, (MassRetrievalRequest) request);
 				}
+			} catch(RuntimeException exception) {
+				//Logging the message
+				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			} catch(InterruptedException exception) {
 				//Logging the message
 				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
-				
-				return;
 			}
 		}
 		
