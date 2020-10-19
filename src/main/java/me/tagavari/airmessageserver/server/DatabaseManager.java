@@ -493,7 +493,7 @@ public class DatabaseManager {
 		Collection<Blocks.LiteConversationInfo> resultList = new ArrayList<>();
 		
 		try {
-			Collection<Field<?>> fields = Arrays.asList(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class), field("message.text", String.class), field("message.date", Long.class), field("handle.id", String.class), field("sub2.participant_list", String.class).as("participant_list"), field("GROUP_CONCAT(attachment.mime_type)", String.class).as("attachment_list"));
+			Collection<Field<?>> fields = new ArrayList<>(Arrays.asList(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class), field("message.text", String.class), field("message.date", Long.class), field("handle.id", String.class), field("sub2.participant_list", String.class).as("participant_list"), field("GROUP_CONCAT(attachment.mime_type)", String.class).as("attachment_list")));
 			if(dbSupportsSendStyle) fields.add(field("message.expressive_send_style_id", String.class));
 			
 			//Querying the database
