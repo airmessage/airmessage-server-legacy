@@ -133,7 +133,7 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 		}
 		
 		//Sending the packet
-		writerThread.sendPacket(new WriterThread.PacketStruct(client, content, encrypt, sentRunnable));
+		if(writerThread != null) writerThread.sendPacket(new WriterThread.PacketStruct(client, content, encrypt, sentRunnable));
 	}
 	
 	@Override

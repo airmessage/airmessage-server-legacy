@@ -7,6 +7,7 @@ import me.tagavari.airmessageserver.connection.ConnectionManager;
 import me.tagavari.airmessageserver.request.*;
 import org.jooq.Record;
 import org.jooq.*;
+import org.jooq.exception.DataAccessException;
 import org.jooq.impl.DSL;
 
 import java.io.*;
@@ -293,11 +294,15 @@ public class DatabaseManager {
 					else if(request instanceof CustomRetrievalRequest) fulfillCustomRetrievalRequest(connection, (CustomRetrievalRequest) request);
 					else if(request instanceof MassRetrievalRequest) fulfillMassRetrievalRequest(connection, (MassRetrievalRequest) request);
 				}
+			} catch(RuntimeException exception) {
+				//Logging the message
+				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+				
+				//Capturing the exception
+				Sentry.capture(exception);
 			} catch(InterruptedException exception) {
 				//Logging the message
 				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
-				
-				return;
 			}
 		}
 		
@@ -491,22 +496,26 @@ public class DatabaseManager {
 		//Creating the result list
 		Collection<Blocks.LiteConversationInfo> resultList = new ArrayList<>();
 		
-		//Querying the database
-		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
-		Result<Record9<String, String, String, String, Long, String, String, String, String>> results = create.select(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class), field("message.text", String.class), field("message.date", Long.class), field("message.expressive_send_style_id", String.class), field("handle.id", String.class), field("sub2.participant_list", String.class).as("participant_list"), field("GROUP_CONCAT(attachment.mime_type)", String.class).as("attachment_list"))
+		try {
+			Collection<Field<?>> fields = new ArrayList<>(Arrays.asList(field("chat.guid", String.class), field("chat.display_name", String.class), field("chat.service_name", String.class), field("message.text", String.class), field("message.date", Long.class), field("handle.id", String.class), field("sub2.participant_list", String.class).as("participant_list"), field("GROUP_CONCAT(attachment.mime_type)", String.class).as("attachment_list")));
+			if(dbSupportsSendStyle) fields.add(field("message.expressive_send_style_id", String.class));
+			
+			//Querying the database
+			DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
+			Result<Record> results = create.select(fields)
 				.from(select(field("sub1.*"), field("GROUP_CONCAT(handle.id)", String.class).as("participant_list"))
-						.from(select(field("chat.ROWID", Long.class).as("chat_id"), field("message.ROWID", Long.class).as("message_id"), field("MAX(message.date)", Long.class))
-								.from(table("chat"))
-								.leftJoin(table("chat_message_join")).on(field("chat_message_join.chat_id").eq(field("chat.ROWID")))
-								.leftJoin(table("message")).on(field("chat_message_join.message_id").eq(field("message.ROWID")))
-								.where(field("message.item_type", Integer.class).eq(0))
-								.groupBy(field("chat.ROWID"))
-								.asTable("sub1")
-						)
-						.leftJoin(table("chat_handle_join")).on(field("chat_handle_join.chat_id", Long.class).eq(field("sub1.chat_id", Long.class)))
-						.leftJoin(table("handle")).on(field("chat_handle_join.handle_id", Long.class).eq(field("handle.ROWID", Long.class)))
-						.groupBy(field("sub1.chat_id"))
-						.asTable("sub2")
+					.from(select(field("chat.ROWID", Long.class).as("chat_id"), field("message.ROWID", Long.class).as("message_id"), field("MAX(message.date)", Long.class))
+						.from(table("chat"))
+						.leftJoin(table("chat_message_join")).on(field("chat_message_join.chat_id").eq(field("chat.ROWID")))
+						.leftJoin(table("message")).on(field("chat_message_join.message_id").eq(field("message.ROWID")))
+						.where(field("message.item_type", Integer.class).eq(0))
+						.groupBy(field("chat.ROWID"))
+						.asTable("sub1")
+					)
+					.leftJoin(table("chat_handle_join")).on(field("chat_handle_join.chat_id", Long.class).eq(field("sub1.chat_id", Long.class)))
+					.leftJoin(table("handle")).on(field("chat_handle_join.handle_id", Long.class).eq(field("handle.ROWID", Long.class)))
+					.groupBy(field("sub1.chat_id"))
+					.asTable("sub2")
 				)
 				.leftJoin(table("chat")).on(field("chat.ROWID", Long.class).eq(field("sub2.chat_id", Long.class)))
 				.leftJoin(table("message")).on(field("message.ROWID", Long.class).eq(field("sub2.message_id", Long.class)))
@@ -516,34 +525,39 @@ public class DatabaseManager {
 				.groupBy(field("chat.ROWID", Long.class))
 				.orderBy(field("message.date", Long.class).desc())
 				.fetch();
-		
-		for(Record result : results) {
-			String guid = result.get("chat.guid", String.class);
-			String service = result.get("chat.service_name", String.class);
-			String name = result.get("chat.display_name", String.class);
-			String membersRaw = result.get("participant_list", String.class);
-			String[] members = membersRaw == null ? null : membersRaw.split(",");
-			Long date = result.get("message.date", Long.class);
-			String text = result.get("message.text", String.class);
-			if(text != null) {
-				text = text.replace(Character.toString('\uFFFC'), "");
-				text = text.replace(Character.toString('\uFFFD'), "");
-				if(text.isEmpty()) text = null;
-			}
-			String sendStyle = result.get("message.expressive_send_style_id", String.class);
-			String sender = result.get("handle.id", String.class);
-			String attachmentListRaw = result.get("attachment_list", String.class);
-			String[] attachmentList = attachmentListRaw == null ? null : attachmentListRaw.split(",");
 			
-			resultList.add(new Blocks.LiteConversationInfo(guid, service, name, members, date != null ? Main.getTimeHelper().toUnixTime(date) : -1, sender, text, sendStyle, attachmentList));
-		}
-		
-		//Checking if the connection is registered and is still open
-		if(request.connection.isConnected()) {
-			//Sending the conversation info
-			ConnectionManager.getCommunicationsManager().sendLiteConversationInfo(request.connection, resultList);
-		} else {
-			Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
+			for(Record result : results) {
+				String guid = result.get("chat.guid", String.class);
+				String service = result.get("chat.service_name", String.class);
+				String name = result.get("chat.display_name", String.class);
+				String membersRaw = result.get("participant_list", String.class);
+				String[] members = membersRaw == null ? new String[0] : membersRaw.split(",");
+				Long date = result.get("message.date", Long.class);
+				String text = result.get("message.text", String.class);
+				if(text != null) {
+					text = text.replace(Character.toString('\uFFFC'), "");
+					text = text.replace(Character.toString('\uFFFD'), "");
+					if(text.isEmpty()) text = null;
+				}
+				String sendStyle = dbSupportsSendStyle ? result.get("message.expressive_send_style_id", String.class) : null;
+				String sender = result.get("handle.id", String.class);
+				String attachmentListRaw = result.get("attachment_list", String.class);
+				String[] attachmentList = attachmentListRaw == null ? null : attachmentListRaw.split(",");
+				
+				resultList.add(new Blocks.LiteConversationInfo(guid, service, name, members, date != null ? Main.getTimeHelper().toUnixTime(date) : -1, sender, text, sendStyle, attachmentList));
+			}
+			
+			//Checking if the connection is registered and is still open
+			if(request.connection.isConnected()) {
+				Main.getLogger().log(Level.INFO, "Fulfilled lite conversation request, returning " + resultList.size() + " conversations");
+				
+				//Sending the conversation info
+				ConnectionManager.getCommunicationsManager().sendLiteConversationInfo(request.connection, resultList);
+			} else {
+				Main.getLogger().log(Level.INFO, "Ignoring lite conversation request, connection not available");
+			}
+		} catch(DataAccessException exception) {
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 		}
 	}
 	

@@ -25,9 +25,8 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	private final Map<Integer, ClientSocket> connectionList = Collections.synchronizedMap(new HashMap<>());
 	private ConnectWebSocketClient connectClient;
 	
-	private final boolean connectRegistration;
-	private final String connectIDToken;
 	private final String connectUserID;
+	private String connectRegistrationIDToken;
 	
 	private Timer handshakeTimeoutTimer;
 	
@@ -42,20 +41,29 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	};
 	
 	/**
-	 * DataProxyConnect constructor
-	 * @param registration TRUE if this is a new registration, FALSE if this client has already been registered
-	 * @param key The account's ID token if this is a new registration, or the user ID if this client has already been registered
+	 * Assumes that this server is already registered, and connects via user ID
+	 * @param connectUserID The user ID to use
 	 */
-	public DataProxyConnect(boolean registration, String key) {
-		if(registration) {
-			connectRegistration = true;
-			connectIDToken = key;
-			connectUserID = null;
-		} else {
-			connectRegistration = false;
-			connectIDToken = null;
-			connectUserID = key;
-		}
+	public DataProxyConnect(String connectUserID) {
+		this.connectUserID = connectUserID;
+		this.connectRegistrationIDToken = null;
+	}
+	
+	/**
+	 * Registers this server first using the ID token, and then uses the user ID on subsequent connections
+	 * @param connectUserID The user ID to use
+	 * @param connectRegistrationIDToken The ID token to use
+	 */
+	public DataProxyConnect(String connectUserID, String connectRegistrationIDToken) {
+		this.connectUserID = connectUserID;
+		this.connectRegistrationIDToken = connectRegistrationIDToken;
+	}
+	
+	/**
+	 * Tells this proxy to use the user ID rather than the registration token on subsequent connections
+	 */
+	public void setRegistered() {
+		connectRegistrationIDToken = null;
 	}
 	
 	private void addClient(int connectionID) {
@@ -80,8 +88,8 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 		if(connectClient != null && !connectClient.isClosed()) return;
 		
 		//Getting the client
-		if(connectRegistration) {
-			connectClient = ConnectWebSocketClient.createInstanceRegister(connectIDToken, this);
+		if(connectRegistrationIDToken != null) {
+			connectClient = ConnectWebSocketClient.createInstanceRegister(connectRegistrationIDToken, this);
 		} else {
 			connectClient = ConnectWebSocketClient.createInstanceExisting(connectUserID, this);
 		}
