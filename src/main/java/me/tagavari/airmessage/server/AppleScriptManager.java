@@ -13,147 +13,184 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 class AppleScriptManager {
-	//Creating the AppleScript commands
-	private static final String[] ASTextExisting = { //ARGS: Chat GUID / Message
-			"tell application \"Messages\"",
-			
-			//Getting target chat
-			"set targetChat to text chat id \"%1$s\"",
-			
-			//Sending the message
-			"send \"%2$s\" to targetChat",
-			
-			"end tell"
+	//macOS 10
+	//ARGS: Chat GUID / Message
+	private static final String[] ASTextExisting = {
+		"tell application \"Messages\"",
+		
+		//Getting target chat
+		"set targetChat to text chat id \"%1$s\"",
+		
+		//Sending the message
+		"send \"%2$s\" to targetChat",
+		
+		"end tell"
 	};
-	private static final String[] ASTextNew = { //ARGS: Recipients / Message / Service
-			"tell application \"Messages\"",
-			
-			//Getting the iMessage service
-			"if \"%3$s\" is \"iMessage\" then",
-			"set targetService to 1st service whose service type = iMessage",
-			"else",
-			"set targetService to service \"%3$s\"",
-			"end if",
-			
-			//Splitting the recipient list
-			/* "set oldDelimiters to AppleScript's text item delimiters",
-			"set AppleScript's text item delimiters to \"" + appleScriptDelimiter + "\"",
-			"set recipientList to every text item of \"%1$s\"",
-			"set AppleScript's text item delimiters to oldDelimiters",
-			"set recipientList to {%1$s}", */
-			
-			//Converting the recipients to iMessage buddies
-			/* "set buddyList to {}",
-			"repeat with currentRecipient in recipientList",
-			"set currentBuddy to buddy currentRecipient of targetService",
-			"copy currentBuddy to the end of buddyList",
-			"end repeat", */
-			
-			//Creating the chat
-			"set targetChat to make new text chat with properties {participants:{%1$s}}",
-			
-			//Sending the messages
-			"send \"%2$s\" to targetChat",
-			
-			//Getting the chat info
-			//"get targetChat",
-			
-			"end tell"
+	//macOS 11+
+	//ARGS: Chat GUID / Message
+	private static final String[] ASTextExisting11 = {
+		"tell application \"Messages\"",
+		
+		//Getting target chat
+		"set targetChat to chat id \"%1$s\"",
+		
+		//Sending the message
+		"send \"%2$s\" to targetChat",
+		
+		"end tell"
 	};
-	private static final String[] ASFileExisting = { //ARGS: Chat GUID / File
-			//Getting the file
-			"set message to POSIX file \"%2$s\"",
-			
-			"tell application \"Messages\"",
-			
-			//Getting target chat
-			"set targetChat to text chat id \"%1$s\"",
-			
-			//Sending the message
-			"send message to targetChat",
-			
-			"end tell"
+	//ARGS: Recipients / Message / Service
+	private static final String[] ASTextNew = {
+		"tell application \"Messages\"",
+		
+		//Getting the iMessage service
+		"if \"%3$s\" is \"iMessage\" then",
+		"set targetService to 1st service whose service type = iMessage",
+		"else",
+		"set targetService to service \"%3$s\"",
+		"end if",
+		
+		//Splitting the recipient list
+		/* "set oldDelimiters to AppleScript's text item delimiters",
+		"set AppleScript's text item delimiters to \"" + appleScriptDelimiter + "\"",
+		"set recipientList to every text item of \"%1$s\"",
+		"set AppleScript's text item delimiters to oldDelimiters",
+		"set recipientList to {%1$s}", */
+		
+		//Converting the recipients to iMessage buddies
+		/* "set buddyList to {}",
+		"repeat with currentRecipient in recipientList",
+		"set currentBuddy to buddy currentRecipient of targetService",
+		"copy currentBuddy to the end of buddyList",
+		"end repeat", */
+		
+		//Creating the chat
+		"set targetChat to make new text chat with properties {participants:{%1$s}}",
+		
+		//Sending the messages
+		"send \"%2$s\" to targetChat",
+		
+		//Getting the chat info
+		//"get targetChat",
+		
+		"end tell"
 	};
-	private static final String[] ASFileNew = { //ARGS: Recipients / File / Service
-			//Getting the file
-			"set message to POSIX file \"%2$s\"",
-			
-			"tell application \"Messages\"",
-			
-			//Getting the iMessage service
-			"if \"%3$s\" is \"iMessage\" then",
-			"set targetService to 1st service whose service type = iMessage",
-			"else",
-			"set targetService to service \"%3$s\"",
-			"end if",
-			
-			//Splitting the recipient list
-			/* "set oldDelimiters to AppleScript's text item delimiters",
-			"set AppleScript's text item delimiters to \"" + appleScriptDelimiter + "\"",
-			"set recipientList to every text item of \"%1$s\"",
-			"set AppleScript's text item delimiters to oldDelimiters",
-			"set recipientList to {%1$s}", */
-			
-			//Converting the recipients to iMessage buddies
-			/* "set buddyList to {}",
-			"repeat with currentRecipient in recipientList",
-			"set currentBuddy to buddy currentRecipient of targetService",
-			"copy currentBuddy to the end of buddyList",
-			"end repeat", */
-			
-			//Creating the chat
-			"set targetChat to make new text chat with properties {participants:{%1$s}}",
-			
-			//Sending the messages
-			"send message to targetChat",
-			
-			//Getting the chat info
-			//"get targetChat",
-			
-			"end tell"
+	//macOS 10
+	//ARGS: Chat GUID / File
+	private static final String[] ASFileExisting = {
+		//Getting the file
+		"set message to POSIX file \"%2$s\"",
+		
+		"tell application \"Messages\"",
+		
+		//Getting target chat
+		"set targetChat to text chat id \"%1$s\"",
+		
+		//Sending the message
+		"send message to targetChat",
+		
+		"end tell"
 	};
-	private static final String[] ASCreateChat = { //ARGS: Recipients / Service
-			"tell application \"Messages\"",
-			
-			//Getting the service
-			"if \"%2$s\" is \"iMessage\" then",
-			"set targetService to 1st service whose service type = iMessage",
-			"else",
-			"set targetService to service \"%2$s\"",
-			"end if",
-			
-			//Creating the chat
-			"set targetChat to make new text chat with properties {participants:{%1$s}}",
-			
-			//Getting the chat info
-			"get targetChat",
-			
-			"end tell"
+	//macOS 11+
+	//ARGS: Chat GUID / File
+	private static final String[] ASFileExisting11 = {
+		//Getting the file
+		"set message to POSIX file \"%2$s\"",
+		
+		"tell application \"Messages\"",
+		
+		//Getting target chat
+		"set targetChat to chat id \"%1$s\"",
+		
+		//Sending the message
+		"send message to targetChat",
+		
+		"end tell"
+	};
+	//ARGS: Recipients / File / Service
+	private static final String[] ASFileNew = {
+		//Getting the file
+		"set message to POSIX file \"%2$s\"",
+		
+		"tell application \"Messages\"",
+		
+		//Getting the iMessage service
+		"if \"%3$s\" is \"iMessage\" then",
+		"set targetService to 1st service whose service type = iMessage",
+		"else",
+		"set targetService to service \"%3$s\"",
+		"end if",
+		
+		//Splitting the recipient list
+		/* "set oldDelimiters to AppleScript's text item delimiters",
+		"set AppleScript's text item delimiters to \"" + appleScriptDelimiter + "\"",
+		"set recipientList to every text item of \"%1$s\"",
+		"set AppleScript's text item delimiters to oldDelimiters",
+		"set recipientList to {%1$s}", */
+		
+		//Converting the recipients to iMessage buddies
+		/* "set buddyList to {}",
+		"repeat with currentRecipient in recipientList",
+		"set currentBuddy to buddy currentRecipient of targetService",
+		"copy currentBuddy to the end of buddyList",
+		"end repeat", */
+		
+		//Creating the chat
+		"set targetChat to make new text chat with properties {participants:{%1$s}}",
+		
+		//Sending the messages
+		"send message to targetChat",
+		
+		//Getting the chat info
+		//"get targetChat",
+		
+		"end tell"
+	};
+	//ARGS: Recipients / Service
+	private static final String[] ASCreateChat = {
+		"tell application \"Messages\"",
+		
+		//Getting the service
+		"if \"%2$s\" is \"iMessage\" then",
+		"set targetService to 1st service whose service type = iMessage",
+		"else",
+		"set targetService to service \"%2$s\"",
+		"end if",
+		
+		//Creating the chat
+		"set targetChat to make new text chat with properties {participants:{%1$s}}",
+		
+		//Getting the chat info
+		"get targetChat",
+		
+		"end tell"
 	};
 	private static final String[] ASAutomationTest = {
-			"tell application \"Messages\"",
-			"get first text chat",
-			"end tell"
+		"tell application \"Messages\"",
+		"get first text chat",
+		"end tell"
 	};
-	private static final String[] ASShowAutomationWarning = { //ARGS: Message / Positive button / Negative button
-			"display dialog \"%1$s\" buttons {\"%2$s\", \"%3$s\"} cancel button \"%2$s\" default button \"%3$s\" with icon caution",
-			
-			"if button returned of result = \"%3$s\" then",
-			"tell application \"System Preferences\"",
-			"activate",
-			"reveal anchor \"Privacy\" of pane id \"com.apple.preference.security\"",
-			"end tell",
-			"end if"
+	//ARGS: Message / Positive button / Negative button
+	private static final String[] ASShowAutomationWarning = {
+		"display dialog \"%1$s\" buttons {\"%2$s\", \"%3$s\"} cancel button \"%2$s\" default button \"%3$s\" with icon caution",
+		
+		"if button returned of result = \"%3$s\" then",
+		"tell application \"System Preferences\"",
+		"activate",
+		"reveal anchor \"Privacy\" of pane id \"com.apple.preference.security\"",
+		"end tell",
+		"end if"
 	};
-	private static final String[] ASShowDiskAccessWarning = { //ARGS: Message / Positive button / Negative button
-			"display dialog \"%1$s\" buttons {\"%2$s\", \"%3$s\"} cancel button \"%2$s\" default button \"%3$s\" with icon caution",
-			
-			"if button returned of result = \"%3$s\" then",
-			"tell application \"System Preferences\"",
-			"activate",
-			"reveal anchor \"Privacy_AllFiles\" of pane id \"com.apple.preference.security\"",
-			"end tell",
-			"end if"
+	//ARGS: Message / Positive button / Negative button
+	private static final String[] ASShowDiskAccessWarning = {
+		"display dialog \"%1$s\" buttons {\"%2$s\", \"%3$s\"} cancel button \"%2$s\" default button \"%3$s\" with icon caution",
+		
+		"if button returned of result = \"%3$s\" then",
+		"tell application \"System Preferences\"",
+		"activate",
+		"reveal anchor \"Privacy_AllFiles\" of pane id \"com.apple.preference.security\"",
+		"end tell",
+		"end if"
 	};
 	
 	//private static final Pattern createChatResultPattern = Pattern.compile("\\Atext chat id \"(\\S+)\" of application \"Messages\"\\Z"); //text chat id "iMessage;+;chat175084451468489158" of application "Messages" <- ONLY FROM SCRIPTER OUTPUT
@@ -252,7 +289,7 @@ class AppleScriptManager {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
-		for(String line : ASTextExisting) {
+		for(String line : Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSBigSurVersion) >= 0 ? ASTextExisting11 : ASTextExisting) {
 			command.add("-e");
 			command.add(String.format(line, chatGUID, escapeAppleScriptString(message)));
 		}
@@ -306,7 +343,7 @@ class AppleScriptManager {
 		//Building the command
 		ArrayList<String> command = new ArrayList<>();
 		command.add("osascript");
-		for(String line : ASFileExisting) {
+		for(String line : Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSBigSurVersion) >= 0 ? ASFileExisting11 : ASFileExisting) {
 			command.add("-e");
 			command.add(String.format(line, chatGUID, escapeAppleScriptString(file.getAbsolutePath())));
 		}
