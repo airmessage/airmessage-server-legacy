@@ -6,7 +6,7 @@
 
 	<groupId>me.tagavari.airmessage</groupId>
 	<artifactId>AirMessageServer</artifactId>
-	<version>0.3.3b</version>
+	<version>0.3.4</version>
 	<packaging>jar</packaging>
 
 	<properties>
