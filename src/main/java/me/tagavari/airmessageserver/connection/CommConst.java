@@ -3,7 +3,7 @@ package me.tagavari.airmessageserver.connection;
 public class CommConst {
 	//Transmission header values
 	public static final int mmCommunicationsVersion = 5;
-	public static final int mmCommunicationsSubVersion = 1;
+	public static final int mmCommunicationsSubVersion = 2;
 	
 	//NHT - Net header type
 	public static final int nhtClose = 0;
@@ -15,14 +15,15 @@ public class CommConst {
 	
 	public static final int nhtMessageUpdate = 200;
 	public static final int nhtTimeRetrieval = 201;
-	public static final int nhtMassRetrieval = 202;
-	public static final int nhtMassRetrievalFile = 203;
-	public static final int nhtMassRetrievalFinish = 204;
-	public static final int nhtConversationUpdate = 205;
-	public static final int nhtModifierUpdate = 206;
-	public static final int nhtAttachmentReq = 207;
-	public static final int nhtAttachmentReqConfirm = 208;
-	public static final int nhtAttachmentReqFail = 209;
+	public static final int nhtIDRetrieval = 202;
+	public static final int nhtMassRetrieval = 203;
+	public static final int nhtMassRetrievalFile = 204;
+	public static final int nhtMassRetrievalFinish = 205;
+	public static final int nhtConversationUpdate = 206;
+	public static final int nhtModifierUpdate = 207;
+	public static final int nhtAttachmentReq = 208;
+	public static final int nhtAttachmentReqConfirm = 209;
+	public static final int nhtAttachmentReqFail = 210;
 	
 	public static final int nhtLiteConversationRetrieval = 300;
 	public static final int nhtLiteThreadRetrieval = 301;

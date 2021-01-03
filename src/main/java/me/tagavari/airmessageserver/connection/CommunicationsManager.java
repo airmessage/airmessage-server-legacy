@@ -240,6 +240,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		
 		switch(messageType) {
 			case CommConst.nhtTimeRetrieval -> handleMessageTimeRetrieval(client, unpacker);
+			case CommConst.nhtIDRetrieval -> handleMessageIDRetrieval(client, unpacker);
 			case CommConst.nhtMassRetrieval -> handleMessageMassRetrieval(client, unpacker);
 			case CommConst.nhtConversationUpdate -> handleMessageConversationUpdate(client, unpacker);
 			case CommConst.nhtAttachmentReq -> handleMessageAttachmentRequest(client, unpacker);
@@ -357,9 +358,20 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		
 		//Creating a new request and queuing it
 		DatabaseManager.getInstance().addClientRequest(new CustomRetrievalRequest(
-				client,
-				new DatabaseManager.RetrievalFilter(DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper))), -1, null),
-				CommConst.nhtTimeRetrieval));
+			client,
+			new DatabaseManager.RetrievalFilter(DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper))), -1, null),
+			CommConst.nhtTimeRetrieval));
+	}
+	
+	private void handleMessageIDRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+		//Reading the request data
+		long idSince = unpacker.unpackLong();
+		
+		//Creating a new request and queuing it
+		DatabaseManager.getInstance().addClientRequest(new CustomRetrievalRequest(
+			client,
+			new DatabaseManager.RetrievalFilter(DSL.field("message.ROWID").greaterThan(idSince), -1, null),
+			CommConst.nhtIDRetrieval));
 	}
 	
 	private void handleMessageMassRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
