@@ -675,7 +675,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		}
 	}
 	
-	public boolean sendFileChunk(ClientRegistration client, short requestID, int requestIndex, long fileLength, boolean isLast, String fileGUID, byte[] chunkData) {
+	public boolean sendFileChunk(ClientRegistration client, short requestID, int requestIndex, long fileLength, boolean isLast, String fileGUID, byte[] chunkData, int chunkDataLength) {
 		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtAttachmentReq);
 			
@@ -685,7 +685,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			packer.packBoolean(isLast);
 			
 			packer.packString(fileGUID);
-			packer.packPayload(chunkData);
+			packer.packPayload(chunkData, chunkDataLength);
 			
 			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			
@@ -742,7 +742,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		}
 	}
 	
-	public boolean sendMassRetrievalFileChunk(ClientRegistration client, short requestID, int requestIndex, String fileName, boolean isLast, String fileGUID, byte[] chunkData) {
+	public boolean sendMassRetrievalFileChunk(ClientRegistration client, short requestID, int requestIndex, String fileName, boolean isLast, String fileGUID, byte[] chunkData, int chunkDataLength) {
 		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtMassRetrievalFile);
 			
@@ -752,7 +752,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			packer.packBoolean(isLast);
 			
 			packer.packString(fileGUID);
-			packer.packPayload(chunkData);
+			packer.packPayload(chunkData, chunkDataLength);
 			
 			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			

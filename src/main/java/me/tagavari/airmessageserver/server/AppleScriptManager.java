@@ -6,6 +6,7 @@ import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
 
 import java.io.*;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -14,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.InflaterOutputStream;
 
 public class AppleScriptManager {
 	//macOS 10
@@ -681,7 +683,7 @@ public class AppleScriptManager {
 				targetDir.mkdir();
 				targetFile = new File(targetDir, fileName);
 				
-				try(FileOutputStream out = new FileOutputStream(targetFile)) {
+				try(OutputStream out = new InflaterOutputStream(new BufferedOutputStream(new FileOutputStream(targetFile)))) {
 					while(!requestKill.get()) {
 						//Getting the data struct
 						FileFragment fileFragment = dataQueue.poll(timeout, TimeUnit.MILLISECONDS);
@@ -690,7 +692,7 @@ public class AppleScriptManager {
 						if(fileFragment == null) continue;
 						
 						//Writing the file to disk
-						out.write(Constants.decompressGZIP(fileFragment.compressedData));
+						out.write(fileFragment.compressedData);
 						
 						//Checking if the file is the last one
 						if(fileFragment.isLast) {

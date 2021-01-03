@@ -259,14 +259,16 @@ public class Blocks {
 		public String type;
 		public long size;
 		public byte[] checksum;
+		public final long sort;
 		
-		public AttachmentInfo(String guid, String name, String type, long size, byte[] checksum) {
+		public AttachmentInfo(String guid, String name, String type, long size, byte[] checksum, long sort) {
 			//Setting the variables
 			this.guid = guid;
 			this.name = name;
 			this.type = type;
 			this.size = size;
 			this.checksum = checksum;
+			this.sort = sort;
 		}
 		
 		@Override
@@ -276,6 +278,7 @@ public class Blocks {
 			packer.packNullableString(type);
 			packer.packLong(size);
 			packer.packNullablePayload(checksum);
+			packer.packLong(sort);
 		}
 	}
 	

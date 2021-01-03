@@ -4,6 +4,7 @@ import io.sentry.Sentry;
 import me.tagavari.airmessageserver.common.Blocks;
 import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
+import me.tagavari.airmessageserver.helper.LookAheadStreamIterator;
 import me.tagavari.airmessageserver.request.*;
 import org.jooq.Record;
 import org.jooq.*;
@@ -12,6 +13,7 @@ import org.jooq.impl.DSL;
 
 import java.io.*;
 import java.nio.file.Files;
+import java.security.DigestInputStream;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -26,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
+import java.util.zip.DeflaterInputStream;
 
 import static org.jooq.impl.DSL.*;
 
@@ -438,39 +441,24 @@ public class DatabaseManager {
 		//Checking if there have been no errors so far
 		if(succeeded) {
 			//Preparing to read the data
-			byte[] buffer = new byte[request.chunkSize];
-			byte[] compressedBuffer;
-			int bytesRead;
-			boolean moreDataRead;
 			int requestIndex = 0;
 			long fileLength = file.length();
 			
 			//Streaming the file
-			try(InputStream inputStream = new BufferedInputStream(new FileInputStream(file))) {
-				//Attempting to read the data
-				if((bytesRead = inputStream.read(buffer)) != -1) {
-					do {
-						//Compressing the buffer
-						compressedBuffer = Constants.compressGZIP(buffer, bytesRead);
-						
-						//Reading the next chunk
-						moreDataRead = (bytesRead = inputStream.read(buffer)) != -1;
-						
-						//Sending the data
-						if(request.connection.isConnected()) {
-							ConnectionManager.getCommunicationsManager().sendFileChunk(request.connection, request.requestID, requestIndex, fileLength, !moreDataRead, request.fileGuid, compressedBuffer);
-						} else {
-							Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
-							break;
-						}
-						
-						//Adding to the request index
-						requestIndex++;
-					} while(moreDataRead);
-				} else {
-					//Updating the state
-					succeeded = false;
-					errorCode = CommConst.nstAttachmentReqIO;
+			try(InputStream inputStream = new DeflaterInputStream(new BufferedInputStream(new FileInputStream(file)))) {
+				for(LookAheadStreamIterator iterator = new LookAheadStreamIterator(request.chunkSize, inputStream); iterator.hasNext();) {
+					LookAheadStreamIterator.ForwardsStreamData data = iterator.next();
+					
+					//Sending the data
+					if(request.connection.isConnected()) {
+						ConnectionManager.getCommunicationsManager().sendFileChunk(request.connection, request.requestID, requestIndex, fileLength, data.isLast(), request.fileGuid, data.getData(), data.getLength());
+					} else {
+						Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
+						break;
+					}
+					
+					//Adding to the request index
+					requestIndex++;
 				}
 			} catch(IOException exception) {
 				//Logging the error
@@ -682,34 +670,22 @@ public class DatabaseManager {
 						if(!compareMIMEArray(request.attachmentFilterWhitelist, attachment.fileType) && (compareMIMEArray(request.attachmentFilterBlacklist, attachment.fileType) || !request.attachmentFilterDLOutside)) return; //Attachment type
 						
 						//Streaming the file
-						byte[] buffer = new byte[1024 * 1024]; //1 MiB
-						byte[] compressedBuffer;
-						int bytesRead;
-						boolean moreDataRead;
-						int requestIndex = 0;
-						
-						try(FileInputStream inputStream = new FileInputStream(attachment.file)) {
-							//Attempting to read the data
-							if((bytesRead = inputStream.read(buffer)) != -1) {
-								do {
-									//Compressing the buffer
-									compressedBuffer = Constants.compressGZIP(buffer, bytesRead);
-									
-									//Reading the next chunk
-									moreDataRead = (bytesRead = inputStream.read(buffer)) != -1;
-									
-									//Checking if the connection is ready
-									if(request.connection.isConnected()) {
-										//Sending the data
-										ConnectionManager.getCommunicationsManager().sendMassRetrievalFileChunk(request.connection, request.requestID, requestIndex, attachment.fileName, !moreDataRead, attachment.guid, compressedBuffer);
-									} else {
-										Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
-										break;
-									}
-									
-									//Adding to the request index
-									requestIndex++;
-								} while(moreDataRead);
+						try(InputStream inputStream = new DeflaterInputStream(new BufferedInputStream(new FileInputStream(attachment.file)))) {
+							int requestIndex = 0;
+							for(LookAheadStreamIterator iterator = new LookAheadStreamIterator(1024 * 1024, inputStream); iterator.hasNext();) {
+								LookAheadStreamIterator.ForwardsStreamData data = iterator.next();
+								
+								//Checking if the connection is ready
+								if(request.connection.isConnected()) {
+									//Sending the data
+									ConnectionManager.getCommunicationsManager().sendMassRetrievalFileChunk(request.connection, request.requestID, requestIndex, attachment.fileName, data.isLast(), attachment.guid, data.getData(), data.getLength());
+								} else {
+									Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
+									break;
+								}
+								
+								//Adding to the request index
+								requestIndex++;
 							}
 						} catch(IOException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
@@ -1040,7 +1016,7 @@ public class DatabaseManager {
 				long dateRead = generalMessageRecords.getValue(i, field("message.date_read", Long.class));
 				
 				//Fetching the attachments
-				List<SelectField<?>> attachmentFields = new ArrayList<>(Arrays.asList(new SelectField<?>[]{field("attachment.guid", String.class), field("attachment.filename", String.class), field("attachment.transfer_name", String.class), field("attachment.mime_type", String.class), field("attachment.total_bytes", Long.class)}));
+				List<SelectField<?>> attachmentFields = new ArrayList<>(Arrays.asList(field("attachment.ROWID", Long.class), field("attachment.guid", String.class), field("attachment.filename", String.class), field("attachment.transfer_name", String.class), field("attachment.mime_type", String.class), field("attachment.total_bytes", Long.class)));
 				//if(dbSupportsAssociation) attachmentFields.add(DSL.field("attachment.is_sticker", Boolean.class));
 				
 				Condition filter = field("message_attachment_join.message_id").eq(rowID);
@@ -1064,6 +1040,7 @@ public class DatabaseManager {
 					String filePath = fileRecords.getValue(f, field("attachment.filename", String.class));
 					File file = filePath == null ? null : new File(filePath.replaceFirst("~", System.getProperty("user.home")));
 					long fileSize = fileRecords.getValue(f, field("attachment.total_bytes", Long.class));
+					long fileRow = fileRecords.getValue(f, field("attachment.ROWID", Long.class));
 					
 					//Updating the file name
 					if(fileName == null) {
@@ -1073,11 +1050,12 @@ public class DatabaseManager {
 					
 					//Adding the file
 					files.add(new Blocks.AttachmentInfo(fileGUID,
-							fileName,
-							fileType,
-							fileSize,
-							//The checksum will be calculated if the message is outgoing
-							sender == null && file != null ? calculateChecksum(file) : null));
+						fileName,
+						fileType,
+						fileSize,
+						//The checksum will be calculated if the message is outgoing
+						sender == null && file != null ? calculateChecksum(file) : null,
+						fileRow));
 					
 					if(attachmentFiles != null && file != null) attachmentFiles.add(new TransientAttachmentInfo(fileGUID, date, file, fileName, fileType, fileSize));
 				}
@@ -1265,18 +1243,16 @@ public class DatabaseManager {
 		//Returning null if the file isn't ready
 		if(!file.exists() || !file.isFile() || !file.canRead()) return null;
 		
-		//Preparing to read the file
 		MessageDigest messageDigest = MessageDigest.getInstance(CommConst.hashAlgorithm);
-		try(FileInputStream inputStream = new FileInputStream(file)) {
-			byte[] dataBytes = new byte[1024];
-			
-			//Reading the file
-			int bytesRead;
-			while((bytesRead = inputStream.read(dataBytes)) != -1) messageDigest.update(dataBytes, 0, bytesRead);
-			
-			//Returning the file hash
-			return messageDigest.digest();
+		try(InputStream inputStream = new DigestInputStream(new FileInputStream(file), messageDigest)) {
+			byte[] buffer = new byte[1024];
+			int lengthRead;
+			do {
+				lengthRead = inputStream.read(buffer);
+			} while(lengthRead != -1);
 		}
+		
+		return messageDigest.digest();
 	}
 	
 	private static class DataFetchResult {
