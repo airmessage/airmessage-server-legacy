@@ -1095,6 +1095,10 @@ public class DatabaseManager {
 			}
 			//Otherwise checking if the item is a chat leave
 			else if(itemType == 3) {
+				int dbGroupActionType = generalMessageRecords.getValue(i, field("message.group_action_type", Integer.class));
+				//On macOS 11, this represents a chat icon change for some reason. We can't handle this, so just ignore.
+				if(dbGroupActionType != 0) continue;
+				
 				//Getting the detail parameters
 				int groupActionType = Blocks.GroupActionInfo.subtypeLeave;
 				
