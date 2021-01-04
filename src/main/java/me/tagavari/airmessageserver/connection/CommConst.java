@@ -24,6 +24,7 @@ public class CommConst {
 	public static final int nhtAttachmentReq = 208;
 	public static final int nhtAttachmentReqConfirm = 209;
 	public static final int nhtAttachmentReqFail = 210;
+	public static final int nhtIDUpdate = 211;
 	
 	public static final int nhtLiteConversationRetrieval = 300;
 	public static final int nhtLiteThreadRetrieval = 301;

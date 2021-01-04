@@ -4,6 +4,7 @@ import io.sentry.Sentry;
 import me.tagavari.airmessageserver.common.Blocks;
 import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
+import me.tagavari.airmessageserver.helper.CompressionHelper;
 import me.tagavari.airmessageserver.helper.LookAheadStreamIterator;
 import me.tagavari.airmessageserver.request.*;
 import org.jooq.Record;
@@ -155,6 +156,10 @@ public class DatabaseManager {
 		return creationTargetingAvailabilityList.get();
 	}
 	
+	public long getLatestEntryID() {
+		return scannerThread.latestEntryID;
+	}
+	
 	public void requestCreationTargetingAvailabilityUpdate() {
 		creationTargetingUpdateRequired = true;
 	}
@@ -165,7 +170,7 @@ public class DatabaseManager {
 		private final Connection connection;
 		
 		//Creating the time values
-		private long latestEntryID = -1;
+		private volatile long latestEntryID = -1;
 		private final long creationTime;
 		//private long lastCheckTime;
 		
@@ -206,7 +211,9 @@ public class DatabaseManager {
 									field("message.ROWID").greaterThan(latestEntryID), -1, null), null);
 					
 					//Updating the latest entry ID
-					if(dataFetchResult.latestMessageID > latestEntryID) latestEntryID = dataFetchResult.latestMessageID;
+					if(dataFetchResult.latestMessageID > latestEntryID) {
+						latestEntryID = dataFetchResult.latestMessageID;
+					}
 					
 					//Updating the last check time
 					//lastCheckTime = System.currentTimeMillis();
@@ -223,6 +230,9 @@ public class DatabaseManager {
 				if(dataFetchResult != null && !dataFetchResult.conversationItems.isEmpty()) {
 					//Sending the data
 					ConnectionManager.getCommunicationsManager().sendMessageUpdate(dataFetchResult.conversationItems);
+					
+					//Updating the latest ID
+					ConnectionManager.getCommunicationsManager().sendIDUpdate(null, dataFetchResult.latestMessageID);
 				}
 				
 				//Updating the message states
@@ -569,6 +579,9 @@ public class DatabaseManager {
 			DataFetchResult result = fetchData(connection, request.filter, null);
 			if(request.connection.isConnected()) {
 				ConnectionManager.getCommunicationsManager().sendMessageUpdate(request.connection, CommConst.nhtMessageUpdate, result.conversationItems);
+				if(!result.isolatedModifiers.isEmpty()) {
+					ConnectionManager.getCommunicationsManager().sendModifierUpdate(request.connection, result.isolatedModifiers);
+				}
 			}
 		} catch(IOException | GeneralSecurityException | SQLException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
@@ -944,9 +957,9 @@ public class DatabaseManager {
 							if(!file.exists()) continue;
 							String fileType = fileRecord.getValue(0, field("attachment.mime_type", String.class));
 							
-							//Reading the file with GZIP compression
+							//Reading and compressing the file
 							byte[] fileBytes = Files.readAllBytes(file.toPath());
-							fileBytes = Constants.compressGZIP(fileBytes, fileBytes.length);
+							fileBytes = CompressionHelper.compressDeflate(fileBytes, fileBytes.length);
 							
 							//Getting the file guid
 							String fileGuid = fileRecord.getValue(0, field("attachment.guid", String.class));
@@ -1172,7 +1185,7 @@ public class DatabaseManager {
 		if(modifierList.isEmpty()) return;
 
 		//Sending the data
-		ConnectionManager.getCommunicationsManager().sendModifierUpdate(modifierList);
+		ConnectionManager.getCommunicationsManager().sendModifierUpdate(null, modifierList);
 	}
 	
 	private void indexTargetAvailability(Connection connection) throws SQLException {

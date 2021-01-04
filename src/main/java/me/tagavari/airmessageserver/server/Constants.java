@@ -240,36 +240,6 @@ public class Constants {
 		return exception.getMessage().toLowerCase().contains("socket closed");
 	}
 	
-	/* static byte[] compressGZIP(byte[] data, int length) throws IOException {
-		try(ByteArrayInputStream in = new ByteArrayInputStream(data, 0, length);
-			ByteArrayOutputStream fin = new ByteArrayOutputStream(); GZIPOutputStream out = new GZIPOutputStream(fin)) {
-			byte[] buffer = new byte[1024];
-			int bytesRead;
-			while((bytesRead = in.read(buffer)) != -1) out.write(data, 0, bytesRead);
-			in.close();
-			return fin.toByteArray();
-		}
-	} */
-	
-	static byte[] compressGZIP(byte[] data, int length) throws IOException, OutOfMemoryError {
-		try(ByteArrayOutputStream fin = new ByteArrayOutputStream(); GZIPOutputStream out = new GZIPOutputStream(fin)) {
-			out.write(data, 0, length);
-			out.close();
-			return fin.toByteArray();
-		}
-	}
-	
-	static byte[] decompressGZIP(byte[] data) throws IOException, OutOfMemoryError {
-		try(ByteArrayInputStream src = new ByteArrayInputStream(data); GZIPInputStream in = new GZIPInputStream(src);
-			ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-			byte[] buffer = new byte[1024];
-			int bytesRead;
-			while((bytesRead = in.read(buffer)) != -1) out.write(buffer, 0, bytesRead);
-			in.close();
-			return out.toByteArray();
-		}
-	}
-	
 	static boolean compareMimeTypes(String one, String two) {
 		if(one.equals("*/*") || two.equals("*/*")) return true;
 		String[] oneComponents = one.split("/");

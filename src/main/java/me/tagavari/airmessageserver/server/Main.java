@@ -69,6 +69,7 @@ public class Main {
 		
 		if(isDebugMode()) {
 			getLogger().log(Level.INFO, "Server running in debug mode");
+			Sentry.init(null, null);
 		} else {
 			//Initializing Sentry
 			SentryClient client = Sentry.init(new DefaultSentryClientFactory() {

@@ -349,6 +349,12 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			
 			dataProxy.sendMessage(client, packer.toByteArray(), true);
 		}
+		
+		//Sending the client the latest database entry ID
+		long latestEntryID = DatabaseManager.getInstance().getLatestEntryID();
+		if(latestEntryID != -1) {
+			sendIDUpdate(client, latestEntryID);
+		}
 	}
 	
 	private void handleMessageTimeRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
@@ -765,18 +771,35 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		}
 	}
 	
-	public boolean sendModifierUpdate(Collection<Blocks.ModifierInfo> items) {
+	public boolean sendModifierUpdate(ClientRegistration client, Collection<Blocks.ModifierInfo> items) {
 		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtModifierUpdate);
 			
 			packer.packArrayHeader(items.size());
 			for(Blocks.Block item : items) item.writeObject(packer);
 			
-			dataProxy.sendMessage(null, packer.toByteArray(), true);
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			//Only send a push notification for incoming items
 			if(items.stream().anyMatch(item ->
 					(item instanceof Blocks.TapbackModifierInfo && ((Blocks.TapbackModifierInfo) item).sender != null) ||
 					(item instanceof Blocks.StickerModifierInfo && ((Blocks.StickerModifierInfo) item).sender != null))) dataProxy.sendPushNotification();
+			
+			return true;
+		} catch(BufferOverflowException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			Sentry.capture(exception);
+			
+			return false;
+		}
+	}
+	
+	public boolean sendIDUpdate(ClientRegistration client, long id) {
+		try(AirPacker packer = AirPacker.get()) {
+			packer.packInt(CommConst.nhtIDUpdate);
+			
+			packer.packLong(id);
+			
+			dataProxy.sendMessage(client, packer.toByteArray(), true);
 			
 			return true;
 		} catch(BufferOverflowException exception) {
