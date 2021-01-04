@@ -6,7 +6,6 @@ import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
 
 import java.io.*;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -46,39 +45,55 @@ public class AppleScriptManager {
 	};
 	//ARGS: Recipients / Message / Service
 	private static final String[] ASTextNew = {
-			"tell application \"Messages\"",
-			
-			//Getting the iMessage service
-			"if \"%3$s\" is \"iMessage\" then",
-			"set targetService to 1st service whose service type = iMessage",
-			"else",
-			"set targetService to service \"%3$s\"",
-			"end if",
-			
-			//Splitting the recipient list
-			/* "set oldDelimiters to AppleScript's text item delimiters",
-			"set AppleScript's text item delimiters to \"" + appleScriptDelimiter + "\"",
-			"set recipientList to every text item of \"%1$s\"",
-			"set AppleScript's text item delimiters to oldDelimiters",
-			"set recipientList to {%1$s}", */
-			
-			//Converting the recipients to iMessage buddies
-			/* "set buddyList to {}",
-			"repeat with currentRecipient in recipientList",
-			"set currentBuddy to buddy currentRecipient of targetService",
-			"copy currentBuddy to the end of buddyList",
-			"end repeat", */
-			
-			//Creating the chat
-			"set targetChat to make new text chat with properties {participants:{%1$s}}",
-			
-			//Sending the messages
-			"send \"%2$s\" to targetChat",
-			
-			//Getting the chat info
-			//"get targetChat",
-			
-			"end tell"
+		"tell application \"Messages\"",
+		
+		//Getting the iMessage service
+		"if \"%3$s\" is \"iMessage\" then",
+		"set targetService to 1st service whose service type = iMessage",
+		"else",
+		"set targetService to service \"%3$s\"",
+		"end if",
+		
+		//Splitting the recipient list
+		/* "set oldDelimiters to AppleScript's text item delimiters",
+		"set AppleScript's text item delimiters to \"" + appleScriptDelimiter + "\"",
+		"set recipientList to every text item of \"%1$s\"",
+		"set AppleScript's text item delimiters to oldDelimiters",
+		"set recipientList to {%1$s}", */
+		
+		//Converting the recipients to iMessage buddies
+		/* "set buddyList to {}",
+		"repeat with currentRecipient in recipientList",
+		"set currentBuddy to buddy currentRecipient of targetService",
+		"copy currentBuddy to the end of buddyList",
+		"end repeat", */
+		
+		//Creating the chat
+		"set targetChat to make new text chat with properties {participants:{%1$s}}",
+		
+		//Sending the messages
+		"send \"%2$s\" to targetChat",
+		
+		//Getting the chat info
+		//"get targetChat",
+		
+		"end tell"
+	};
+	//macOS 11+ (single participant)
+	//ARGS: Recipient / Message / Service
+	private static final String[] ASTextNewSingle11 = {
+		"tell application \"Messages\"",
+		
+		//Getting the service
+		"set targetAccount to 1st account whose service type = %3$s",
+		
+		//Creating the chat
+		"set targetParticipant to participant \"%1$s\" of targetAccount",
+		
+		//Sending the message
+		"send \"%2$s\" to targetParticipant",
+		
+		"end tell"
 	};
 	//macOS 10
 	//ARGS: Chat GUID / File
@@ -320,18 +335,29 @@ public class AppleScriptManager {
 		//Returning false if there are no members
 		if(chatMembers.length == 0) return new Constants.Tuple<>(CommConst.nstSendResultBadRequest, Constants.exceptionToString(new IllegalArgumentException("Bad request: no target members provided (send new file)")));
 		
-		//Formatting the chat members
-		StringBuilder delimitedChatMembers = new StringBuilder("buddy \"" + escapeAppleScriptString(chatMembers[0]) + "\" of targetService");
-		
-		//Adding the remaining members
-		for(int i = 1; i < chatMembers.length; i++) delimitedChatMembers.append(',').append("buddy \"").append(escapeAppleScriptString(chatMembers[i])).append("\" of targetService");
-		
-		//Building the command
 		ArrayList<String> command = new ArrayList<>();
-		command.add("osascript");
-		for(String line : ASTextNew) {
-			command.add("-e");
-			command.add(String.format(line, delimitedChatMembers.toString(), escapeAppleScriptString(message), escapeAppleScriptString(service)));
+		
+		//If there's only one member and we're on macOS 11, use our hacky workaround
+		if(chatMembers.length == 1 && Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSBigSurVersion) >= 0) {
+			//Building the command
+			command.add("osascript");
+			for(String line : ASTextNewSingle11) {
+				command.add("-e");
+				command.add(String.format(line, escapeAppleScriptString(chatMembers[0]), escapeAppleScriptString(message), escapeAppleScriptString(service)));
+			}
+		} else {
+			//Formatting the chat members
+			StringBuilder delimitedChatMembers = new StringBuilder("buddy \"" + escapeAppleScriptString(chatMembers[0]) + "\" of targetService");
+			
+			//Adding the remaining members
+			for(int i = 1; i < chatMembers.length; i++) delimitedChatMembers.append(',').append("buddy \"").append(escapeAppleScriptString(chatMembers[i])).append("\" of targetService");
+			
+			//Building the command
+			command.add("osascript");
+			for(String line : ASTextNew) {
+				command.add("-e");
+				command.add(String.format(line, delimitedChatMembers.toString(), escapeAppleScriptString(message), escapeAppleScriptString(service)));
+			}
 		}
 		
 		//Running the command
