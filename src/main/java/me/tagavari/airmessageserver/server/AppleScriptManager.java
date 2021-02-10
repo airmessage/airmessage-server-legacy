@@ -722,6 +722,10 @@ public class AppleScriptManager {
 						
 						//Checking if the file is the last one
 						if(fileFragment.isLast) {
+							//Completing the stream
+							out.flush();
+							out.close();
+							
 							//Calling the download successful method
 							onDownloadSuccessful(targetFile);
 							
