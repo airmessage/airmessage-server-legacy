@@ -47,9 +47,9 @@ public class DatabaseManager {
 	private static DatabaseManager instance;
 	
 	//Creating the schema support values
-	private boolean dbSupportsSendStyle;
-	private boolean dbSupportsAssociation;
-	private boolean dbSupportsHiddenAttachments;
+	private final boolean dbSupportsSendStyle;
+	private final boolean dbSupportsAssociation;
+	private final boolean dbSupportsHiddenAttachments;
 	
 	//Creating the thread values
 	ScannerThread scannerThread;
