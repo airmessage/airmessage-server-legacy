@@ -1,6 +1,7 @@
 SIGNATURE=$1 # Apple signing ID: "Developer ID Application: Developer Name (DUCNFCN445)"
 NOTARIZATION_USERNAME=$2 # Apple ID username: "developer@example.com"
 NOTARIZATION_PASSKEY=$3 # Apple ID password Keychain listing: "AC_PASSWORD"
+NOTARIZATION_PROVIDER=$4 # Team provider short name: "4RYZSDG57V"
 
 JAVA_HOME=$(/usr/libexec/java_home -v 15)
 VERSION=$(./gradlew -q printVersionName)
@@ -98,8 +99,9 @@ else
 	echo "Uploading app to Apple notarization service"
 	REQUEST_UUID=$(xcrun altool --notarize-app \
 		--primary-bundle-id "me.tagavari.airmessageserver" \
-		--username $NOTARIZATION_USERNAME \
+		--username "$NOTARIZATION_USERNAME" \
 		--password "@keychain:$NOTARIZATION_PASSKEY" \
+		--asc-provider "$NOTARIZATION_PROVIDER" \
 		--file "$PACKAGE_FILE" \
 		| grep RequestUUID | awk '{print $3}')
 	rm "$PACKAGE_FILE"
