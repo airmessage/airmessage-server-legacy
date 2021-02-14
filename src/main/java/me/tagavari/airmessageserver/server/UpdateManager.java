@@ -119,7 +119,7 @@ class UpdateManager {
 				final String relTargetLink = jLatestRelease.getString("download-url");
 				String relMessage = new String(Base64.getDecoder().decode(releaseNotes.get(targetLocale)));
 				final String relMessageHTML = HtmlRenderer.builder().build().render(Parser.builder().build().parse(relMessage));
-				final boolean relExternalDownload = "true".equals(jLatestRelease.getString("download-url"));
+				final boolean relExternalDownload = "true".equals(jLatestRelease.getString("download-ext"));
 				
 				//Showing the update window
 				UIHelper.getDisplay().asyncExec(() -> openUpdateWindow(relVerName, relMessageHTML, relTargetLink, relExternalDownload));
