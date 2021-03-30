@@ -1,7 +1,7 @@
 package me.tagavari.airmessageserver.connection;
 
+import io.sentry.Breadcrumb;
 import io.sentry.Sentry;
-import io.sentry.event.BreadcrumbBuilder;
 import me.tagavari.airmessageserver.common.AirPacker;
 import me.tagavari.airmessageserver.common.AirUnpacker;
 import me.tagavari.airmessageserver.common.Blocks;
@@ -201,13 +201,15 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			
 			//Logging the event
 			{
-				//Adding a breadcrumb
 				int contentLength = data.length;
 				
-				Map<String, String> dataMap = new HashMap<>(2);
-				dataMap.put("Message type", Integer.toString(messageType));
-				dataMap.put("Content length", Integer.toString(contentLength));
-				Sentry.getContext().recordBreadcrumb(new BreadcrumbBuilder().setCategory(Constants.sentryBCatPacket).setMessage("New packet received").setData(dataMap).build());
+				//Adding a breadcrumb
+				Breadcrumb breadcrumb = new Breadcrumb();
+				breadcrumb.setCategory(Constants.sentryBCatPacket);
+				breadcrumb.setMessage("New packet received");
+				breadcrumb.setData("Message type", messageType);
+				breadcrumb.setData("Content length", contentLength);
+				Sentry.addBreadcrumb(breadcrumb);
 				
 				Main.getLogger().log(Level.FINEST, "New message received: " + messageType + " / " + contentLength);
 			}
@@ -595,7 +597,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -611,7 +613,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -627,7 +629,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			dataProxy.sendMessage(null, packer.toByteArray(), true);
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -647,7 +649,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -665,7 +667,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -683,7 +685,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -708,7 +710,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -731,7 +733,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -754,7 +756,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -775,7 +777,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -798,7 +800,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -816,7 +818,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}
@@ -833,7 +835,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			return true;
 		} catch(BufferOverflowException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			return false;
 		}

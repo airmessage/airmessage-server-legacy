@@ -66,7 +66,7 @@ class ClientSocket extends ClientRegistration {
 		} catch(IOException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			if(isConnected() && Constants.checkDisconnected(exception)) callbacks.cancelConnection(this, false);
-			else Sentry.capture(exception);
+			else Sentry.captureException(exception);
 			
 			return false;
 		}

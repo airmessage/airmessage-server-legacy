@@ -43,7 +43,7 @@ class ConnectWebSocketClient extends WebSocketClient {
 		try {
 			return new ConnectWebSocketClient(new URI(connectHostname + "?" + query), headers, connectTimeout, connectionListener);
 		} catch(URISyntaxException exception) {
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			return null;
 		}
@@ -63,7 +63,7 @@ class ConnectWebSocketClient extends WebSocketClient {
 		try {
 			return new ConnectWebSocketClient(new URI(connectHostname + "?" + query), headers, connectTimeout, connectionListener);
 		} catch(URISyntaxException exception) {
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			return null;
 		}

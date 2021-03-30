@@ -182,7 +182,7 @@ public class UIHelper {
 		try {
 			while(!display.isDisposed()) if(!display.readAndDispatch()) display.sleep();
 		} catch(Exception exception) {
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 		}
 		System.exit(0);

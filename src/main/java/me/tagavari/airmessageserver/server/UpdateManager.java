@@ -125,7 +125,7 @@ class UpdateManager {
 				UIHelper.getDisplay().asyncExec(() -> openUpdateWindow(relVerName, relMessageHTML, relTargetLink, relExternalDownload));
 			} catch(Exception exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-				Sentry.capture(exception);
+				Sentry.captureException(exception);
 				
 				return;
 			}
@@ -166,7 +166,7 @@ class UpdateManager {
 			return new URL(target);
 		} catch(MalformedURLException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			throw new IllegalArgumentException(exception);
 		}
@@ -177,7 +177,7 @@ class UpdateManager {
 			return file.toURI().toURL();
 		} catch(MalformedURLException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			
 			throw new IllegalArgumentException(exception);
 		}

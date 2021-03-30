@@ -139,7 +139,7 @@ public class DatabaseManager {
 			resultSet.close();
 		} catch(SQLException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 		} */
 		
 		//Creating the threads
@@ -221,7 +221,7 @@ public class DatabaseManager {
 					//lastCheckTime = System.currentTimeMillis();
 				} catch(IOException | NoSuchAlgorithmException | OutOfMemoryError | SQLException | RuntimeException exception) {
 					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-					Sentry.capture(exception);
+					Sentry.captureException(exception);
 					dataFetchResult = null;
 				} catch(InterruptedException exception) {
 					//Returning
@@ -304,7 +304,7 @@ public class DatabaseManager {
 							Main.getLogger().log(Level.FINEST, "Updated chat creation target index");
 						} catch(SQLException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-							Sentry.capture(exception);
+							Sentry.captureException(exception);
 						}
 					}
 				}
@@ -359,7 +359,7 @@ public class DatabaseManager {
 				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 				
 				//Capturing the exception
-				Sentry.capture(exception);
+				Sentry.captureException(exception);
 			} catch(InterruptedException exception) {
 				//Logging the message
 				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
@@ -520,7 +520,7 @@ public class DatabaseManager {
 			} catch(IOException exception) {
 				//Logging the error
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-				//Sentry.capture(exception);
+				//Sentry.captureException(exception);
 				
 				//Updating the state
 				succeeded = false;
@@ -616,7 +616,7 @@ public class DatabaseManager {
 			}
 		} catch(IOException | GeneralSecurityException | SQLException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 		}
 	}
 	
@@ -632,7 +632,7 @@ public class DatabaseManager {
 			}
 		} catch(IOException | GeneralSecurityException | SQLException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 		}
 	}
 	
@@ -749,7 +749,7 @@ public class DatabaseManager {
 							}
 						} catch(IOException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-							Sentry.capture(exception);
+							Sentry.captureException(exception);
 						}
 					}
 				}
@@ -770,7 +770,7 @@ public class DatabaseManager {
 			});
 		} catch(IOException | OutOfMemoryError | RuntimeException | SQLException | GeneralSecurityException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 		}
 	}
 	

@@ -10,31 +10,40 @@ repositories {
     mavenCentral()
 }
 
-dependencies {
-    testImplementation group: "junit", name: "junit", version: "4.12"
+project.ext.swtVersion = "3.116.0"
 
+configurations.all {
+    resolutionStrategy {
+        dependencySubstitution {
+            substitute module('org.eclipse.platform:org.eclipse.swt.${osgi.platform}') with module("org.eclipse.platform:org.eclipse.swt.cocoa.macosx.x86_64:$swtVersion")
+        }
+    }
+}
+
+dependencies {
     //SQLite JDBC - Database library
-    implementation "org.xerial:sqlite-jdbc:3.32.3.2"
+    implementation "org.xerial:sqlite-jdbc:3.34.0"
 
     //jOOQ - Database library
-    implementation "org.jooq:jooq:3.13.5"
+    implementation "org.jooq:jooq:3.14.8"
 
     //Sentry - Crash reporting library
-    implementation "io.sentry:sentry:1.7.30"
+    implementation "io.sentry:sentry:4.3.0"
 
     //SLF4J - Logging library
     //implementation "org.slf4j:slf4j-nop:1.7.30"
 
     //JSON in Java - JSON library
-    implementation "org.json:json:20200518"
+    implementation "org.json:json:20210307"
 
     //Commonmark Java - Markdown parser
-    implementation "com.atlassian.commonmark:commonmark:0.15.2"
+    implementation "org.commonmark:commonmark:0.17.1"
 
     //JavaWebsocket - WebSocket library
     implementation "org.java-websocket:Java-WebSocket:1.5.1"
 
-    implementation fileTree("lib") { include "*.jar" }
+    //SWT - UI library
+    implementation "org.eclipse.platform:org.eclipse.swt.cocoa.macosx.x86_64:$swtVersion"
 }
 
 task copyToLib(type: Copy) {

@@ -52,7 +52,7 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 			listenerThread.start();
 		} catch(Exception exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 			notifyStop(ServerState.ERROR_INTERNAL);
 			return;
 		}
@@ -127,7 +127,7 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 				content = EncryptionHelper.encrypt(content);
 			} catch(GeneralSecurityException exception) {
 				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-				Sentry.capture(exception);
+				Sentry.captureException(exception);
 				return;
 			}
 		}

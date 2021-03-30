@@ -1,7 +1,6 @@
 package me.tagavari.airmessageserver.connection.direct;
 
 import io.sentry.Sentry;
-import io.sentry.event.BreadcrumbBuilder;
 import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.server.Constants;
 import me.tagavari.airmessageserver.server.Main;
@@ -11,8 +10,6 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.SocketException;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.logging.Level;
 
 class ReaderThread extends Thread {
@@ -36,7 +33,7 @@ class ReaderThread extends Thread {
 				if(contentLen > CommConst.maxPacketAllocation) {
 					//Logging the error
 					Main.getLogger().log(Level.WARNING, "Rejecting large packet (size " + contentLen + ")");
-					Sentry.getContext().recordBreadcrumb(new BreadcrumbBuilder().setCategory(Constants.sentryBCatPacket).setMessage("Rejecting large packet (size " + contentLen + ")").build());
+					Sentry.addBreadcrumb("Rejecting large packet (size " + contentLen + ")", Constants.sentryBCatPacket);
 					
 					//Closing the connection
 					listener.cancelConnection(true);
@@ -52,7 +49,7 @@ class ReaderThread extends Thread {
 			} catch(OutOfMemoryError exception) {
 				//Logging the error
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-				Sentry.capture(exception);
+				Sentry.captureException(exception);
 				
 				//Closing the connection
 				listener.cancelConnection(true);
