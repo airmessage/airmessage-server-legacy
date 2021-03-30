@@ -137,7 +137,7 @@ public class DataProxyTCP extends DataProxy<ClientSocket> implements ListenerThr
 	}
 	
 	@Override
-	public void sendPushNotification() {
+	public void sendPushNotification(int version, byte[] payload) {
 		//Not supported
 	}
 	
