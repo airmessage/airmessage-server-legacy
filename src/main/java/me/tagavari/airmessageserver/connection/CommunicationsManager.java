@@ -365,25 +365,10 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		long timeLower = unpacker.unpackLong();
 		long timeUpper = unpacker.unpackLong();
 		
-		//Building the query WHERE clause
-		Condition fetchCondition = DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper)));
-		//If we're using Connect, skip providing updates for incoming messages as these should be sent over FCM instead
-		if(PreferencesManager.getPrefAccountType() == PreferencesManager.accountTypeConnect) {
-			fetchCondition = fetchCondition.and(
-				//Item is not a message (a group action, for example)
-				DSL.field("message.item_type").notEqual(0)
-					//Or the message is outgoing, sent from another device
-					.or(DSL.field("message.is_from_me").isTrue())
-					//Or the message is not a tapback (only tapbacks are sent over FCM; stickers are not, for example)
-					.or(DSL.field("message.associated_message_type").lessThan(2000))
-					.or(DSL.field("message.associated_message_type").greaterOrEqual(4000))
-			);
-		}
-		
 		//Creating a new request and queuing it
 		DatabaseManager.getInstance().addClientRequest(new CustomRetrievalRequest(
 			client,
-			new DatabaseManager.RetrievalFilter(fetchCondition, -1, null),
+			new DatabaseManager.RetrievalFilter(DSL.field("message.date").greaterThan(Main.getTimeHelper().toDatabaseTime(timeLower)).and(DSL.field("message.date").lessThan(Main.getTimeHelper().toDatabaseTime(timeUpper))), -1, null),
 			CommConst.nhtTimeRetrieval));
 		DatabaseManager.getInstance().addClientRequest(new ReadReceiptRequest(client, timeLower));
 	}
@@ -394,25 +379,10 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		long timeLower = unpacker.unpackLong();
 		long timeUpper = unpacker.unpackLong();
 		
-		//Building the query WHERE clause
-		Condition fetchCondition = DSL.field("message.ROWID").greaterThan(idSince);
-		//If we're using Connect, skip providing updates for incoming messages as these should be sent over FCM instead
-		if(PreferencesManager.getPrefAccountType() == PreferencesManager.accountTypeConnect) {
-			fetchCondition = fetchCondition.and(
-				//Item is not a message (a group action, for example)
-				DSL.field("message.item_type").notEqual(0)
-					//Or the message is outgoing, sent from another device
-					.or(DSL.field("message.is_from_me").isTrue())
-					//Or the message is not a tapback (only tapbacks are sent over FCM; stickers are not, for example)
-					.or(DSL.field("message.associated_message_type").lessThan(2000))
-					.or(DSL.field("message.associated_message_type").greaterOrEqual(4000))
-			);
-		}
-		
 		//Creating a new request and queuing it
 		DatabaseManager.getInstance().addClientRequest(new CustomRetrievalRequest(
 			client,
-			new DatabaseManager.RetrievalFilter(fetchCondition, -1, null),
+			new DatabaseManager.RetrievalFilter(DSL.field("message.ROWID").greaterThan(idSince), -1, null),
 			CommConst.nhtIDRetrieval));
 		DatabaseManager.getInstance().addClientRequest(new ReadReceiptRequest(client, timeLower));
 	}

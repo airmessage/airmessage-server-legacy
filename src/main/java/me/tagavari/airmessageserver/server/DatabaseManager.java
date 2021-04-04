@@ -228,60 +228,32 @@ public class DatabaseManager {
 					return;
 				}
 				
-				//Items to be sent to directly connected clients
-				List<Blocks.ConversationItem> connectionMessages = null;
-				List<Blocks.ModifierInfo> connectionModifiers = null;
-				
-				//Items to be sent over FCM
-				List<Blocks.MessageInfo> pushMessages = null;
-				List<Blocks.ModifierInfo> pushModifiers = null;
-				
-				if(dataFetchResult != null) {
-					if(PreferencesManager.getPrefAccountType() == PreferencesManager.accountTypeDirect) {
-						//If we're using a direct connection, we have to send everything through direct connections
-						connectionMessages = dataFetchResult.conversationItems;
-						connectionModifiers = dataFetchResult.isolatedModifiers;
-					} else {
-						//If we're using Connect, separate incoming messages and send them over FCM instead
-						connectionMessages = new ArrayList<>();
-						connectionModifiers = new ArrayList<>();
-						pushMessages = new ArrayList<>();
-						pushModifiers = new ArrayList<>();
-						
-						for(Blocks.ConversationItem item : dataFetchResult.conversationItems) {
-							if(item instanceof Blocks.MessageInfo && ((Blocks.MessageInfo) item).sender != null) {
-								pushMessages.add((Blocks.MessageInfo) item);
-							} else {
-								connectionMessages.add(item);
-							}
-						}
-						
-						for(Blocks.ModifierInfo item : dataFetchResult.isolatedModifiers) {
-							if((item instanceof Blocks.TapbackModifierInfo && ((Blocks.TapbackModifierInfo) item).sender != null)/* ||
-							   (item instanceof Blocks.StickerModifierInfo && ((Blocks.StickerModifierInfo) item).sender != null)*/) {
-								pushModifiers.add(item);
-							} else {
-								connectionModifiers.add(item);
-							}
-						}
-					}
-				}
-				
 				//Updating new message items
-				if(connectionMessages != null && !connectionMessages.isEmpty()) {
-					ConnectionManager.getCommunicationsManager().sendMessageUpdate(connectionMessages);
+				if(dataFetchResult != null && !dataFetchResult.conversationItems.isEmpty()) {
+					ConnectionManager.getCommunicationsManager().sendMessageUpdate(dataFetchResult.conversationItems);
 				}
 				
 				//Updating the message states
 				List<Blocks.ModifierInfo> newModifiers = getUnreadUpdates(connection);
-				if(connectionModifiers != null) newModifiers.addAll(connectionModifiers);
+				if(dataFetchResult != null) newModifiers.addAll(dataFetchResult.isolatedModifiers);
 				if(!newModifiers.isEmpty()) {
 					ConnectionManager.getCommunicationsManager().sendModifierUpdate(null, newModifiers);
 				}
 				
 				//Sending push notifications
-				if(pushMessages != null && (!pushMessages.isEmpty() || !pushModifiers.isEmpty())) {
-					ConnectionManager.getCommunicationsManager().sendPushNotification(pushMessages, pushModifiers);
+				if(dataFetchResult != null) {
+					List<Blocks.MessageInfo> pushMessages = dataFetchResult.conversationItems.stream()
+						.filter(item -> item instanceof Blocks.MessageInfo)
+						.map(item -> (Blocks.MessageInfo) item)
+						.filter(item -> item.sender != null)
+						.collect(Collectors.toList());
+					List<Blocks.ModifierInfo> pushModifiers = dataFetchResult.isolatedModifiers.stream()
+						.filter(item -> item instanceof Blocks.TapbackModifierInfo && ((Blocks.TapbackModifierInfo) item).sender != null)
+						.collect(Collectors.toList());
+					
+					if(!pushMessages.isEmpty() || !pushModifiers.isEmpty()) {
+						ConnectionManager.getCommunicationsManager().sendPushNotification(pushMessages, pushModifiers);
+					}
 				}
 				
 				//Notifying clients of the latest message ID
