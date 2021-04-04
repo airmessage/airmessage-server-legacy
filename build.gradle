@@ -12,13 +12,13 @@ repositories {
 
 project.ext.swtVersion = "3.116.0"
 
-configurations.all {
+/* configurations.all {
     resolutionStrategy {
         dependencySubstitution {
             substitute module('org.eclipse.platform:org.eclipse.swt.${osgi.platform}') with module("org.eclipse.platform:org.eclipse.swt.cocoa.macosx.x86_64:$swtVersion")
         }
     }
-}
+} */
 
 dependencies {
     //SQLite JDBC - Database library
@@ -43,7 +43,9 @@ dependencies {
     implementation "org.java-websocket:Java-WebSocket:1.5.1"
 
     //SWT - UI library
-    implementation "org.eclipse.platform:org.eclipse.swt.cocoa.macosx.x86_64:$swtVersion"
+    //implementation "org.eclipse.platform:org.eclipse.swt.cocoa.macosx.x86_64:$swtVersion"
+
+    implementation fileTree("lib") { include "*.jar" }
 }
 
 task copyToLib(type: Copy) {
