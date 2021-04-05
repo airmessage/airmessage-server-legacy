@@ -3,7 +3,6 @@ package me.tagavari.airmessageserver.connection;
 import io.sentry.Sentry;
 import me.tagavari.airmessageserver.connection.connect.DataProxyConnect;
 import me.tagavari.airmessageserver.connection.direct.DataProxyTCP;
-import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.PreferencesManager;
 
 /**
@@ -17,7 +16,7 @@ public class ConnectionManager {
 	public static void setDataProxy(DataProxy dataProxy) {
 		ConnectionManager.dataProxy = dataProxy;
 		
-		Sentry.getContext().addTag("protocol_proxy", dataProxy.getDisplayName().toLowerCase());
+		Sentry.setTag("protocol_proxy", dataProxy.getDisplayName().toLowerCase());
 	}
 	
 	public static void assignDataProxy() {

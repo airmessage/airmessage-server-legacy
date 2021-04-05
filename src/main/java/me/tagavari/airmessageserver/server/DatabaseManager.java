@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 import java.util.zip.DeflaterInputStream;
 
 import static org.jooq.impl.DSL.*;
@@ -138,7 +139,7 @@ public class DatabaseManager {
 			resultSet.close();
 		} catch(SQLException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 		} */
 		
 		//Creating the threads
@@ -192,6 +193,7 @@ public class DatabaseManager {
 		public void run() {
 			//Creating the message array variable
 			DataFetchResult dataFetchResult;
+			boolean latestMessageIDUpdated = false;
 			
 			//Looping until the thread is interrupted
 			while(!isInterrupted()) {
@@ -211,7 +213,7 @@ public class DatabaseManager {
 									field("message.ROWID").greaterThan(latestEntryID), -1, null), null);
 					
 					//Updating the latest entry ID
-					if(dataFetchResult.latestMessageID > latestEntryID) {
+					if(latestMessageIDUpdated = dataFetchResult.latestMessageID > latestEntryID) {
 						latestEntryID = dataFetchResult.latestMessageID;
 					}
 					
@@ -219,28 +221,44 @@ public class DatabaseManager {
 					//lastCheckTime = System.currentTimeMillis();
 				} catch(IOException | NoSuchAlgorithmException | OutOfMemoryError | SQLException | RuntimeException exception) {
 					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-					Sentry.capture(exception);
+					Sentry.captureException(exception);
 					dataFetchResult = null;
 				} catch(InterruptedException exception) {
 					//Returning
 					return;
 				}
 				
-				//Checking if there are new messages
+				//Updating new message items
 				if(dataFetchResult != null && !dataFetchResult.conversationItems.isEmpty()) {
-					//Sending the data
 					ConnectionManager.getCommunicationsManager().sendMessageUpdate(dataFetchResult.conversationItems);
-					
-					//Updating the latest ID
-					ConnectionManager.getCommunicationsManager().sendIDUpdate(null, dataFetchResult.latestMessageID);
 				}
 				
 				//Updating the message states
-				try {
-					updateMessageStates(connection, dataFetchResult == null ? new ArrayList<>() : dataFetchResult.isolatedModifiers);
-				} catch(SQLException exception) {
-					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-					Sentry.capture(exception);
+				List<Blocks.ModifierInfo> newModifiers = getUnreadUpdates(connection);
+				if(dataFetchResult != null) newModifiers.addAll(dataFetchResult.isolatedModifiers);
+				if(!newModifiers.isEmpty()) {
+					ConnectionManager.getCommunicationsManager().sendModifierUpdate(null, newModifiers);
+				}
+				
+				//Sending push notifications
+				if(dataFetchResult != null) {
+					List<Blocks.MessageInfo> pushMessages = dataFetchResult.conversationItems.stream()
+						.filter(item -> item instanceof Blocks.MessageInfo)
+						.map(item -> (Blocks.MessageInfo) item)
+						.filter(item -> item.sender != null)
+						.collect(Collectors.toList());
+					List<Blocks.ModifierInfo> pushModifiers = dataFetchResult.isolatedModifiers.stream()
+						.filter(item -> item instanceof Blocks.TapbackModifierInfo && ((Blocks.TapbackModifierInfo) item).sender != null)
+						.collect(Collectors.toList());
+					
+					if(!pushMessages.isEmpty() || !pushModifiers.isEmpty()) {
+						ConnectionManager.getCommunicationsManager().sendPushNotification(pushMessages, pushModifiers);
+					}
+				}
+				
+				//Notifying clients of the latest message ID
+				if(latestMessageIDUpdated) {
+					ConnectionManager.getCommunicationsManager().sendIDUpdate(null, latestEntryID);
 				}
 				
 				{
@@ -258,7 +276,7 @@ public class DatabaseManager {
 							Main.getLogger().log(Level.FINEST, "Updated chat creation target index");
 						} catch(SQLException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-							Sentry.capture(exception);
+							Sentry.captureException(exception);
 						}
 					}
 				}
@@ -306,13 +324,14 @@ public class DatabaseManager {
 					else if(request instanceof LiteThreadRequest) fulfillLiteThreadRequest(connection, (LiteThreadRequest) request);
 					else if(request instanceof CustomRetrievalRequest) fulfillCustomRetrievalRequest(connection, (CustomRetrievalRequest) request);
 					else if(request instanceof MassRetrievalRequest) fulfillMassRetrievalRequest(connection, (MassRetrievalRequest) request);
+					else if(request instanceof ReadReceiptRequest) fulfillReadReceiptRequest(connection, (ReadReceiptRequest) request);
 				}
 			} catch(RuntimeException exception) {
 				//Logging the message
 				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 				
 				//Capturing the exception
-				Sentry.capture(exception);
+				Sentry.captureException(exception);
 			} catch(InterruptedException exception) {
 				//Logging the message
 				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
@@ -473,7 +492,7 @@ public class DatabaseManager {
 			} catch(IOException exception) {
 				//Logging the error
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-				//Sentry.capture(exception);
+				//Sentry.captureException(exception);
 				
 				//Updating the state
 				succeeded = false;
@@ -569,7 +588,7 @@ public class DatabaseManager {
 			}
 		} catch(IOException | GeneralSecurityException | SQLException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 		}
 	}
 	
@@ -585,7 +604,7 @@ public class DatabaseManager {
 			}
 		} catch(IOException | GeneralSecurityException | SQLException | OutOfMemoryError | RuntimeException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
 		}
 	}
 	
@@ -702,7 +721,7 @@ public class DatabaseManager {
 							}
 						} catch(IOException exception) {
 							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-							Sentry.capture(exception);
+							Sentry.captureException(exception);
 						}
 					}
 				}
@@ -723,7 +742,44 @@ public class DatabaseManager {
 			});
 		} catch(IOException | OutOfMemoryError | RuntimeException | SQLException | GeneralSecurityException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-			Sentry.capture(exception);
+			Sentry.captureException(exception);
+		}
+	}
+	
+	private void fulfillReadReceiptRequest(Connection connection, ReadReceiptRequest request) {
+		//Converting the request time
+		long timeSince = Main.getTimeHelper().toDatabaseTime(request.timeSince);
+		
+		//Creating the DSL context
+		DSLContext create = DSL.using(connection, SQLDialect.SQLITE);
+		
+		//Fetching the data
+		Result<Record6<Long, String, Boolean, Boolean, Boolean, Long>> results = create.select(DSL.max(field("message.ROWID", Long.class)), field("message.guid", String.class), field("message.is_sent", Boolean.class), field("message.is_delivered", Boolean.class), field("message.is_read", Boolean.class), field("message.date_read", Long.class))
+			.from(DSL.table("message"))
+			.join(DSL.table("chat_message_join")).on(field("message.ROWID").eq(field("chat_message_join.message_id")))
+			.join(DSL.table("chat")).on(field("chat_message_join.chat_id").eq(field("chat.ROWID")))
+			.where(field("message.is_from_me").isTrue()).and(or(field("message.date_delivered").greaterThan(timeSince), field("message.date_read").greaterThan(timeSince)))
+			.groupBy(field("chat.ROWID")).fetch();
+		
+		//Iterating over the results
+		List<Blocks.ModifierInfo> list = new ArrayList<>();
+		for(int i = 0; i < results.size(); i++) {
+			//Getting the result information
+			String resultGuid = results.getValue(i, field("message.guid", String.class));
+			int resultState = determineMessageState(results.getValue(i, field("message.is_sent", Boolean.class)),
+				results.getValue(i, field("message.is_delivered", Boolean.class)),
+				results.getValue(i, field("message.is_read", Boolean.class)));
+			
+			//Adding the modifier to the list
+			list.add(new Blocks.ActivityStatusModifierInfo(resultGuid, resultState, Main.getTimeHelper().toUnixTime(results.getValue(i, field("message.date_read", Long.class)))));
+			
+			//Checking if the connection is registered and is still open
+			if(request.connection.isConnected()) {
+				//Sending the conversation info
+				ConnectionManager.getCommunicationsManager().sendModifierUpdate(request.connection, list);
+			} else {
+				Main.getLogger().log(Level.INFO, "Ignoring read receipt request, connection not available");
+			}
 		}
 	}
 	
@@ -1111,48 +1167,26 @@ public class DatabaseManager {
 		return latestMessageID;
 	}
 	
-	private void updateMessageStates(Connection connection, ArrayList<Blocks.ModifierInfo> modifierList) throws SQLException {
+	private List<Blocks.ModifierInfo> getUnreadUpdates(Connection connection) {
 		//Creating the DSL context
 		DSLContext context = DSL.using(connection, SQLDialect.SQLITE);
 		
 		//Fetching the data
-		/* Result<Record8<String, Long, Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.field("message.text", String.class), DSL.field("message.date", Long.class), DSL.field("message.date", Long.class).max(), DSL.field("message.guid", String.class), DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_delivered", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.date_read", Long.class))
-				.from(DSL.table("chat"))
-				.join(DSL.table("chat_message_join")).on(DSL.field("chat.ROWID").eq(DSL.field("chat_message_join.chat_id")))
-				.join(DSL.table("message")).on(DSL.field("chat_message_join.message_id").eq(DSL.field("message.ROWID")))
-				.where(DSL.field("message.is_from_me").isTrue())
-				.groupBy(DSL.field("chat.ROWID")).fetch(); */
-		
 		Result<Record6<Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.max(field("message.ROWID", Long.class)), field("message.guid", String.class), field("message.is_sent", Boolean.class), field("message.is_delivered", Boolean.class), field("message.is_read", Boolean.class), field("message.date_read", Long.class))
-				.from(DSL.table("message"))
-				.join(DSL.table("chat_message_join")).on(field("message.ROWID").eq(field("chat_message_join.message_id")))
-				.join(DSL.table("chat")).on(field("chat_message_join.chat_id").eq(field("chat.ROWID")))
-				.where(field("message.is_from_me").isTrue())
-				.groupBy(field("chat.ROWID")).fetch();
-		
-		/* Result<Record8<String, Long, Long, String, Boolean, Boolean, Boolean, Long>> results = context.select(DSL.field("message.text", String.class), DSL.field("message.date", Long.class), DSL.field("message.date", Long.class).max(), DSL.field("message.guid", String.class), DSL.field("message.is_sent", Boolean.class), DSL.field("message.is_delivered", Boolean.class), DSL.field("message.is_read", Boolean.class), DSL.field("message.date_read", Long.class))
-				.from(DSL.table("message"))
-				.join(DSL.table("chat_message_join")).on(DSL.field("message.ROWID").eq(DSL.field("chat_message_join.message_id")))
-				.join(DSL.table("chat")).on(DSL.field("chat_message_join.chat_id").eq(DSL.field("chat.ROWID")))
-				.join(DSL.select(DSL.field("chat.ROWID", Long.class), DSL.field("message.date", Long.class).max().as("maxDate")).from(DSL.table("message"))
-						.join(DSL.table("chat_message_join")).on(DSL.field("message.ROWID").eq(DSL.field("chat_message_join.message_id")))
-						.join(DSL.table("chat")).on(DSL.field("chat_message_join.chat_id").eq(DSL.field("chat.ROWID"))).groupBy(DSL.field("chat.ROWID")).asTable("grouped")).on(DSL.field("chat.ROWID").eq(DSL.field("grouped.ROWID"))).and(DSL.field("message.date").eq(DSL.field("grouped.maxDate")))
-				//.where(DSL.field("message.is_from_me").isTrue())
-				//.groupBy(DSL.field("chat.ROWID")).fetch();
-				.fetch(); */
-		
-		//Creating the result list
-		//ArrayList<Object> modifierList = new ArrayList<>();
+			.from(DSL.table("message"))
+			.join(DSL.table("chat_message_join")).on(field("message.ROWID").eq(field("chat_message_join.message_id")))
+			.join(DSL.table("chat")).on(field("chat_message_join.chat_id").eq(field("chat.ROWID")))
+			.where(field("message.is_from_me").isTrue())
+			.groupBy(field("chat.ROWID")).fetch();
 		
 		//Iterating over the results
-		//HashMap<String, MessageState> messageStatesCache = messageStates;
-		//messageStates = new HashMap<>();
+		List<Blocks.ModifierInfo> list = new ArrayList<>();
 		for(int i = 0; i < results.size(); i++) {
 			//Getting the result information
 			String resultGuid = results.getValue(i, field("message.guid", String.class));
 			int resultState = determineMessageState(results.getValue(i, field("message.is_sent", Boolean.class)),
-					results.getValue(i, field("message.is_delivered", Boolean.class)),
-					results.getValue(i, field("message.is_read", Boolean.class)));
+				results.getValue(i, field("message.is_delivered", Boolean.class)),
+				results.getValue(i, field("message.is_read", Boolean.class)));
 			
 			//Getting the item
 			MessageState messageState;
@@ -1178,18 +1212,14 @@ public class DatabaseManager {
 				//Main.getLogger().finest("New activity status for message " + results.getValue(i, DSL.field("message.text", String.class)) + ": " + cacheState + " -> " + resultState);
 				
 				//Adding the modifier to the list
-				modifierList.add(new Blocks.ActivityStatusModifierInfo(resultGuid, resultState, Main.getTimeHelper().toUnixTime(results.getValue(i, field("message.date_read", Long.class)))));
+				list.add(new Blocks.ActivityStatusModifierInfo(resultGuid, resultState, Main.getTimeHelper().toUnixTime(results.getValue(i, field("message.date_read", Long.class)))));
 			}
 		}
 		
 		//Increasing the depth of the elements in the list, and removing them if they are deeper than 5
 		messageStates.entrySet().removeIf(stringMessageStateEntry -> ++stringMessageStateEntry.getValue().depth > 5);
 		
-		//Returning if there are no modifiers to send
-		if(modifierList.isEmpty()) return;
-
-		//Sending the data
-		ConnectionManager.getCommunicationsManager().sendModifierUpdate(null, modifierList);
+		return list;
 	}
 	
 	private void indexTargetAvailability(Connection connection) throws SQLException {

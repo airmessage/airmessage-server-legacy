@@ -736,7 +736,7 @@ public class AppleScriptManager {
 				} catch(IOException | InterruptedException | OutOfMemoryError exception) {
 					//Printing the stack trace
 					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-					Sentry.capture(exception);
+					Sentry.captureException(exception);
 					
 					//Failing the download
 					failRequest(CommConst.nstSendResultBadRequest, Constants.exceptionToString(exception));

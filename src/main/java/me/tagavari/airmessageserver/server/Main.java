@@ -1,13 +1,9 @@
 package me.tagavari.airmessageserver.server;
 
-import io.sentry.DefaultSentryClientFactory;
 import io.sentry.Sentry;
-import io.sentry.SentryClient;
-import io.sentry.context.ContextManager;
-import io.sentry.context.SingletonContextManager;
-import io.sentry.dsn.Dsn;
-import io.sentry.event.UserBuilder;
+import io.sentry.protocol.User;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
+import org.eclipse.swt.SWT;
 
 import javax.swing.*;
 import java.io.*;
@@ -67,20 +63,24 @@ public class Main {
 		//Reading the device name
 		deviceName = readDeviceName();
 		
-		if(isDebugMode()) {
+		if(isDebugMode() && false) {
 			getLogger().log(Level.INFO, "Server running in debug mode");
-			Sentry.init(null, null);
+			Sentry.init("");
 		} else {
 			//Initializing Sentry
-			SentryClient client = Sentry.init(new DefaultSentryClientFactory() {
-				@Override
-				protected ContextManager getContextManager(Dsn dsn) {
-					//Include context data on every thread
-					return new SingletonContextManager();
-				}
+			Sentry.init(options -> {
+				options.setEnableExternalConfiguration(true);
+				options.setSentryClientName("airmessage-server@" + Constants.SERVER_VERSION);
+				options.setTag("system_version", System.getProperty("os.version"));
+				options.setBeforeSend((event, hint) -> {
+					if(event.isCrashed() && event.getOriginThrowable() != null) {
+						//Log errors to disk
+						Main.getLogger().log(Level.SEVERE, "Fatal error", event.getOriginThrowable());
+					}
+					
+					return event;
+				});
 			});
-			client.setRelease("airmessage-server@" + Constants.SERVER_VERSION);
-			client.addTag("system_version", System.getProperty("os.version"));
 		}
 		
 		//Logging the startup messages
@@ -98,7 +98,11 @@ public class Main {
 		}
 		
 		//Marking the user's ID for Sentry
-		Sentry.getContext().setUser(new UserBuilder().setId(PreferencesManager.getInstallationID()).build());
+		{
+			User user = new User();
+			user.setId(PreferencesManager.getInstallationID());
+			Sentry.setUser(user);
+		}
 		
 		//Initializing the UI helper
 		UIHelper.initialize();

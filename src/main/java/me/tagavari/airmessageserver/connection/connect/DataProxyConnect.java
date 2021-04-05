@@ -1,6 +1,8 @@
 package me.tagavari.airmessageserver.connection.connect;
 
 import io.sentry.Sentry;
+import me.tagavari.airmessageserver.connection.CommConst;
+import me.tagavari.airmessageserver.connection.CommunicationsManager;
 import me.tagavari.airmessageserver.connection.DataProxy;
 import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.ServerState;
@@ -129,9 +131,14 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	}
 	
 	@Override
-	public void sendPushNotification() {
-		ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
+	public void sendPushNotification(int version, byte[] payload) {
+		ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES * 5 + payload.length);
 		byteBuffer.putInt(NHT.nhtServerNotifyPush);
+		byteBuffer.putInt(version);
+		byteBuffer.putInt(2);
+		byteBuffer.putInt(CommConst.mmCommunicationsVersion);
+		byteBuffer.putInt(CommConst.mmCommunicationsSubVersion);
+		byteBuffer.put(payload);
 		
 		connectClient.sendSafe(byteBuffer.array());
 	}
