@@ -208,3 +208,6 @@ gradle-app.setting
 # AirMessage build files
 AirMessage.app
 AirMessage.zip
+
+# Generated resource files
+src/main/resources/connectsite/

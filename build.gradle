@@ -48,6 +48,17 @@ dependencies {
     implementation fileTree("lib") { include "*.jar" }
 }
 
+task installConnectAuth(type: Exec) {
+    workingDir "connectauth"
+    commandLine "npm", "install"
+}
+
+task buildConnectAuth(type: Exec) {
+    dependsOn installConnectAuth
+    workingDir "connectauth"
+    commandLine "npm", "run", "build"
+}
+
 task copyToLib(type: Copy) {
     from configurations.default
     into jar.destinationDirectory.asFile.get()

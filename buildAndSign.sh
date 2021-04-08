@@ -13,6 +13,18 @@ PACKAGE_FILE="$OUTPUT_DIR/server-v$VERSION.zip"
 
 echo "Preparing AirMessage Server v$VERSION"
 
+#Build webpack
+npm install --prefix connectauth
+npm run build --prefix connectauth
+
+if [ -d "src/main/resources/connectsite" ]
+then
+    rm -rf src/main/resources/connectsite/*
+else
+    mkdir src/main/resources/connectsite
+fi
+cp -r connectauth/build/* src/main/resources/connectsite
+
 #Clean up old files
 ./gradlew clean
 

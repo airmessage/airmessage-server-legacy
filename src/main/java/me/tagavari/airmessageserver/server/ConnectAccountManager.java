@@ -10,8 +10,12 @@ import org.eclipse.swt.browser.Browser;
 import org.eclipse.swt.browser.BrowserFunction;
 import org.eclipse.swt.events.ShellAdapter;
 import org.eclipse.swt.events.ShellEvent;
-import org.eclipse.swt.layout.*;
-import org.eclipse.swt.widgets.*;
+import org.eclipse.swt.layout.GridData;
+import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.ProgressBar;
+import org.eclipse.swt.widgets.Shell;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -54,6 +58,7 @@ public class ConnectAccountManager {
 			
 			new AccountFunctionCallback(browser, "accountFunctionCallback", parentShell);
 			new AccountFunctionErrorCallback(browser, "accountFunctionErrorCallback", parentShell);
+			new LogFunction(browser, "javaLog");
 			
 			GridData browserNotesGD = new GridData();
 			browserNotesGD.grabExcessHorizontalSpace = browserNotesGD.grabExcessVerticalSpace = true;
@@ -176,16 +181,23 @@ public class ConnectAccountManager {
 				//Just send file contents to the client
 				String path = exchange.getRequestURI().toString();
 				String resource = path.equals("/") ? "/index.html" : path;
-				InputStream inputStream = ConnectAccountManager.class.getClassLoader().getResourceAsStream("connectsite" + resource);
-				if(inputStream == null) {
-					//404 not found
-					exchange.sendResponseHeaders(404, -1);
-				} else {
-					//200 OK
-					exchange.sendResponseHeaders(200, 0);
-					
-					try(inputStream; OutputStream outputStream = exchange.getResponseBody()) {
-						inputStream.transferTo(outputStream);
+				
+				try(InputStream inputStream = ConnectAccountManager.class.getClassLoader().getResourceAsStream("connectsite" + resource)) {
+					if(inputStream == null) {
+						//404 not found
+						exchange.sendResponseHeaders(404, -1);
+					} else {
+						if(resource.endsWith(".html")) exchange.getResponseHeaders().set("Content-Type", "text/html");
+						else if(resource.endsWith(".png")) exchange.getResponseHeaders().set("Content-Type", "image/png");
+						else if(resource.endsWith(".css")) exchange.getResponseHeaders().set("Content-Type", "text/css");
+						else if(resource.endsWith(".js")) exchange.getResponseHeaders().set("Content-Type", "text/javascript");
+						
+						//200 OK
+						exchange.sendResponseHeaders(200, inputStream.available());
+						
+						try(OutputStream outputStream = exchange.getResponseBody()) {
+							inputStream.transferTo(outputStream);
+						}
 					}
 				}
 			} catch(IOException exception) {
@@ -284,6 +296,19 @@ public class ConnectAccountManager {
 			String errorName = (String) arguments[0];
 			String errorMessage = (String) arguments[1];
 			handleAccountError(errorName, errorMessage, parentShell);
+			return null;
+		}
+	}
+	
+	private static class LogFunction extends BrowserFunction {
+		public LogFunction(Browser browser, String name) {
+			super(browser, name);
+		}
+		
+		@Override
+		public Object function(Object[] arguments) {
+			String errorMessage = (String) arguments[0];
+			Main.getLogger().log(Level.INFO, errorMessage);
 			return null;
 		}
 	}
