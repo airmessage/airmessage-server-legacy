@@ -1,6 +1,6 @@
 SIGNATURE=$1 # Apple signing ID: "Developer ID Application: Developer Name (DUCNFCN445)"
 NOTARIZATION_USERNAME=$2 # Apple ID username: "developer@example.com"
-NOTARIZATION_PASSKEY=$3 # Apple ID password Keychain listing: "AC_PASSWORD"
+NOTARIZATION_PASSWORD=$3 # Apple ID password Keychain listing: "AC_PASSWORD"
 NOTARIZATION_PROVIDER=$4 # Team provider short name: "4RYZSDG57V"
 
 JAVA_HOME=$(/usr/libexec/java_home -v 15)
@@ -94,7 +94,7 @@ else
 fi
 
 #Package app to ZIP
-if [ -z "$NOTARIZATION_PASSKEY" ]
+if [ -z "$NOTARIZATION_PASSWORD" ]
 then
 	echo "Compressing app for development"
 else
@@ -102,7 +102,7 @@ else
 fi
 ditto -c -k --keepParent "$APP_FILE" "$PACKAGE_FILE"
 
-if [ -z "$NOTARIZATION_PASSKEY" ]
+if [ -z "$NOTARIZATION_PASSWORD" ]
 then
 	echo "Skipping notarization"
 	echo "Successfully built AirMessage Server v$VERSION for development"
@@ -112,7 +112,7 @@ else
 	REQUEST_UUID=$(xcrun altool --notarize-app \
 		--primary-bundle-id "me.tagavari.airmessageserver" \
 		--username "$NOTARIZATION_USERNAME" \
-		--password "@keychain:$NOTARIZATION_PASSKEY" \
+		--password "$NOTARIZATION_PASSWORD" \
 		--asc-provider "$NOTARIZATION_PROVIDER" \
 		--file "$PACKAGE_FILE" \
 		| grep RequestUUID | awk '{print $3}')
@@ -121,7 +121,7 @@ else
 	#Wait for notarization to finish
 	echo "Waiting for completion of notarization request $REQUEST_UUID"
 	while true; do
-		NOTARIZATION_STATUS=$(xcrun altool --notarization-info "$REQUEST_UUID" --username "$NOTARIZATION_USERNAME" --password "@keychain:$NOTARIZATION_PASSKEY")
+		NOTARIZATION_STATUS=$(xcrun altool --notarization-info "$REQUEST_UUID" --username "$NOTARIZATION_USERNAME" --password "$NOTARIZATION_PASSWORD")
 		if echo "$NOTARIZATION_STATUS" | grep -q "Status: in progress"; then sleep 20
 		elif echo "$NOTARIZATION_STATUS" | grep -q "Status: success"; then break
 		else
