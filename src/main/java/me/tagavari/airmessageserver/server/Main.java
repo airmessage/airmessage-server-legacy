@@ -3,7 +3,6 @@ package me.tagavari.airmessageserver.server;
 import io.sentry.Sentry;
 import io.sentry.protocol.User;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
-import org.eclipse.swt.SWT;
 
 import javax.swing.*;
 import java.io.*;
@@ -63,7 +62,7 @@ public class Main {
 		//Reading the device name
 		deviceName = readDeviceName();
 		
-		if(isDebugMode() && false) {
+		if(isDebugMode()) {
 			getLogger().log(Level.INFO, "Server running in debug mode");
 			Sentry.init("");
 		} else {
@@ -88,6 +87,9 @@ public class Main {
 		
 		//Returning if the system is not valid
 		if(!runSystemCheck()) return;
+		
+		//Initializing properties
+		PropertiesManager.initializeProperties();
 		
 		//Preparing the preferences
 		{

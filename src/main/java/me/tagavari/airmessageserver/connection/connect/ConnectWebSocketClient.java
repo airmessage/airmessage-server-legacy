@@ -3,6 +3,7 @@ package me.tagavari.airmessageserver.connection.connect;
 import io.sentry.Sentry;
 import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.PreferencesManager;
+import me.tagavari.airmessageserver.server.PropertiesManager;
 import org.java_websocket.WebSocket;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.drafts.Draft_6455;
@@ -22,8 +23,6 @@ import java.util.logging.Level;
 
 class ConnectWebSocketClient extends WebSocketClient {
 	//Creating the constants
-	private static final String connectHostname = "wss://connect.airmessage.org";
-	//private static final String connectHostname = "ws://localhost:1259";
 	private static final int connectTimeout = 8 * 1000; //8 seconds
 	
 	//Creating the callbacks
@@ -41,7 +40,7 @@ class ConnectWebSocketClient extends WebSocketClient {
 				.toString();
 		
 		try {
-			return new ConnectWebSocketClient(new URI(connectHostname + "?" + query), headers, connectTimeout, connectionListener);
+			return new ConnectWebSocketClient(new URI(PropertiesManager.getConnectEndpoint() + "?" + query), headers, connectTimeout, connectionListener);
 		} catch(URISyntaxException exception) {
 			Sentry.captureException(exception);
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
@@ -61,7 +60,7 @@ class ConnectWebSocketClient extends WebSocketClient {
 				.toString();
 		
 		try {
-			return new ConnectWebSocketClient(new URI(connectHostname + "?" + query), headers, connectTimeout, connectionListener);
+			return new ConnectWebSocketClient(new URI(PropertiesManager.getConnectEndpoint() + "?" + query), headers, connectTimeout, connectionListener);
 		} catch(URISyntaxException exception) {
 			Sentry.captureException(exception);
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);

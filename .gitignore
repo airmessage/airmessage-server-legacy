@@ -205,6 +205,10 @@ gradle-app.setting
 
 # End of https://www.gitignore.io/api/java,linux,macos,gradle,windows,intellij
 
+# Secret properties
+src/main/resources/secrets.properties
+src/main/resources/sentry.properties
+
 # AirMessage build files
 AirMessage.app
 AirMessage.zip
