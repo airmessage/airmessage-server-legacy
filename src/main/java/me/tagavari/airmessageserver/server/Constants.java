@@ -14,8 +14,8 @@ import java.util.zip.GZIPOutputStream;
 
 public class Constants {
 	//Creating the version values
-	public static final String SERVER_VERSION = "3.1";
-	public static final int SERVER_VERSION_CODE = 18;
+	public static final String SERVER_VERSION = "3.2";
+	public static final int SERVER_VERSION_CODE = 19;
 	
 	//Creating the file values
 	static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
