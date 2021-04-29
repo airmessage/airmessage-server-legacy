@@ -30,7 +30,7 @@ Please note that the authentication screen for signing in to AirMessage Connect 
 To create a signed app, run `buildAndSign.sh [signing identity] [account username] [account password] [team short name]`.
 
 The command requires 4 arguments in order to be able to properly codesign and notarize the app:
-- `[signing identity]`: Used with the [`codesign`][codesign] command. Run `security find-identity -v -p codesigning` to list codesign identities. Provide the short 10-character signing identity ID, like `DUCNFCN445`.
+- `[signing identity]`: Used with the [`codesign`][codesign] command. Run `security find-identity -v -p codesigning` to list codesign identities. Provide the full string value of the identity, like `Developer ID Application: John Doe (DUCNFCN445)`.
 - `[account username]`: Used with [`altool`][altool]. The email address of an Apple ID with access to App Store Connect.
 - `[account password]`: Used with [`altool`][altool]. An [app-specific password](https://support.apple.com/en-us/HT204397) for the Apple ID.
   Either the name of the Keychain entry of the password in the format of `@keychain:ENTRY_NAME`, or in plaintext (not recommended).
