@@ -115,7 +115,8 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	@Override
 	public void sendMessage(ClientSocket client, byte[] content, boolean encrypt, Runnable sentRunnable) {
 		//Encrypting the content if requested and a password is set
-		boolean isEncrypted = encrypt && !PreferencesManager.getPrefPassword().isBlank();
+		boolean supportsEncryption = !PreferencesManager.getPrefPassword().isBlank();
+		boolean isEncrypted = encrypt && supportsEncryption;
 		if(isEncrypted) {
 			try {
 				content = EncryptionHelper.encrypt(content);
@@ -136,7 +137,9 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 			byteBuffer.putInt(NHT.nhtServerProxy);
 			byteBuffer.putInt(client.getConnectionID());
 		}
-		byteBuffer.put(isEncrypted ? (byte) -100 : (byte) -101);
+		if(isEncrypted) byteBuffer.put((byte) -100); //The content is encrypted
+		else if(supportsEncryption) byteBuffer.put((byte) -101); //We support encryption, but this packet should not be encrypted
+		else byteBuffer.put((byte) -102); //We don't support encryption
 		byteBuffer.put(content);
 		
 		//Sending the data
