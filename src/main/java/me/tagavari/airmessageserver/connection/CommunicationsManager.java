@@ -5,6 +5,7 @@ import io.sentry.Sentry;
 import me.tagavari.airmessageserver.common.AirPacker;
 import me.tagavari.airmessageserver.common.AirUnpacker;
 import me.tagavari.airmessageserver.common.Blocks;
+import me.tagavari.airmessageserver.exception.LargeAllocationException;
 import me.tagavari.airmessageserver.request.*;
 import me.tagavari.airmessageserver.server.*;
 import org.eclipse.swt.widgets.Display;
@@ -216,12 +217,12 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 			
 			if(wasEncrypted) processMessageSecure(client, messageType, unpacker);
 			else processMessageInsecure(client, messageType, unpacker);
-		} catch(BufferUnderflowException exception) {
+		} catch(BufferUnderflowException | LargeAllocationException exception) {
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 		}
 	}
 	
-	private boolean processMessageInsecure(ClientRegistration client, int messageType, AirUnpacker unpacker) throws BufferUnderflowException {
+	private boolean processMessageInsecure(ClientRegistration client, int messageType, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Responding to standard requests
 		switch(messageType) {
 			case CommConst.nhtClose -> dataProxy.disconnectClient(client);
@@ -235,7 +236,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		return true;
 	}
 	
-	private boolean processMessageSecure(ClientRegistration client, int messageType, AirUnpacker unpacker) throws BufferUnderflowException {
+	private boolean processMessageSecure(ClientRegistration client, int messageType, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		if(processMessageInsecure(client, messageType, unpacker)) return true;
 		
 		//The client can't perform any sensitive tasks unless they are authenticated
@@ -264,7 +265,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		return true;
 	}
 	
-	private void handleMessageAuthentication(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+	private void handleMessageAuthentication(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Stopping the registration timer
 		client.cancelHandshakeExpiryTimer();
 		
@@ -295,7 +296,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 				}
 				
 				return;
-			} catch(BufferOverflowException exception) {
+			} catch(BufferOverflowException | LargeAllocationException exception) {
 				//Logging the exception
 				Main.getLogger().log(Level.INFO, exception.getMessage(), exception);
 				
@@ -387,7 +388,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		DatabaseManager.getInstance().addClientRequest(new ReadReceiptRequest(client, timeLower));
 	}
 	
-	private void handleMessageMassRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+	private void handleMessageMassRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Reading the request data
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		
@@ -422,7 +423,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		DatabaseManager.getInstance().addClientRequest(new MassRetrievalRequest(client, requestID, restrictMessages, timeSinceMessages, downloadAttachments, restrictAttachmentsDate, timeSinceAttachments, restrictAttachmentsSize, attachmentsSizeLimit, attachmentFilterWhitelist, attachmentFilterBlacklist, attachmentFilterDLOther));
 	}
 	
-	private void handleMessageConversationUpdate(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+	private void handleMessageConversationUpdate(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Reading the chat GUID list
 		String[] chatGUIDs = new String[unpacker.unpackArrayHeader()];
 		for(int i = 0; i < chatGUIDs.length; i++) chatGUIDs[i] = unpacker.unpackString();
@@ -431,7 +432,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		DatabaseManager.getInstance().addClientRequest(new ConversationInfoRequest(client, chatGUIDs));
 	}
 	
-	private void handleMessageAttachmentRequest(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+	private void handleMessageAttachmentRequest(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		int chunkSize = unpacker.unpackInt(); //How many bytes to upload per packet
@@ -454,7 +455,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		DatabaseManager.getInstance().addClientRequest(new LiteConversationRequest(client));
 	}
 	
-	private void handleMessageLiteThreadRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+	private void handleMessageLiteThreadRetrieval(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Reading the request information
 		String conversationGUID = unpacker.unpackString();
 		long firstMessageID = unpacker.unpackBoolean() ? unpacker.unpackLong() : -1;
@@ -463,7 +464,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		DatabaseManager.getInstance().addClientRequest(new LiteThreadRequest(client, conversationGUID, firstMessageID));
 	}
 	
-	private void handleMessageCreateChat(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+	private void handleMessageCreateChat(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		String[] chatMembers = new String[unpacker.unpackArrayHeader()]; //The members of this conversation
@@ -477,7 +478,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		sendMessageRequestResponse(client, CommConst.nhtCreateChat, requestID, result.item1, result.item2);
 	}
 	
-	private void handleMessageSendTextExisting(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+	private void handleMessageSendTextExisting(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		String chatGUID = unpacker.unpackString(); //The GUID of the chat to send a message to
@@ -490,7 +491,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		sendMessageRequestResponse(client, CommConst.nhtSendResult, requestID, result.item1, result.item2);
 	}
 	
-	private void handleMessageSendTextNew(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+	private void handleMessageSendTextNew(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		String[] members = new String[unpacker.unpackArrayHeader()]; //The members of the chat to send the message to
@@ -505,7 +506,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		sendMessageRequestResponse(client, CommConst.nhtSendResult, requestID, result.item1, result.item2);
 	}
 	
-	private void handleMessageSendFileExisting(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+	private void handleMessageSendFileExisting(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		int requestIndex = unpacker.unpackInt(); //The index of this request, to ensure that packets are received and written in order
@@ -518,7 +519,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		AppleScriptManager.addFileFragment(client, requestID, chatGUID, fileName, requestIndex, compressedBytes, isLast);
 	}
 	
-	private void handleMessageSendFileNew(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException {
+	private void handleMessageSendFileNew(ClientRegistration client, AirUnpacker unpacker) throws BufferUnderflowException, LargeAllocationException {
 		//Reading the request information
 		short requestID = unpacker.unpackShort(); //The request ID to avoid collisions
 		int requestIndex = unpacker.unpackInt(); //The index of this request, to ensure that packets are received and written in order

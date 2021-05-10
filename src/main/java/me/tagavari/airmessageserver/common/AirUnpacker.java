@@ -1,5 +1,8 @@
 package me.tagavari.airmessageserver.common;
 
+import me.tagavari.airmessageserver.connection.CommConst;
+import me.tagavari.airmessageserver.exception.LargeAllocationException;
+
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -39,11 +42,11 @@ public class AirUnpacker {
 		return byteBuffer.getDouble();
 	}
 	
-	public String unpackString() throws BufferUnderflowException {
+	public String unpackString() throws BufferUnderflowException, LargeAllocationException {
 		return new String(unpackPayload(), StandardCharsets.UTF_8);
 	}
 	
-	public String unpackNullableString() throws BufferUnderflowException {
+	public String unpackNullableString() throws BufferUnderflowException, LargeAllocationException {
 		if(unpackBoolean()) {
 			return unpackString();
 		} else {
@@ -51,14 +54,17 @@ public class AirUnpacker {
 		}
 	}
 	
-	public byte[] unpackPayload() throws BufferUnderflowException {
+	public byte[] unpackPayload() throws BufferUnderflowException, LargeAllocationException {
 		int length = unpackInt();
+		if(length >= CommConst.maxPacketAllocation) {
+			throw new LargeAllocationException(length, CommConst.maxPacketAllocation);
+		}
 		byte[] data = new byte[length];
 		byteBuffer.get(data);
 		return data;
 	}
 	
-	public byte[] unpackNullablePayload() throws BufferUnderflowException {
+	public byte[] unpackNullablePayload() throws BufferUnderflowException, LargeAllocationException {
 		if(unpackBoolean()) {
 			return unpackPayload();
 		} else {
