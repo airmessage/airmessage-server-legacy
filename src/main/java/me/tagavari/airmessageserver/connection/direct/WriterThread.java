@@ -1,6 +1,7 @@
 package me.tagavari.airmessageserver.connection.direct;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -20,9 +21,11 @@ class WriterThread extends Thread {
 			while(!isInterrupted()) {
 				PacketStruct packet = uploadQueue.take();
 				if(packet.target == null) {
-					for(ClientSocket client : clientList) {
-						if(!client.isClientRegistered()) continue;
-						client.sendDataSync(packet.content, packet.isEncrypted);
+					synchronized(clientList) {
+						for(ClientSocket client : clientList) {
+							if(!client.isClientRegistered()) continue;
+							client.sendDataSync(packet.content, packet.isEncrypted);
+						}
 					}
 				} else {
 					packet.target.sendDataSync(packet.content, packet.isEncrypted);
