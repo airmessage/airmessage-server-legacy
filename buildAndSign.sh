@@ -3,7 +3,6 @@ NOTARIZATION_USERNAME=$2 # Apple ID username: "developer@example.com"
 NOTARIZATION_PASSWORD=$3 # Apple ID password Keychain listing: "AC_PASSWORD"
 NOTARIZATION_PROVIDER=$4 # Team provider short name: "4RYZSDG57V"
 
-JAVA_HOME=$(/usr/libexec/java_home -v 15)
 VERSION=$(./gradlew -q printVersionName)
 
 JDEPS="java.base,java.desktop,java.logging,java.sql,java.xml,java.datatransfer,java.compiler,jdk.unsupported,java.naming,jdk.crypto.ec,jdk.httpserver"
