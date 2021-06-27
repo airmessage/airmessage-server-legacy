@@ -45,7 +45,11 @@ dependencies {
     //SWT - UI library
     //implementation "org.eclipse.platform:org.eclipse.swt.cocoa.macosx.x86_64:$swtVersion"
 
-    implementation fileTree("lib") { include "*.jar" }
+    if(System.getProperty("os.arch") == "aarch64") {
+        implementation fileTree("lib-applesilicon") { include "*.jar" }
+    } else {
+        implementation fileTree("lib-intel") { include "*.jar" }
+    }
 }
 
 task installConnectAuth(type: Exec) {
