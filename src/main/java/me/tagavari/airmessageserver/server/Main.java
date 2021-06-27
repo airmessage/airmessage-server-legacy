@@ -72,9 +72,9 @@ public class Main {
 				options.setSentryClientName("airmessage-server@" + Constants.SERVER_VERSION);
 				options.setTag("system_version", System.getProperty("os.version"));
 				options.setBeforeSend((event, hint) -> {
-					if(event.isCrashed() && event.getOriginThrowable() != null) {
+					if(event.isCrashed() && event.getThrowable() != null) {
 						//Log errors to disk
-						Main.getLogger().log(Level.SEVERE, "Fatal error", event.getOriginThrowable());
+						Main.getLogger().log(Level.SEVERE, "Fatal error", event.getThrowable());
 					}
 					
 					return event;

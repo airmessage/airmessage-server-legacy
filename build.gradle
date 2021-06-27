@@ -10,25 +10,15 @@ repositories {
     mavenCentral()
 }
 
-project.ext.swtVersion = "3.116.0"
-
-/* configurations.all {
-    resolutionStrategy {
-        dependencySubstitution {
-            substitute module('org.eclipse.platform:org.eclipse.swt.${osgi.platform}') with module("org.eclipse.platform:org.eclipse.swt.cocoa.macosx.x86_64:$swtVersion")
-        }
-    }
-} */
-
 dependencies {
     //SQLite JDBC - Database library
-    implementation "org.xerial:sqlite-jdbc:3.34.0"
+    implementation "org.xerial:sqlite-jdbc:3.36.0"
 
     //jOOQ - Database library
-    implementation "org.jooq:jooq:3.14.8"
+    implementation "org.jooq:jooq:3.14.11"
 
     //Sentry - Crash reporting library
-    implementation "io.sentry:sentry:4.3.0"
+    implementation "io.sentry:sentry:5.0.1"
 
     //SLF4J - Logging library
     //implementation "org.slf4j:slf4j-nop:1.7.30"
@@ -37,13 +27,10 @@ dependencies {
     implementation "org.json:json:20210307"
 
     //Commonmark Java - Markdown parser
-    implementation "org.commonmark:commonmark:0.17.1"
+    implementation "org.commonmark:commonmark:0.17.2"
 
     //JavaWebsocket - WebSocket library
-    implementation "org.java-websocket:Java-WebSocket:1.5.1"
-
-    //SWT - UI library
-    //implementation "org.eclipse.platform:org.eclipse.swt.cocoa.macosx.x86_64:$swtVersion"
+    implementation "org.java-websocket:Java-WebSocket:1.5.2"
 
     if(System.getProperty("os.arch") == "aarch64") {
         implementation fileTree("lib-applesilicon") { include "*.jar" }
