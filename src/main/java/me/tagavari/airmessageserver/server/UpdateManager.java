@@ -38,8 +38,8 @@ import java.util.zip.ZipInputStream;
 class UpdateManager {
 	//Creating the reference values
 	private static final String updateBaseURL = "https://airmessage.org";
-	private static final URL stableUpdateURL = makeURL(updateBaseURL + "/update/server/1");
-	private static final URL betaUpdateURL = makeURL(updateBaseURL + "/update/server-beta/1");
+	private static final URL stableUpdateURL = makeURL(new File("/Users/cole/Downloads/update.json"));//makeURL(updateBaseURL + "/update/server/2.json");
+	private static final URL betaUpdateURL = makeURL(updateBaseURL + "/update/server-beta/2.json");
 	
 	//Creating the state values
 	private static final AtomicBoolean updateCheckInProgress = new AtomicBoolean(false);
@@ -77,25 +77,16 @@ class UpdateManager {
 			}
 			
 			try {
-				//Finding the first valid release
-				JSONObject jLatestRelease = null;
-				JSONArray jArrayReleases = jRoot.getJSONArray("releases");
-				for(int i = 0; i < jArrayReleases.length(); i++) {
-					JSONObject jRelease = jArrayReleases.getJSONObject(i);
-					if(Constants.compareVersions(Constants.getSystemVersion(), Constants.parseVersionString(jRelease.getString("os_version_requirement"))) < 0) continue;
-					jLatestRelease = jRelease;
-					break;
-				}
-				
-				//Returning if no release was found, or no upgrade is needed
-				if(jLatestRelease == null || jLatestRelease.getInt("version_code") <= Constants.SERVER_VERSION_CODE) {
+				//Returning if the release is incompatible, or no upgrade is needed
+				if(Constants.compareVersions(Constants.getSystemVersion(), Constants.parseVersionString(jRoot.getString("osRequirement"))) < 0 ||
+				   jRoot.getInt("versionCode") <= Constants.SERVER_VERSION_CODE) {
 					shouldShowNoUpdateWindow = true;
 					return;
 				}
 				
 				//Fetching the locales of the release notes
 				HashMap<Locale, String> releaseNotes = new HashMap<>(); //Locale, message
-				JSONArray jArrayNotes = jLatestRelease.getJSONArray("notes");
+				JSONArray jArrayNotes = jRoot.getJSONArray("notes");
 				for(int j = 0; j < jArrayNotes.length(); j++) {
 					JSONObject jNotes = jArrayNotes.getJSONObject(j);
 					releaseNotes.put(Locale.forLanguageTag(jNotes.getString("lang")), jNotes.getString("message"));
@@ -103,26 +94,32 @@ class UpdateManager {
 				
 				//Compiling the system locales into a language range list
 				List<Locale.LanguageRange> languageRangeList = new ArrayList<>();
-				//for(Locale locale : Locale.getAvailableLocales()) languageRangeList.add(new Locale.LanguageRange(locale.toLanguageTag()));
 				languageRangeList.add(new Locale.LanguageRange(Locale.getDefault().toLanguageTag()));
 				languageRangeList.add(new Locale.LanguageRange(Locale.ENGLISH.toLanguageTag()));
 				
 				//Finding a target locale
 				Locale targetLocale = Locale.lookup(languageRangeList, releaseNotes.keySet());
-				/*List<Locale> filterResults = Locale.filter(languageRangeList, releaseNotes.keySet());
-				if(!filterResults.isEmpty()) targetLocale = filterResults.get(0);
-				else targetLocale = Locale.lookup(languageRangeList, releaseNotes.keySet());*/
 				if(targetLocale == null) throw new JSONException("Empty release notes language");
 				
 				//Getting the release information
-				final String relVerName = jLatestRelease.getString("version_name");
-				final String relTargetLink = jLatestRelease.getString("download-url");
+				final String relVerName = jRoot.getString("versionName");
+				final String relURLIntel = jRoot.getString("urlIntel");
+				final String relURLAppleSilicon = jRoot.has("urlAppleSilicon") ? jRoot.getString("urlAppleSilicon") : null;
 				String relMessage = new String(Base64.getDecoder().decode(releaseNotes.get(targetLocale)));
 				final String relMessageHTML = HtmlRenderer.builder().build().render(Parser.builder().build().parse(relMessage));
-				final boolean relExternalDownload = "true".equals(jLatestRelease.getString("download-ext"));
+				final boolean relExternalDownload = jRoot.getBoolean("externalDownload");
+				
+				String downloadURL;
+				if(Main.isAppleSilicon()) {
+					//Try to download an Apple Silicon-optimized version, fall back to default version
+					if(relURLAppleSilicon != null) downloadURL = relURLAppleSilicon;
+					else downloadURL = relURLIntel;
+				} else {
+					downloadURL = relURLIntel;
+				}
 				
 				//Showing the update window
-				UIHelper.getDisplay().asyncExec(() -> openUpdateWindow(relVerName, relMessageHTML, relTargetLink, relExternalDownload));
+				UIHelper.getDisplay().asyncExec(() -> openUpdateWindow(relVerName, relMessageHTML, downloadURL, relExternalDownload));
 			} catch(Exception exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.captureException(exception);
@@ -580,70 +577,18 @@ class UpdateManager {
 			return;
 		}
 		
-		//Getting the app install location
-		URL jarURL = Main.class.getProtectionDomain().getCodeSource().getLocation();
-		File jarFile = null;
-		try {
-			if("file".equals(jarURL.getProtocol())) jarFile = new File(jarURL.toURI());
-		} catch(URISyntaxException exception) {
-			Main.getLogger().log(Level.WARNING, "Couldn't find program JAR location / " + exception.getMessage(), exception);
-		}
-		
-		//The JAR file was loaded from a network location or something?
-		if(jarFile == null) {
-			//Updating the state
-			updateInstallationInProgress.set(false);
-			
-			//Displaying an error
-			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.install_location")));
-			
-			return;
-		}
-		
-		//Finding the app directory
-		File appDir = jarFile;
-		do {
-			appDir = appDir.getParentFile();
-		} while(appDir != null && !appDir.getName().endsWith(".app"));
-		
-		if(appDir == null) {
-			//Updating the state
-			updateInstallationInProgress.set(false);
-			
-			//Displaying an error
-			UIHelper.getDisplay().asyncExec(() -> UIHelper.displayAlertDialog(Main.resources().getString("message.error.update.install_format")));
-			
-			return;
-		}
-		
 		//Kicking off the installer process
 		try {
-			final String pathInstalled = appDir.getCanonicalPath(); //The path of the currently installed copy of AirMessage
-			File installedParent = appDir.getParentFile();
-			final String pathInstalledParent = installedParent != null ? installedParent.getCanonicalPath() : "/"; //The parent directory of the currently installed copy of AirMessage
 			final String pathUpdate = topZipFile.getCanonicalPath(); //The path of the copy of AirMessage to install
-			final String pathUpdateParent = Constants.updateDir.getCanonicalPath();
 			
 			Main.getLogger().log(Level.INFO, "Starting installer process");
-			Main.getLogger().log(Level.INFO, "Installed path: " + pathInstalled);
-			Main.getLogger().log(Level.INFO, "Installed parent path: " + pathInstalledParent);
 			Main.getLogger().log(Level.INFO, "Update path: " + pathUpdate);
-			Main.getLogger().log(Level.INFO, "Update parent path: " + pathUpdateParent);
 			
-			String command = String.join(" ",
-					"sleep", "2", //Wait for AirMessage to exit
-					"&&",
-					"rm", "-r", "\"" + pathInstalled + "\"", //Delete this AirMessage installation
-					"&&",
-					"mv", "\"" + pathUpdate + "\"", "\"" + pathInstalledParent + "\"", //Move the new AirMessage installation to the app directory
-					"&&",
-					"open", "\"" + pathInstalled + "\"", //Open the new app
-					"&&",
-					"rm", "-r", "\"" + pathUpdateParent + "\"" //Clean up the update directory
-			);
+			String script = new String(Main.class.getClassLoader().getResourceAsStream("installUpdate.sh").readAllBytes());
 			
 			ProcessBuilder processBuilder = new ProcessBuilder();
-			processBuilder.command("sh", "-c", command);
+			processBuilder.command("sh", "-c", script, "install", pathUpdate);
+			processBuilder.redirectOutput(new File(System.getProperty("user.home") + "/Downloads/log.txt"));
 			processBuilder.start();
 		} catch(IOException exception) {
 			//Logging the error

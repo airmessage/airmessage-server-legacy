@@ -26,6 +26,7 @@ public class Main {
 	private static TimeHelper timeHelper;
 	private static Logger logger;
 	private static String deviceName;
+	private static boolean isAppleSilicon;
 	
 	private static boolean isSetupMode;
 	private static ServerState serverState = ServerState.SETUP;
@@ -60,7 +61,8 @@ public class Main {
 		}
 		
 		//Reading the device name
-		deviceName = readDeviceName();
+		deviceName = SystemAccess.readDeviceName();
+		isAppleSilicon = SystemAccess.isProcessTranslated() || "arm".equals(SystemAccess.readProcessorArchitecture());
 		
 		if(isDebugMode()) {
 			getLogger().log(Level.INFO, "Server running in debug mode");
@@ -311,30 +313,11 @@ public class Main {
 		return ResourceBundle.getBundle("me.tagavari.airmessageserver.server.Translations");
 	}
 	
-	private static String readDeviceName() {
-		try {
-			Process process = Runtime.getRuntime().exec(new String[]{"scutil", "--get", "ComputerName"});
-			
-			if(process.waitFor() == 0) {
-				//Reading and returning the input
-				BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
-				return in.lines().collect(Collectors.joining());
-			} else {
-				//Logging the error
-				try(BufferedReader in = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-					String errorOutput = in.lines().collect(Collectors.joining());
-					Main.getLogger().log(Level.WARNING, "Unable to read device name: " + errorOutput);
-				}
-			}
-		} catch(IOException | InterruptedException exception) {
-			//Printing the stack trace
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-		}
-		
-		return null;
-	}
-	
 	public static String getDeviceName() {
 		return deviceName;
+	}
+	
+	public static boolean isAppleSilicon() {
+		return isAppleSilicon;
 	}
 }
