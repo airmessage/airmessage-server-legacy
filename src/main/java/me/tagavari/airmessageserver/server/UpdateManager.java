@@ -38,7 +38,7 @@ import java.util.zip.ZipInputStream;
 class UpdateManager {
 	//Creating the reference values
 	private static final String updateBaseURL = "https://airmessage.org";
-	private static final URL stableUpdateURL = makeURL(new File("/Users/cole/Downloads/update.json"));//makeURL(updateBaseURL + "/update/server/2.json");
+	private static final URL stableUpdateURL = makeURL(updateBaseURL + "/update/server/2.json");
 	private static final URL betaUpdateURL = makeURL(updateBaseURL + "/update/server-beta/2.json");
 	
 	//Creating the state values
