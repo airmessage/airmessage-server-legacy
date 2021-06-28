@@ -16,8 +16,6 @@ rm -r "$(dirname "$1")"
 sleep 1
 
 #Open the new app
-open /Applications/AirMessage.app
-
 for i in 1 2 3 4 5
 do
 	open /Applications/AirMessage.app && break || sleep 1
