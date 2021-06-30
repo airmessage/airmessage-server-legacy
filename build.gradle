@@ -23,8 +23,8 @@ dependencies {
     //SLF4J - Logging library
     //implementation "org.slf4j:slf4j-nop:1.7.30"
 
-    //JSON in Java - JSON library
-    implementation "org.json:json:20210307"
+    //Jackson YAML data format - YAML parser
+    implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.12.3"
 
     //Commonmark Java - Markdown parser
     implementation "org.commonmark:commonmark:0.17.2"

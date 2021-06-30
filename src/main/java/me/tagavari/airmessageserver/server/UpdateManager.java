@@ -1,5 +1,7 @@
 package me.tagavari.airmessageserver.server;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.sentry.Sentry;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
@@ -11,35 +13,34 @@ import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.*;
 import org.eclipse.swt.program.Program;
 import org.eclipse.swt.widgets.*;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.*;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 class UpdateManager {
 	//Creating the reference values
 	private static final String updateBaseURL = "https://airmessage.org";
-	private static final URL stableUpdateURL = makeURL(updateBaseURL + "/update/server/2.json");
-	private static final URL betaUpdateURL = makeURL(updateBaseURL + "/update/server-beta/2.json");
+	private static final URL stableUpdateURL = makeURL(updateBaseURL + "/update/server/2.yaml");
+	private static final URL betaUpdateURL = makeURL(updateBaseURL + "/update/server-beta/2.yaml");
 	
 	//Creating the state values
 	private static final AtomicBoolean updateCheckInProgress = new AtomicBoolean(false);
@@ -61,36 +62,28 @@ class UpdateManager {
 		
 		try {
 			//Getting the object
-			JSONObject jRoot;
-			try(Scanner scanner = new Scanner(updateURL.openStream())) {
-				scanner.useDelimiter("\\A");
-				
-				if(!scanner.hasNext()) {
-					Main.getLogger().log(Level.WARNING, "Tried to fetch update data, received empty string");
-					return;
-				}
-				String result = scanner.next();
-				jRoot = new JSONObject(result);
-			} catch(IOException | JSONException exception) {
+			UpdateRecord updateRecord;
+			
+			try {
+				ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
+				updateRecord = objectMapper.readValue(updateURL, UpdateRecord.class);
+			} catch(IOException exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				return;
 			}
 			
 			try {
 				//Returning if the release is incompatible, or no upgrade is needed
-				if(Constants.compareVersions(Constants.getSystemVersion(), Constants.parseVersionString(jRoot.getString("osRequirement"))) < 0 ||
-				   jRoot.getInt("versionCode") <= Constants.SERVER_VERSION_CODE) {
+				if(Constants.compareVersions(Constants.getSystemVersion(), Constants.parseVersionString(updateRecord.osRequirement())) < 0 ||
+				   updateRecord.versionCode() <= Constants.SERVER_VERSION_CODE) {
 					shouldShowNoUpdateWindow = true;
 					return;
 				}
 				
 				//Fetching the locales of the release notes
-				HashMap<Locale, String> releaseNotes = new HashMap<>(); //Locale, message
-				JSONArray jArrayNotes = jRoot.getJSONArray("notes");
-				for(int j = 0; j < jArrayNotes.length(); j++) {
-					JSONObject jNotes = jArrayNotes.getJSONObject(j);
-					releaseNotes.put(Locale.forLanguageTag(jNotes.getString("lang")), jNotes.getString("message"));
-				}
+				Map<Locale, String> releaseNotes = updateRecord.notes().stream()
+					//Locale, message
+					.collect(Collectors.toMap((notes) -> Locale.forLanguageTag(notes.lang()), UpdateRecord.Notes::message));
 				
 				//Compiling the system locales into a language range list
 				List<Locale.LanguageRange> languageRangeList = new ArrayList<>();
@@ -99,27 +92,23 @@ class UpdateManager {
 				
 				//Finding a target locale
 				Locale targetLocale = Locale.lookup(languageRangeList, releaseNotes.keySet());
-				if(targetLocale == null) throw new JSONException("Empty release notes language");
+				if(targetLocale == null) throw new RuntimeException("Empty release notes language");
 				
 				//Getting the release information
-				final String relVerName = jRoot.getString("versionName");
-				final String relURLIntel = jRoot.getString("urlIntel");
-				final String relURLAppleSilicon = jRoot.has("urlAppleSilicon") ? jRoot.getString("urlAppleSilicon") : null;
-				String relMessage = new String(Base64.getDecoder().decode(releaseNotes.get(targetLocale)));
-				final String relMessageHTML = HtmlRenderer.builder().build().render(Parser.builder().build().parse(relMessage));
-				final boolean relExternalDownload = jRoot.getBoolean("externalDownload");
+				String messageMarkdown = releaseNotes.get(targetLocale);
+				String messageHTML = HtmlRenderer.builder().build().render(Parser.builder().build().parse(messageMarkdown));
 				
 				String downloadURL;
 				if(Main.isAppleSilicon()) {
 					//Try to download an Apple Silicon-optimized version, fall back to default version
-					if(relURLAppleSilicon != null) downloadURL = relURLAppleSilicon;
-					else downloadURL = relURLIntel;
+					if(updateRecord.urlAppleSilicon() != null) downloadURL = updateRecord.urlAppleSilicon();
+					else downloadURL = updateRecord.urlIntel();
 				} else {
-					downloadURL = relURLIntel;
+					downloadURL = updateRecord.urlIntel();
 				}
 				
 				//Showing the update window
-				UIHelper.getDisplay().asyncExec(() -> openUpdateWindow(relVerName, relMessageHTML, downloadURL, relExternalDownload));
+				UIHelper.getDisplay().asyncExec(() -> openUpdateWindow(updateRecord.versionName(), messageHTML, downloadURL, updateRecord.externalDownload()));
 			} catch(Exception exception) {
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 				Sentry.captureException(exception);
