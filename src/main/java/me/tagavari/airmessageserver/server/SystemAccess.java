@@ -19,7 +19,7 @@ public class SystemAccess {
 				//Logging the error
 				try(BufferedReader in = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
 					String errorOutput = in.lines().collect(Collectors.joining());
-					Main.getLogger().log(Level.WARNING, "Unable to read device name: " + errorOutput);
+					Main.getLogger().log(Level.WARNING, "Unable to read process output: " + errorOutput);
 				}
 			}
 		} catch(IOException | InterruptedException exception) {
