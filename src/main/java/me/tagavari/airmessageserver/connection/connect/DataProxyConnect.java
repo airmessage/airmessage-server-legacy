@@ -1,12 +1,9 @@
 package me.tagavari.airmessageserver.connection.connect;
 
-import io.sentry.Sentry;
 import me.tagavari.airmessageserver.connection.CommConst;
-import me.tagavari.airmessageserver.connection.CommunicationsManager;
 import me.tagavari.airmessageserver.connection.DataProxy;
 import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.ServerState;
-import org.java_websocket.exceptions.WebsocketNotConnectedException;
 import org.java_websocket.framing.CloseFrame;
 
 import java.nio.BufferUnderflowException;
@@ -16,7 +13,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
 
 public class DataProxyConnect extends DataProxy<ClientSocket> implements ConnectionListener {
 	private static final Random random = new Random();
@@ -189,7 +185,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 			case NHT.closeCodeIncompatibleProtocol -> ServerState.ERROR_CONN_OUTDATED;
 			case NHT.closeCodeAccountValidation -> ServerState.ERROR_CONN_VALIDATION;
 			case NHT.closeCodeServerTokenRefresh -> ServerState.ERROR_CONN_TOKEN;
-			case NHT.closeCodeNoSubscription -> ServerState.ERROR_CONN_SUBSCRIPTION;
+			case NHT.closeCodeNoActivation -> ServerState.ERROR_CONN_ACTIVATION;
 			case NHT.closeCodeOtherLocation -> ServerState.ERROR_CONN_CONFLICT;
 			default -> ServerState.ERROR_EXTERNAL;
 		};
