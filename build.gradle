@@ -12,10 +12,10 @@ repositories {
 
 dependencies {
     //SQLite JDBC - Database library
-    implementation "org.xerial:sqlite-jdbc:3.36.0"
+    implementation "org.xerial:sqlite-jdbc:3.36.0.1"
 
     //jOOQ - Database library
-    implementation "org.jooq:jooq:3.14.11"
+    implementation "org.jooq:jooq:3.14.12"
 
     //Sentry - Crash reporting library
     implementation "io.sentry:sentry:5.0.1"
@@ -27,7 +27,7 @@ dependencies {
     implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.12.3"
 
     //Commonmark Java - Markdown parser
-    implementation "org.commonmark:commonmark:0.17.2"
+    implementation "org.commonmark:commonmark:0.18.0"
 
     //JavaWebsocket - WebSocket library
     implementation "org.java-websocket:Java-WebSocket:1.5.2"
