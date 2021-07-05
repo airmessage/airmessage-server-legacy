@@ -575,9 +575,12 @@ class UpdateManager {
 			
 			String script = new String(Main.class.getClassLoader().getResourceAsStream("installUpdate.sh").readAllBytes());
 			
+			File outputFile = new File(Constants.applicationSupportDir, "update.log");
+			if(outputFile.exists()) outputFile.delete();
+			
 			ProcessBuilder processBuilder = new ProcessBuilder();
 			processBuilder.command("sh", "-c", script, "install", pathUpdate);
-			processBuilder.redirectOutput(new File(System.getProperty("user.home") + "/Downloads/log.txt"));
+			processBuilder.redirectOutput(outputFile);
 			processBuilder.start();
 		} catch(IOException exception) {
 			//Logging the error
