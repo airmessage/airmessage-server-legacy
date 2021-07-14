@@ -2,12 +2,15 @@ package me.tagavari.airmessageserver.connection.connect;
 
 import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.connection.DataProxy;
+import me.tagavari.airmessageserver.connection.EncryptionHelper;
 import me.tagavari.airmessageserver.server.Main;
+import me.tagavari.airmessageserver.server.PreferencesManager;
 import me.tagavari.airmessageserver.server.ServerState;
 import org.java_websocket.framing.CloseFrame;
 
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -107,16 +110,32 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	
 	@Override
 	public void sendMessage(ClientSocket client, byte[] content, boolean encrypt, Runnable sentRunnable) {
+		//Encrypting the content if requested and a password is set
+		boolean supportsEncryption = !PreferencesManager.getPrefPassword().isBlank();
+		boolean isEncrypted = encrypt && supportsEncryption;
+		if(isEncrypted) {
+			try {
+				content = EncryptionHelper.encrypt(content);
+			} catch(GeneralSecurityException exception) {
+				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+				Sentry.captureException(exception);
+				return;
+			}
+		}
+		
 		//Constructing and sending the message
 		ByteBuffer byteBuffer;
 		if(client == null) {
-			byteBuffer = ByteBuffer.allocate(Integer.BYTES + content.length);
+			byteBuffer = ByteBuffer.allocate(Integer.BYTES + 1 + content.length);
 			byteBuffer.putInt(NHT.nhtServerProxyBroadcast);
 		} else {
-			byteBuffer = ByteBuffer.allocate(Integer.BYTES * 2 + content.length);
+			byteBuffer = ByteBuffer.allocate(Integer.BYTES * 2 + 1 + content.length);
 			byteBuffer.putInt(NHT.nhtServerProxy);
 			byteBuffer.putInt(client.getConnectionID());
 		}
+		if(isEncrypted) byteBuffer.put((byte) -100); //The content is encrypted
+		else if(supportsEncryption) byteBuffer.put((byte) -101); //We support encryption, but this packet should not be encrypted
+		else byteBuffer.put((byte) -102); //We don't support encryption
 		byteBuffer.put(content);
 		
 		//Sending the data
@@ -264,7 +283,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	
 	@Override
 	public boolean requiresAuthentication() {
-		return false;
+		return !PreferencesManager.getPrefPassword().isBlank();
 	}
 	
 	@Override

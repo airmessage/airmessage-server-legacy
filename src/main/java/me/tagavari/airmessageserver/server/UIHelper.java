@@ -129,7 +129,7 @@ public class UIHelper {
 				manualButtonFD.top = new FormAttachment(accountButton, 0, SWT.CENTER);
 				manualButton.setLayoutData(manualButtonFD);
 				manualButton.addListener(SWT.Selection, event -> {
-					PreferencesUI.openPrefsPasswordWindow(shell, () -> {
+					PreferencesUI.openPrefsPasswordWindow(shell, false, () -> {
 						//Closing the shell
 						shell.close();
 						

@@ -103,7 +103,7 @@ public class PreferencesUI {
 			textWarning.setLayoutData(textWarningGD); */
 		} else pwTextPort = null;
 		
-		if(accountType == PreferencesManager.accountTypeDirect) {
+		{
 			Label securityLabel = new Label(prefContainer, SWT.NONE);
 			Button prefsButton = new Button(prefContainer, SWT.PUSH);
 			
@@ -114,7 +114,7 @@ public class PreferencesUI {
 			GridData prefGB = new GridData(GridData.BEGINNING, GridData.CENTER, false, false);
 			prefGB.horizontalIndent = -8;
 			prefsButton.setLayoutData(prefGB);
-			prefsButton.addListener(SWT.Selection, event -> openPrefsPasswordWindow(windowShell, null));
+			prefsButton.addListener(SWT.Selection, event -> openPrefsPasswordWindow(windowShell, accountType == PreferencesManager.accountTypeConnect, null));
 		}
 		
 		{
@@ -314,7 +314,7 @@ public class PreferencesUI {
 		windowShell.forceActive();
 	}
 	
-	public static void openPrefsPasswordWindow(Shell parentShell, Runnable completionListener) {
+	public static void openPrefsPasswordWindow(Shell parentShell, boolean allowEmpty, Runnable completionListener) {
 		//Creating the shell flags
 		Constants.ValueWrapper<Boolean> textEditorOpen = new Constants.ValueWrapper<>(Boolean.FALSE);
 		
@@ -443,7 +443,7 @@ public class PreferencesUI {
 				strengthLabel.requestLayout();
 				
 				//Enabling the accept button if the text isn't empty and has no control characters
-				acceptButton.setEnabled(!currentText.isEmpty());
+				if(!allowEmpty) acceptButton.setEnabled(!currentText.isEmpty());
 			};
 			passTextHidden.addModifyListener(modifyListener);
 			passTextVisible.addModifyListener(modifyListener);
