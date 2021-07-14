@@ -5,7 +5,10 @@ import io.sentry.protocol.User;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
 
 import javax.swing.*;
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.security.SecureRandom;
 import java.text.DateFormat;
@@ -13,7 +16,6 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.ResourceBundle;
 import java.util.logging.*;
-import java.util.stream.Collectors;
 
 public class Main {
 	//Creating the constants

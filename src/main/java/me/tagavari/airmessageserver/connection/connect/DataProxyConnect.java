@@ -1,5 +1,6 @@
 package me.tagavari.airmessageserver.connection.connect;
 
+import io.sentry.Sentry;
 import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.connection.DataProxy;
 import me.tagavari.airmessageserver.connection.EncryptionHelper;
@@ -16,6 +17,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 
 public class DataProxyConnect extends DataProxy<ClientSocket> implements ConnectionListener {
 	private static final Random random = new Random();

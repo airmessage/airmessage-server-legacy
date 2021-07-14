@@ -1,16 +1,13 @@
 package me.tagavari.airmessageserver.connection.direct;
 
 import io.sentry.Sentry;
-import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
 import me.tagavari.airmessageserver.connection.DataProxy;
 import me.tagavari.airmessageserver.connection.EncryptionHelper;
 import me.tagavari.airmessageserver.server.Constants;
 import me.tagavari.airmessageserver.server.Main;
-import me.tagavari.airmessageserver.server.PreferencesManager;
 import me.tagavari.airmessageserver.server.ServerState;
 
-import java.io.IOException;
 import java.net.ServerSocket;
 import java.security.GeneralSecurityException;
 import java.util.*;

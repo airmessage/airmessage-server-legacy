@@ -9,7 +9,6 @@ import me.tagavari.airmessageserver.exception.LargeAllocationException;
 import me.tagavari.airmessageserver.request.*;
 import me.tagavari.airmessageserver.server.*;
 import org.eclipse.swt.widgets.Display;
-import org.jooq.Condition;
 import org.jooq.impl.DSL;
 
 import java.nio.BufferOverflowException;

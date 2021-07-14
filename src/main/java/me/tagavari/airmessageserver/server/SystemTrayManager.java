@@ -3,7 +3,10 @@ package me.tagavari.airmessageserver.server;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.widgets.*;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.swt.widgets.MenuItem;
+import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.TrayItem;
 
 import java.io.IOException;
 import java.text.MessageFormat;
