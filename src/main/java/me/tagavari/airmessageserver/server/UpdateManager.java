@@ -440,7 +440,7 @@ class UpdateManager {
 			int contentLength = conn.getHeaderFieldInt("content-length", -1);
 			
 			//Checking if this content type can't be handled by the app
-			if(contentType == null || !contentType.split(";")[0].equals("application/zip")) {
+			if(contentType == null || !(contentType.split(";")[0].equals("application/zip") || contentType.split(";")[0].equals("application/octet-stream"))) {
 				Main.getLogger().log(Level.INFO, "Unknown update MIME type " + contentType + ", opening in browser");
 				
 				//Passing the request on to the system to handle
