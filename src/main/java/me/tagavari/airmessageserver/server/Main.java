@@ -65,7 +65,9 @@ public class Main {
 		
 		//Reading the device name
 		deviceName = SystemAccess.readDeviceName();
-		isAppleSilicon = SystemAccess.isProcessTranslated() || "arm".equals(SystemAccess.readProcessorArchitecture());
+		boolean isProcessTranslated = SystemAccess.isProcessTranslated();
+		String processorArchitecture = SystemAccess.readProcessorArchitecture();
+		isAppleSilicon = isProcessTranslated || "arm".equals(processorArchitecture);
 		
 		if(isDebugMode()) {
 			getLogger().log(Level.INFO, "Server running in debug mode");
@@ -76,6 +78,8 @@ public class Main {
 				options.setEnableExternalConfiguration(true);
 				options.setRelease("airmessage-server@" + Constants.SERVER_VERSION);
 				options.setTag("system_version", System.getProperty("os.version"));
+				options.setTag("system_architecture", processorArchitecture);
+				options.setTag("is_rosetta_translated", Boolean.toString(isProcessTranslated));
 				options.setBeforeSend((event, hint) -> {
 					if(event.isCrashed() && event.getThrowable() != null) {
 						//Log errors to disk
