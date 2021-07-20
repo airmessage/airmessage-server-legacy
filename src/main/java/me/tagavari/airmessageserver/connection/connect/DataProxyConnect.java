@@ -4,6 +4,7 @@ import io.sentry.Sentry;
 import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.connection.DataProxy;
 import me.tagavari.airmessageserver.connection.EncryptionHelper;
+import me.tagavari.airmessageserver.helper.StringHelper;
 import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.PreferencesManager;
 import me.tagavari.airmessageserver.server.ServerState;
@@ -113,7 +114,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	@Override
 	public void sendMessage(ClientSocket client, byte[] content, boolean encrypt, Runnable sentRunnable) {
 		//Encrypting the content if requested and a password is set
-		boolean supportsEncryption = !PreferencesManager.getPrefPassword().isBlank();
+		boolean supportsEncryption = !StringHelper.isNullOrEmpty(PreferencesManager.getPrefPassword());
 		boolean isEncrypted = encrypt && supportsEncryption;
 		if(isEncrypted) {
 			try {
@@ -285,7 +286,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 	
 	@Override
 	public boolean requiresAuthentication() {
-		return !PreferencesManager.getPrefPassword().isBlank();
+		return !StringHelper.isNullOrEmpty(PreferencesManager.getPrefPassword());
 	}
 	
 	@Override

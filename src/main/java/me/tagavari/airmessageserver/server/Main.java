@@ -3,6 +3,7 @@ package me.tagavari.airmessageserver.server;
 import io.sentry.Sentry;
 import io.sentry.protocol.User;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
+import me.tagavari.airmessageserver.helper.StringHelper;
 
 import javax.swing.*;
 import java.io.File;
@@ -118,7 +119,7 @@ public class Main {
 		
 		boolean setupNeeded = PreferencesManager.getPrefAccountConfirmed() &&
 							  //If the user deleted their password from Keychain, ask them to set it up again
-							  (PreferencesManager.getPrefAccountType() != PreferencesManager.accountTypeDirect || PreferencesManager.getPrefPassword() != null);
+							  (PreferencesManager.getPrefAccountType() != PreferencesManager.accountTypeDirect || StringHelper.isNullOrEmpty(PreferencesManager.getPrefPassword()));
 		
 		//Setting up first run
 		if(setupNeeded) {

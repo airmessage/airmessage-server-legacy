@@ -6,6 +6,7 @@ import me.tagavari.airmessageserver.common.AirPacker;
 import me.tagavari.airmessageserver.common.AirUnpacker;
 import me.tagavari.airmessageserver.common.Blocks;
 import me.tagavari.airmessageserver.exception.LargeAllocationException;
+import me.tagavari.airmessageserver.helper.StringHelper;
 import me.tagavari.airmessageserver.request.*;
 import me.tagavari.airmessageserver.server.*;
 import org.eclipse.swt.widgets.Display;
@@ -812,7 +813,7 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	}
 	
 	public void sendPushNotification(List<Blocks.MessageInfo> messages, List<Blocks.ModifierInfo> modifiers) {
-		boolean encrypt = !PreferencesManager.getPrefPassword().isBlank();
+		boolean encrypt = !StringHelper.isNullOrEmpty(PreferencesManager.getPrefPassword());
 		
 		//Serializing the data
 		byte[] data;
