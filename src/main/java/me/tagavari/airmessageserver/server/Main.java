@@ -73,7 +73,7 @@ public class Main {
 			//Initializing Sentry
 			Sentry.init(options -> {
 				options.setEnableExternalConfiguration(true);
-				options.setSentryClientName("airmessage-server@" + Constants.SERVER_VERSION);
+				options.setRelease("airmessage-server@" + Constants.SERVER_VERSION);
 				options.setTag("system_version", System.getProperty("os.version"));
 				options.setBeforeSend((event, hint) -> {
 					if(event.isCrashed() && event.getThrowable() != null) {
