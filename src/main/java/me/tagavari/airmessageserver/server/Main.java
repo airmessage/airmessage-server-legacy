@@ -121,19 +121,19 @@ public class Main {
 		//Starting the update checker
 		if(PreferencesManager.getPrefAutoCheckUpdates()) UpdateManager.startUpdateChecker();
 		
-		boolean setupNeeded = PreferencesManager.getPrefAccountConfirmed() &&
+		boolean setupNeeded = !PreferencesManager.getPrefAccountConfirmed() ||
 							  //If the user deleted their password from Keychain, ask them to set it up again
-							  (PreferencesManager.getPrefAccountType() != PreferencesManager.accountTypeDirect || StringHelper.isNullOrEmpty(PreferencesManager.getPrefPassword()));
+							  (PreferencesManager.getPrefAccountType() == PreferencesManager.accountTypeConnect && StringHelper.isNullOrEmpty(PreferencesManager.getPrefPassword()));
 		
 		//Setting up first run
 		if(setupNeeded) {
-			runPermissionCheck();
-		} else {
 			//The permission check will be run when the user closes the window
 			UIHelper.openIntroWindow();
 			
 			//Enabling setup mode
 			setSetupMode(true);
+		} else {
+			runPermissionCheck();
 		}
 		
 		//Setting up the system tray
