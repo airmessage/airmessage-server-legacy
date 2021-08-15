@@ -123,8 +123,8 @@ public class Main {
 		
 		boolean setupNeeded = !PreferencesManager.getPrefAccountConfirmed() ||
 							  //If the user deleted their password from Keychain, ask them to set it up again
-							  (PreferencesManager.getPrefAccountType() == PreferencesManager.accountTypeConnect && StringHelper.isNullOrEmpty(PreferencesManager.getPrefPassword()));
-		
+							  (PreferencesManager.getPrefAccountType() == PreferencesManager.accountTypeDirect && StringHelper.isNullOrEmpty(PreferencesManager.getPrefPassword()));
+
 		//Setting up first run
 		if(setupNeeded) {
 			//The permission check will be run when the user closes the window
@@ -146,7 +146,7 @@ public class Main {
 		//Hiding JOOQ's splash
 		System.setProperty("org.jooq.no-logo", "true");
 		
-		if(setupNeeded) {
+		if(!setupNeeded) {
 			//Starting the server
 			startServer();
 		}
