@@ -22,7 +22,8 @@ public class Constants {
 	static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
 	static final File uploadDir = new File(applicationSupportDir, "uploads");
 	static final File updateDir = new File(applicationSupportDir, "update");
-	
+	static final File convertDir = new File(applicationSupportDir, "convert");
+
 	//Creating the macOS version values
 	static final int[] macOSYosemiteVersion = {10, 10};
 	static final int[] macOSElCapitanVersion = {10, 11};
