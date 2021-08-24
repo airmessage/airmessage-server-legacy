@@ -61,4 +61,23 @@ public class SystemAccess {
 			}
 		}
 	}
+
+	/**
+	 * Converts an audio file from one format to another
+	 * @param fileFormat The file format to convert to
+	 * @param dataFormat The data format to convert to
+	 * @param input The file to convert
+	 * @param output The file to write to
+	 */
+	public static void convertAudio(String fileFormat, String dataFormat, File input, File output) throws IOException, InterruptedException, ExecutionException {
+		Process process = Runtime.getRuntime().exec(new String[]{"afconvert", "-f", fileFormat, "-d", dataFormat, input.getPath(), "--o", output.getPath()});
+		int exitCode = process.waitFor();
+		if(exitCode != 0) {
+			//Logging the error
+			try(BufferedReader in = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+				String errorOutput = in.lines().collect(Collectors.joining());
+				throw new ExecutionException(errorOutput, null);
+			}
+		}
+	}
 }

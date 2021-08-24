@@ -475,11 +475,11 @@ public class DatabaseManager {
 			}
 		}
 
+		String fileExtension = FileHelper.getExtensionByStringHandling(file.getName()).orElse(null);
 		boolean fileIsConverted = false;
+
 		//Checking if the file is HEIC
-		if(FileHelper.getExtensionByStringHandling(file.getName())
-						.map(extension -> extension.equals("heic"))
-						.orElse(false)) {
+		if("heic".equals(fileExtension)) {
 			Main.getLogger().log(Level.INFO, "Converting file " + file.getPath() + " from HEIC");
 
 			//Creating the convert directory if it doesn't exist
@@ -490,6 +490,31 @@ public class DatabaseManager {
 			File targetFile = new File(Constants.convertDir, UUID.randomUUID() + ".jpeg");
 			try {
 				SystemAccess.convertImage("jpeg", file, targetFile);
+			} catch(IOException | InterruptedException | ExecutionException exception) {
+				//Printing the stack trace
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+
+				//Notifying the client
+				if(request.connection.isConnected()) {
+					ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqIO, Constants.exceptionToString(exception));
+				}
+
+				return;
+			}
+
+			file = targetFile;
+			fileIsConverted = true;
+		} else if("caf".equals(fileExtension)) {
+			Main.getLogger().log(Level.INFO, "Converting file " + file.getPath() + " from CAF");
+
+			//Creating the convert directory if it doesn't exist
+			if(Constants.convertDir.isFile()) Constants.convertDir.delete();
+			if(!Constants.convertDir.exists()) Constants.convertDir.mkdir();
+
+			//Converting the file
+			File targetFile = new File(Constants.convertDir, UUID.randomUUID() + ".mp4");
+			try {
+				SystemAccess.convertAudio("mp4f", "aac", file, targetFile);
 			} catch(IOException | InterruptedException | ExecutionException exception) {
 				//Printing the stack trace
 				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
