@@ -446,37 +446,39 @@ public class DatabaseManager {
 				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqNotFound, null);
 			}
 			return;
+		}
+
+		//Getting the file
+		String filePath = results.getValue(0, field("filename", String.class));
+
+		//Failing the file check if the path is invalid
+		if(filePath == null) {
+			if(request.connection.isConnected()) {
+				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqNotSaved, null);
+			}
+			return;
 		} else {
-			//Getting the file
-			String filePath = results.getValue(0, field("filename", String.class));
-			
-			//Failing the file check if the path is invalid
-			if(filePath == null) {
+			if(filePath.startsWith("~")) filePath = filePath.replaceFirst("~", System.getProperty("user.home"));
+			file = new File(filePath);
+
+			//Failing the file check if the file doesn't exist
+			if(!file.exists()) {
 				if(request.connection.isConnected()) {
 					ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqNotSaved, null);
 				}
 				return;
-			} else {
-				if(filePath.startsWith("~")) filePath = filePath.replaceFirst("~", System.getProperty("user.home"));
-				file = new File(filePath);
-				
-				//Failing the file check if the file doesn't exist
-				if(!file.exists()) {
-					if(request.connection.isConnected()) {
-						ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqNotSaved, null);
-					}
-					return;
-				} else if(!file.canRead()) {
-					if(request.connection.isConnected()) {
-						ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqUnreadable, null);
-					}
-					return;
+			} else if(!file.canRead()) {
+				if(request.connection.isConnected()) {
+					ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqUnreadable, null);
 				}
+				return;
 			}
 		}
 
 		String fileExtension = FileHelper.getExtensionByStringHandling(file.getName()).orElse(null);
 		boolean fileIsConverted = false;
+		String updatedFileName = null;
+		String updatedFileType = null;
 
 		//Checking if the file is HEIC
 		if("heic".equals(fileExtension)) {
@@ -502,9 +504,14 @@ public class DatabaseManager {
 				return;
 			}
 
+			//Setting the file data
 			file = targetFile;
 			fileIsConverted = true;
-		} else if("caf".equals(fileExtension)) {
+			updatedFileName = file.getName().substring(0, file.getName().lastIndexOf(".")) + ".heic";
+			updatedFileType = "image/heic";
+		}
+		//Otherwise checking if the file is CAF
+		else if("caf".equals(fileExtension)) {
 			Main.getLogger().log(Level.INFO, "Converting file " + file.getPath() + " from CAF");
 
 			//Creating the convert directory if it doesn't exist
@@ -529,6 +536,8 @@ public class DatabaseManager {
 
 			file = targetFile;
 			fileIsConverted = true;
+			updatedFileName = file.getName().substring(0, file.getName().lastIndexOf(".")) + ".caf";
+			updatedFileType = "audio/x-caf";
 		}
 		
 		//Preparing to read the data
@@ -542,7 +551,7 @@ public class DatabaseManager {
 
 				//Sending the data
 				if(request.connection.isConnected()) {
-					ConnectionManager.getCommunicationsManager().sendFileChunk(request.connection, request.requestID, requestIndex, fileLength, data.isLast(), request.fileGuid, data.getData(), data.getLength());
+					ConnectionManager.getCommunicationsManager().sendFileChunk(request.connection, request.requestID, requestIndex, updatedFileName, updatedFileType, fileLength, data.isLast(), data.getData(), data.getLength());
 				} else {
 					Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
 					break;
