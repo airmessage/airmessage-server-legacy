@@ -19,10 +19,10 @@ public class Constants {
 	public static final int SERVER_VERSION_CODE = 23;
 	
 	//Creating the file values
-	static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
-	static final File uploadDir = new File(applicationSupportDir, "uploads");
-	static final File updateDir = new File(applicationSupportDir, "update");
-	static final File convertDir = new File(applicationSupportDir, "convert");
+	public static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
+	public static final File uploadDir = new File(applicationSupportDir, "uploads");
+	public static final File updateDir = new File(applicationSupportDir, "update");
+	public static final File convertDir = new File(applicationSupportDir, "convert");
 
 	//Creating the macOS version values
 	static final int[] macOSYosemiteVersion = {10, 10};

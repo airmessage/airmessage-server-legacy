@@ -70,7 +70,7 @@ public class SystemAccess {
 	 * @param output The file to write to
 	 */
 	public static void convertAudio(String fileFormat, String dataFormat, File input, File output) throws IOException, InterruptedException, ExecutionException {
-		Process process = Runtime.getRuntime().exec(new String[]{"afconvert", "-f", fileFormat, "-d", dataFormat, input.getPath(), "--o", output.getPath()});
+		Process process = Runtime.getRuntime().exec(new String[]{"afconvert", "-f", fileFormat, "-d", dataFormat, input.getPath(), "-o", output.getPath()});
 		int exitCode = process.waitFor();
 		if(exitCode != 0) {
 			//Logging the error

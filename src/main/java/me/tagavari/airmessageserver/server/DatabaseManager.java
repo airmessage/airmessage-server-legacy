@@ -5,6 +5,7 @@ import me.tagavari.airmessageserver.common.Blocks;
 import me.tagavari.airmessageserver.connection.CommConst;
 import me.tagavari.airmessageserver.connection.ConnectionManager;
 import me.tagavari.airmessageserver.helper.CompressionHelper;
+import me.tagavari.airmessageserver.helper.ConversionHelper;
 import me.tagavari.airmessageserver.helper.FileHelper;
 import me.tagavari.airmessageserver.helper.LookAheadStreamIterator;
 import me.tagavari.airmessageserver.request.*;
@@ -438,7 +439,7 @@ public class DatabaseManager {
 				.fetch();
 		
 		//Creating the result variable
-		File file;
+		File sourceFile;
 
 		//Failing if there are no results
 		if(results.isEmpty()) {
@@ -459,15 +460,15 @@ public class DatabaseManager {
 			return;
 		} else {
 			if(filePath.startsWith("~")) filePath = filePath.replaceFirst("~", System.getProperty("user.home"));
-			file = new File(filePath);
+			sourceFile = new File(filePath);
 
 			//Failing the file check if the file doesn't exist
-			if(!file.exists()) {
+			if(!sourceFile.exists()) {
 				if(request.connection.isConnected()) {
 					ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqNotSaved, null);
 				}
 				return;
-			} else if(!file.canRead()) {
+			} else if(!sourceFile.canRead()) {
 				if(request.connection.isConnected()) {
 					ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqUnreadable, null);
 				}
@@ -475,83 +476,33 @@ public class DatabaseManager {
 			}
 		}
 
-		String fileExtension = FileHelper.getExtensionByStringHandling(file.getName()).orElse(null);
-		boolean fileIsConverted = false;
-		String updatedFileName = null;
-		String updatedFileType = null;
+		ConversionHelper.ConvertedFile convertedData;
+		try {
+			convertedData = ConversionHelper.convert(sourceFile);
+		} catch(IOException | InterruptedException | ExecutionException exception) {
+			//Printing the stack trace
+			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 
-		//Checking if the file is HEIC
-		if("heic".equals(fileExtension)) {
-			Main.getLogger().log(Level.INFO, "Converting file " + file.getPath() + " from HEIC");
-
-			//Creating the convert directory if it doesn't exist
-			if(Constants.convertDir.isFile()) Constants.convertDir.delete();
-			if(!Constants.convertDir.exists()) Constants.convertDir.mkdir();
-
-			//Converting the file
-			File targetFile = new File(Constants.convertDir, UUID.randomUUID() + ".jpeg");
-			try {
-				SystemAccess.convertImage("jpeg", file, targetFile);
-			} catch(IOException | InterruptedException | ExecutionException exception) {
-				//Printing the stack trace
-				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-
-				//Notifying the client
-				if(request.connection.isConnected()) {
-					ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqIO, Constants.exceptionToString(exception));
-				}
-
-				return;
+			//Notifying the client
+			if(request.connection.isConnected()) {
+				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqIO, Constants.exceptionToString(exception));
 			}
 
-			//Setting the file data
-			file = targetFile;
-			fileIsConverted = true;
-			updatedFileName = file.getName().substring(0, file.getName().lastIndexOf(".")) + ".heic";
-			updatedFileType = "image/heic";
+			return;
 		}
-		//Otherwise checking if the file is CAF
-		else if("caf".equals(fileExtension)) {
-			Main.getLogger().log(Level.INFO, "Converting file " + file.getPath() + " from CAF");
 
-			//Creating the convert directory if it doesn't exist
-			if(Constants.convertDir.isFile()) Constants.convertDir.delete();
-			if(!Constants.convertDir.exists()) Constants.convertDir.mkdir();
-
-			//Converting the file
-			File targetFile = new File(Constants.convertDir, UUID.randomUUID() + ".mp4");
-			try {
-				SystemAccess.convertAudio("mp4f", "aac", file, targetFile);
-			} catch(IOException | InterruptedException | ExecutionException exception) {
-				//Printing the stack trace
-				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-
-				//Notifying the client
-				if(request.connection.isConnected()) {
-					ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqIO, Constants.exceptionToString(exception));
-				}
-
-				return;
-			}
-
-			file = targetFile;
-			fileIsConverted = true;
-			updatedFileName = file.getName().substring(0, file.getName().lastIndexOf(".")) + ".caf";
-			updatedFileType = "audio/x-caf";
-		}
-		
 		//Preparing to read the data
 		int requestIndex = 0;
-		long fileLength = file.length();
+		long fileLength = convertedData.file().length();
 
 		//Streaming the file
-		try(InputStream inputStream = new DeflaterInputStream(new BufferedInputStream(new FileInputStream(file)))) {
+		try(convertedData; InputStream inputStream = new DeflaterInputStream(new BufferedInputStream(new FileInputStream(convertedData.file())))) {
 			for(LookAheadStreamIterator iterator = new LookAheadStreamIterator(request.chunkSize, inputStream); iterator.hasNext();) {
 				LookAheadStreamIterator.ForwardsStreamData data = iterator.next();
 
 				//Sending the data
 				if(request.connection.isConnected()) {
-					ConnectionManager.getCommunicationsManager().sendFileChunk(request.connection, request.requestID, requestIndex, updatedFileName, updatedFileType, fileLength, data.isLast(), data.getData(), data.getLength());
+					ConnectionManager.getCommunicationsManager().sendFileChunk(request.connection, request.requestID, requestIndex, convertedData.updatedName(), convertedData.updatedType(), fileLength, data.isLast(), data.getData(), data.getLength());
 				} else {
 					Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
 					break;
@@ -567,11 +518,6 @@ public class DatabaseManager {
 			//Notifying the client
 			if(request.connection.isConnected()) {
 				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqIO, null);
-			}
-		} finally {
-			//Cleaning up the converted file
-			if(fileIsConverted) {
-				file.delete();
 			}
 		}
 	}
@@ -767,9 +713,20 @@ public class DatabaseManager {
 						if(request.restrictAttachments && attachment.messageDate < lTimeSinceAttachments) return; //Attachment date
 						if(request.restrictAttachmentsSizes && attachment.fileSize > request.attachmentSizeLimit) return; //Attachment size
 						if(!compareMIMEArray(request.attachmentFilterWhitelist, attachment.fileType) && (compareMIMEArray(request.attachmentFilterBlacklist, attachment.fileType) || !request.attachmentFilterDLOutside)) return; //Attachment type
-						
+
+						//Converting the file
+						ConversionHelper.ConvertedFile convertedData;
+						try {
+							convertedData = ConversionHelper.convert(attachment.file);
+						} catch(IOException | InterruptedException | ExecutionException exception) {
+							//Printing the stack trace
+							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+
+							continue;
+						}
+
 						//Streaming the file
-						try(InputStream inputStream = new DeflaterInputStream(new BufferedInputStream(new FileInputStream(attachment.file)))) {
+						try(convertedData; InputStream inputStream = new DeflaterInputStream(new BufferedInputStream(new FileInputStream(convertedData.file())))) {
 							int requestIndex = 0;
 							for(LookAheadStreamIterator iterator = new LookAheadStreamIterator(1024 * 1024, inputStream); iterator.hasNext();) {
 								LookAheadStreamIterator.ForwardsStreamData data = iterator.next();
@@ -777,7 +734,7 @@ public class DatabaseManager {
 								//Checking if the connection is ready
 								if(request.connection.isConnected()) {
 									//Sending the data
-									ConnectionManager.getCommunicationsManager().sendMassRetrievalFileChunk(request.connection, request.requestID, requestIndex, attachment.fileName, data.isLast(), attachment.guid, data.getData(), data.getLength());
+									ConnectionManager.getCommunicationsManager().sendMassRetrievalFileChunk(request.connection, request.requestID, requestIndex, attachment.fileName, convertedData.updatedName(), convertedData.updatedType(), data.isLast(), attachment.guid, data.getData(), data.getLength());
 								} else {
 									Main.getLogger().log(Level.INFO, "Ignoring file request, connection not available");
 									break;

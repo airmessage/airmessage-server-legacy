@@ -757,13 +757,17 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 		}
 	}
 	
-	public boolean sendMassRetrievalFileChunk(ClientRegistration client, short requestID, int requestIndex, String fileName, boolean isLast, String fileGUID, byte[] chunkData, int chunkDataLength) {
+	public boolean sendMassRetrievalFileChunk(ClientRegistration client, short requestID, int requestIndex, String fileName, String downloadFileName, String downloadFileType, boolean isLast, String fileGUID, byte[] chunkData, int chunkDataLength) {
 		try(AirPacker packer = AirPacker.get()) {
 			packer.packInt(CommConst.nhtMassRetrievalFile);
 			
 			packer.packShort(requestID);
 			packer.packInt(requestIndex);
-			if(requestIndex == 0) packer.packString(fileName);
+			if(requestIndex == 0) {
+				packer.packString(fileName);
+				packer.packNullableString(downloadFileName);
+				packer.packNullableString(downloadFileType);
+			}
 			packer.packBoolean(isLast);
 			
 			packer.packString(fileGUID);
