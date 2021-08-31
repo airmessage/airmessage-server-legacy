@@ -263,9 +263,47 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 				case NHT.nhtServerProxy -> {
 					//Reading the data
 					int connectionID = bytes.getInt();
+
+					/*
+					 * App-level encryption was added at a later date,
+					 * so we use a hack by checking the first byte of the message.
+					 *
+					 * All message types will have the first byte as 0 or -1,
+					 * so we can check for other values here.
+					 *
+					 * If we find a match, assume that this was intentional from the client.
+					 * Otherwise, backtrack and assume the client doesn't support encryption.
+					 *
+					 * -100 -> The content is encrypted
+					 * -101 -> The content is not encrypted, but the client has encryption enabled
+					 * -102 -> The client has encryption disabled
+					 * Anything else -> The client does not support encryption
+					 */
+					boolean isSecure, isEncrypted;
+					byte encryptionValue = bytes.get();
+					if(encryptionValue == -100) isSecure = isEncrypted = true;
+					else if(encryptionValue == -101) isSecure = isEncrypted = false;
+					else {
+						isSecure = true;
+						isEncrypted = false;
+						if(encryptionValue != -102) {
+							bytes.position(bytes.position() - 1);
+						}
+					}
 					byte[] data = new byte[bytes.remaining()];
 					bytes.get(data);
-					
+
+					//Decrypting the data
+					if(isEncrypted && !StringHelper.isNullOrEmpty(PreferencesManager.getPrefPassword())) {
+						try {
+							data = EncryptionHelper.decrypt(data);
+						} catch(GeneralSecurityException exception) {
+							Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+							Sentry.captureException(exception);
+							return;
+						}
+					}
+
 					//Getting the client
 					ClientSocket client = connectionList.get(connectionID);
 					
@@ -276,7 +314,7 @@ public class DataProxyConnect extends DataProxy<ClientSocket> implements Connect
 					}
 					
 					//Notifying the communications manager
-					notifyMessage(client, data, true);
+					notifyMessage(client, data, isSecure);
 				}
 			}
 		} catch(BufferUnderflowException exception) {
