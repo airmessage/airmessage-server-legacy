@@ -1140,6 +1140,14 @@ public class DatabaseManager {
 						if(filePath == null) continue; //Ignoring invalid files
 						fileName = new File(filePath).getName(); //Determining the file name from its path
 					}
+
+					//Updating the file type
+					if(fileType == null) {
+						String fileExtension = FileHelper.getExtensionByStringHandling(fileName).orElse(null);
+						if("caf".equals(fileExtension)) {
+							fileType = "audio/caf";
+						}
+					}
 					
 					//Adding the file
 					files.add(new Blocks.AttachmentInfo(fileGUID,
