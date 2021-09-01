@@ -1,23 +1,23 @@
-import firebase from "firebase/app";
-import "firebase/auth";
 import * as firebaseui from "firebaseui";
 import {firebaseConfig} from "./secrets";
+import {initializeApp} from "firebase/app";
+import {getAuth, getIdToken, GoogleAuthProvider} from "firebase/auth";
 
 // Initialize Firebase
-firebase.initializeApp(firebaseConfig);
+initializeApp(firebaseConfig);
 
 // Initialize the FirebaseUI Widget using Firebase.
-const ui = new firebaseui.auth.AuthUI(firebase.auth());
+const ui = new firebaseui.auth.AuthUI(getAuth());
 
 // The start method will wait until the DOM is loaded.
-ui.start('#firebaseui-auth-container', {
+ui.start("#firebaseui-auth-container", {
 	callbacks: {
 		signInSuccessWithAuthResult: (authResult) => {
 			document.getElementById("desc").innerHTML = "Please wait&#8230;"
 			const userID = authResult.user.uid;
 			
 			// Generate an ID token
-			firebase.auth().currentUser.getIdToken(true).then((idToken) => {
+			getIdToken(getAuth().currentUser, true).then((idToken) => {
 				// Send back to Java app
 				accountFunctionCallback(idToken, userID);
 			}).catch((error) => {
@@ -32,7 +32,7 @@ ui.start('#firebaseui-auth-container', {
 	signInOptions: [
 		// Leave the lines as is for the providers you want to offer your users.
 		{
-			provider: firebase.auth.GoogleAuthProvider.PROVIDER_ID,
+			provider: GoogleAuthProvider.PROVIDER_ID,
 			customParameters: {
 				// Forces account selection even when one account is available.
 				prompt: "select_account"
