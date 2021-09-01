@@ -15,8 +15,8 @@ import java.util.stream.Stream;
 
 public class Constants {
 	//Creating the version values
-	public static final String SERVER_VERSION = "3.3.2";
-	public static final int SERVER_VERSION_CODE = 23;
+	public static final String SERVER_VERSION = "3.4.0";
+	public static final int SERVER_VERSION_CODE = 24;
 	
 	//Creating the file values
 	public static final File applicationSupportDir = new File(System.getProperty("user.home") + '/' + "Library" + '/' + "Application Support" + '/' + "AirMessage");
