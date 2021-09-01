@@ -15,6 +15,6 @@
   },
   "dependencies": {
     "firebase": "^8.6.8",
-    "firebaseui": "^4.8.0"
+    "firebaseui": "^5.0.0"
   }
 }

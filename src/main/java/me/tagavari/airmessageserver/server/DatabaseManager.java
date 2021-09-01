@@ -15,6 +15,7 @@ import org.jooq.exception.DataAccessException;
 import org.jooq.impl.DSL;
 
 import java.io.*;
+import java.io.File;
 import java.nio.file.Files;
 import java.security.DigestInputStream;
 import java.security.GeneralSecurityException;
@@ -372,7 +373,7 @@ public class DatabaseManager {
 			String conversationService;
 			{
 				//Running the SQL
-				Result<org.jooq.Record2<String, String>> results = create.select(field("chat.display_name", String.class), field("chat.service_name", String.class))
+				Result<Record2<String, String>> results = create.select(field("chat.display_name", String.class), field("chat.service_name", String.class))
 						.from(DSL.table("chat"))
 						.where(field("chat.guid").equal(conversationGUID))
 						.fetch();

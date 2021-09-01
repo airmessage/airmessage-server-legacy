@@ -12,19 +12,19 @@ repositories {
 
 dependencies {
     //SQLite JDBC - Database library
-    implementation "org.xerial:sqlite-jdbc:3.36.0.1"
+    implementation "org.xerial:sqlite-jdbc:3.36.0.3"
 
     //jOOQ - Database library
-    implementation "org.jooq:jooq:3.14.12"
+    implementation "org.jooq:jooq:3.15.2"
 
     //Sentry - Crash reporting library
-    implementation "io.sentry:sentry:5.0.1"
+    implementation 'io.sentry:sentry:5.1.2'
 
     //SLF4J - Logging library
     //implementation "org.slf4j:slf4j-nop:1.7.30"
 
     //Jackson YAML data format - YAML parser
-    implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.12.3"
+    implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.12.5"
 
     //Commonmark Java - Markdown parser
     implementation "org.commonmark:commonmark:0.18.0"
