@@ -20,8 +20,7 @@ public class UIHelper {
 	private static Display display;
 	
 	public static void initialize() {
-		display = Display.getCurrent();
-		if(display == null) display = Display.getDefault(); //The display may be null if outside the UI thread
+		display = new Display();
 	}
 	
 	public static boolean displayVersionWarning() {
@@ -180,11 +179,17 @@ public class UIHelper {
 	
 	public static void startEventLoop() {
 		try {
-			while(!display.isDisposed()) if(!display.readAndDispatch()) display.sleep();
+			while(!display.isDisposed()) {
+				if(!display.readAndDispatch()) {
+					display.sleep();
+				}
+			}
 		} catch(Exception exception) {
 			Sentry.captureException(exception);
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 		}
+		display.dispose();
+		display = null;
 		System.exit(0);
 	}
 	

@@ -116,15 +116,10 @@ public class CommunicationsManager implements DataProxyListener<ClientRegistrati
 	@Override
 	public void onStop(ServerState code) {
 		//Updating the state
-		if(Thread.currentThread() == Display.getDefault().getThread()) {
+		UIHelper.getDisplay().asyncExec(() -> {
 			Main.setServerState(code);
 			SystemTrayManager.updateStatusMessage();
-		} else {
-			UIHelper.getDisplay().asyncExec(() -> {
-				Main.setServerState(code);
-				SystemTrayManager.updateStatusMessage();
-			});
-		}
+		});
 		
 		//Setting the server as not running
 		isRunning.set(false);
