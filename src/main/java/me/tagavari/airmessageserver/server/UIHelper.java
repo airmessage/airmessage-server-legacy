@@ -25,7 +25,7 @@ public class UIHelper {
 	
 	public static boolean displayVersionWarning() {
 		//Showing an alert dialog
-		Shell shell = new Shell();
+		Shell shell = new Shell(getDisplay());
 		MessageBox dialog = new MessageBox(shell, SWT.ICON_WARNING | SWT.YES | SWT.NO);
 		dialog.setMessage(Main.resources().getString("message.os_unsupported"));
 		int result = dialog.open();
@@ -37,7 +37,7 @@ public class UIHelper {
 	
 	public static int displaySchemaWarning() {
 		//Showing an alert dialog
-		Shell shell = new Shell();
+		Shell shell = new Shell(getDisplay());
 		MessageBox dialog = new MessageBox(shell, SWT.ICON_WARNING | SWT.ABORT | SWT.RETRY | SWT.IGNORE);
 		dialog.setMessage(Main.resources().getString("message.schema_upgrade_error"));
 		int result = dialog.open();
@@ -170,7 +170,7 @@ public class UIHelper {
 	
 	public static void displayAlertDialog(String message) {
 		//Showing an alert dialog
-		Shell shell = new Shell();
+		Shell shell = new Shell(getDisplay());
 		MessageBox dialog = new MessageBox(shell, SWT.ICON_WARNING | SWT.OK);
 		dialog.setMessage(message);
 		dialog.open();

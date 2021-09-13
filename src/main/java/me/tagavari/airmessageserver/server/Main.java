@@ -93,7 +93,10 @@ public class Main {
 		
 		//Logging the startup messages
 		getLogger().info("Starting AirMessage Server version " + Constants.SERVER_VERSION);
-		
+
+		//Initializing the UI helper
+		UIHelper.initialize();
+
 		//Returning if the system is not valid
 		if(!runSystemCheck()) return;
 		
@@ -114,9 +117,6 @@ public class Main {
 			user.setId(PreferencesManager.getInstallationID());
 			Sentry.setUser(user);
 		}
-		
-		//Initializing the UI helper
-		UIHelper.initialize();
 		
 		//Starting the update checker
 		if(PreferencesManager.getPrefAutoCheckUpdates()) UpdateManager.startUpdateChecker();
