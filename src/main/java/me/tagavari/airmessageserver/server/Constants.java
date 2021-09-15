@@ -25,13 +25,13 @@ public class Constants {
 	public static final File convertDir = new File(applicationSupportDir, "convert");
 
 	//Creating the macOS version values
-	static final int[] macOSYosemiteVersion = {10, 10};
-	static final int[] macOSElCapitanVersion = {10, 11};
-	static final int[] macOSSierraVersion = {10, 12};
-	static final int[] macOSHighSierraVersion = {10, 13};
-	static final int[] macOSMojaveVersion = {10, 14};
-	static final int[] macOSCatalinaVersion = {10, 15};
-	static final int[] macOSBigSurVersion = {10, 16};
+	public static final int[] macOSYosemiteVersion = {10, 10};
+	public static final int[] macOSElCapitanVersion = {10, 11};
+	public static final int[] macOSSierraVersion = {10, 12};
+	public static final int[] macOSHighSierraVersion = {10, 13};
+	public static final int[] macOSMojaveVersion = {10, 14};
+	public static final int[] macOSCatalinaVersion = {10, 15};
+	public static final int[] macOSBigSurVersion = {10, 16};
 	
 	//Creating the AppleScript error values
 	static final int asErrorCodeMessagesUnauthorized = -1743;
@@ -48,11 +48,11 @@ public class Constants {
 	static final int minPort = 0;
 	static final int maxPort = 65535;
 	
-	static File findFreeFile(File directory, String fileName) {
+	public static File findFreeFile(File directory, String fileName) {
 		return findFreeFile(directory, fileName, "_", 0);
 	}
 	
-	static File findFreeFile(File directory, String fileName, String separator, int startIndex) {
+	public static File findFreeFile(File directory, String fileName, String separator, int startIndex) {
 		//Creating the file
 		File file = new File(directory, fileName);
 		
@@ -78,7 +78,7 @@ public class Constants {
 		return file;
 	}
 	
-	static void recursiveDelete(File file) {
+	public static void recursiveDelete(File file) {
 		if(file.isFile()) file.delete();
 		else {
 			File[] childFiles = file.listFiles();
@@ -87,11 +87,11 @@ public class Constants {
 		}
 	}
 	
-	static int[] getSystemVersion() {
+	public static int[] getSystemVersion() {
 		return parseVersionString(System.getProperty("os.version"));
 	}
 	
-	static int[] parseVersionString(String version) {
+	public static int[] parseVersionString(String version) {
 		return Stream.of(version.split("\\.")).mapToInt(Integer::parseInt).toArray();
 	}
 	
@@ -100,7 +100,7 @@ public class Constants {
 	 0 / versions are equal
 	 1 / version 1 is greater
 	 */
-	static int compareVersions(int[] version1, int[] version2) {
+	public static int compareVersions(int[] version1, int[] version2) {
 		//Iterating over the arrays
 		for(int i = 0; i < Math.max(version1.length, version2.length); i++) {
 			//Comparing the version values

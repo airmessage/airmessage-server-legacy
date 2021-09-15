@@ -477,20 +477,7 @@ public class DatabaseManager {
 			}
 		}
 
-		ConversionHelper.ConvertedFile convertedData;
-		try {
-			convertedData = ConversionHelper.convert(sourceFile);
-		} catch(IOException | InterruptedException | ExecutionException exception) {
-			//Printing the stack trace
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-
-			//Notifying the client
-			if(request.connection.isConnected()) {
-				ConnectionManager.getCommunicationsManager().sendMessageRequestResponse(request.connection, CommConst.nhtAttachmentReqFail, request.requestID, CommConst.nstAttachmentReqIO, Constants.exceptionToString(exception));
-			}
-
-			return;
-		}
+		ConversionHelper.ConvertedFile convertedData = ConversionHelper.convert(sourceFile);
 
 		//Preparing to read the data
 		int requestIndex = 0;
@@ -716,15 +703,7 @@ public class DatabaseManager {
 						if(!compareMIMEArray(request.attachmentFilterWhitelist, attachment.fileType) && (compareMIMEArray(request.attachmentFilterBlacklist, attachment.fileType) || !request.attachmentFilterDLOutside)) return; //Attachment type
 
 						//Converting the file
-						ConversionHelper.ConvertedFile convertedData;
-						try {
-							convertedData = ConversionHelper.convert(attachment.file);
-						} catch(IOException | InterruptedException | ExecutionException exception) {
-							//Printing the stack trace
-							Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-
-							continue;
-						}
+						ConversionHelper.ConvertedFile convertedData = ConversionHelper.convert(attachment.file);
 
 						//Streaming the file
 						try(convertedData; InputStream inputStream = new DeflaterInputStream(new BufferedInputStream(new FileInputStream(convertedData.file())))) {

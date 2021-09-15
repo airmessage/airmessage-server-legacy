@@ -1,5 +1,6 @@
 package me.tagavari.airmessageserver.helper;
 
+import io.sentry.Sentry;
 import me.tagavari.airmessageserver.server.Constants;
 import me.tagavari.airmessageserver.server.Main;
 import me.tagavari.airmessageserver.server.SystemAccess;
@@ -12,12 +13,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 
 public class ConversionHelper {
-    public static ConvertedFile convert(File file) throws IOException, InterruptedException, ExecutionException {
+    public static ConvertedFile convert(File file) {
         //Getting the file extension
         String fileExtension = FileHelper.getExtensionByStringHandling(file.getName()).orElse(null);
 
-        //Checking if the file is HEIC
-        if("heic".equals(fileExtension)) {
+        //Checking if the file is HEIC (and we're running on a system version that supports handling it)
+        if("heic".equals(fileExtension) && Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSHighSierraVersion) >= 0) {
             Main.getLogger().log(Level.INFO, "Converting file " + file.getPath() + " from HEIC");
 
             //Creating the convert directory if it doesn't exist
@@ -29,19 +30,22 @@ public class ConversionHelper {
             try {
                 SystemAccess.convertImage("jpeg", file, targetFile);
             } catch(IOException | InterruptedException | ExecutionException exception) {
+                //Log exception
+                Sentry.captureException(exception);
+                
                 //Clean up
                 targetFile.delete();
-
-                //Rethrow
-                throw exception;
+    
+                //Return the original file
+                return new ConvertedFile(file, false, null, null);
             }
 
             //Setting the file data
             String newFileName = file.getName().substring(0, file.getName().lastIndexOf(".")) + ".jpeg";
             return new ConvertedFile(targetFile, true, newFileName, "image/jpeg");
         }
-        //Otherwise checking if the file is CAF
-        else if("caf".equals(fileExtension)) {
+        //Otherwise checking if the file is CAF (and we're running on a system version that supports handling it)
+        else if("caf".equals(fileExtension) && Constants.compareVersions(Constants.getSystemVersion(), Constants.macOSHighSierraVersion) >= 0) {
             Main.getLogger().log(Level.INFO, "Converting file " + file.getPath() + " from CAF");
 
             //Creating the convert directory if it doesn't exist
@@ -53,11 +57,14 @@ public class ConversionHelper {
             try {
                 SystemAccess.convertAudio("mp4f", "aac", file, targetFile);
             } catch(IOException | InterruptedException | ExecutionException exception) {
+                //Log exception
+                Sentry.captureException(exception);
+                
                 //Clean up
                 targetFile.delete();
-
-                //Rethrow
-                throw exception;
+    
+                //Return the original file
+                return new ConvertedFile(file, false, null, null);
             }
 
             String newFilename = file.getName().substring(0, file.getName().lastIndexOf(".")) + ".mp4";
