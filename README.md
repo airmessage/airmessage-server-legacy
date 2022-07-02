@@ -1,5 +1,7 @@
 # AirMessage Server
 
+#### This version of AirMessage Server is no longer maintained. Please see [airmessage/airmessage-server](https://github.com/airmessage/airmessage-server), which runs as a native macOS app.
+
 ![AirMessage running on Microsoft Edge](README/overview.png)
 
 AirMessage lets people use iMessage on the devices they like.
